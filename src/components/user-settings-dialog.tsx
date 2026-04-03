@@ -678,17 +678,14 @@ function EKPOConfigPanel() {
       {/* REST服务路径 */}
       <div>
         <label className="block text-xs font-medium mb-1.5">REST 服务路径</label>
-        <select
+        <input
+          type="text"
           value={config.apiPrefix}
           onChange={(e) => setConfig({ ...config, apiPrefix: e.target.value })}
-          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-        >
-          {EKP_REST_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          placeholder="/api/km-review/"
+          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
+        />
+        <p className="text-xs text-muted-foreground mt-1">蓝凌EKP的REST服务路径，如 /api/km-review/</p>
       </div>
 
       {/* 用户名 */}
