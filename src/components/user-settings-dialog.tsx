@@ -516,6 +516,7 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
           {activeTab === 'ekp' && (
             <EKPOConfigPanel />
           )}
+        </div>
 
         {/* 底部 */}
         <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
