@@ -1,0 +1,476 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { 
+  Paperclip, 
+  Brain, 
+  Mic, 
+  Send,
+  Image as ImageIcon,
+  Code,
+  Video,
+  Search,
+  HelpCircle,
+  PenTool,
+  MoreHorizontal,
+  User,
+  Bot,
+  Loader2,
+  AlertCircle,
+  Settings,
+  Trash2
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useChatHistory, Message, ChatSession } from '@/hooks/use-chat-history';
+
+interface ApiKey {
+  id: string;
+  name: string;
+  provider: 'openai' | 'claude' | 'deepseek' | 'doubao' | 'custom';
+  apiKey: string;
+  baseUrl?: string;
+  isActive: boolean;
+}
+
+const quickSkills = [
+  { icon: ImageIcon, label: '图像生成', color: 'text-purple-500' },
+  { icon: Code, label: 'AI 编程', color: 'text-blue-500' },
+  { icon: Video, label: '视频生成', color: 'text-pink-500' },
+  { icon: Search, label: 'AI 搜索', color: 'text-green-500' },
+  { icon: HelpCircle, label: '解题答疑', color: 'text-orange-500' },
+  { icon: PenTool, label: '帮我写作', color: 'text-cyan-500' },
+  { icon: MoreHorizontal, label: '更多', color: 'text-gray-500' },
+];
+
+interface NewChatPageProps {
+  onNewChat?: () => void;
+}
+
+export function NewChatPage({ onNewChat }: NewChatPageProps) {
+  const [inputValue, setInputValue] = useState('');
+  const [greeting, setGreeting] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [selectedModel, setSelectedModel] = useState('gpt-4o');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const {
+    sessions,
+    currentSession,
+    setCurrentSession,
+    createSession,
+    addMessage,
+    updateSession,
+  } = useChatHistory();
+
+  // 加载 API Keys
+  useEffect(() => {
+    const savedKeys = localStorage.getItem('ai-api-keys');
+    if (savedKeys) {
+      try {
+        const keys = JSON.parse(savedKeys);
+        setApiKeys(keys);
+        const activeKey = keys.find((k: ApiKey) => k.isActive);
+        if (activeKey) {
+          if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
+          else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
+          else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
+          else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
+        }
+      } catch {
+        setApiKeys([]);
+      }
+    }
+  }, []);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentSession?.messages]);
+
+  useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour < 6) {
+      setGreeting('夜深了');
+    } else if (hour < 12) {
+      setGreeting('早上好');
+    } else if (hour < 18) {
+      setGreeting('下午好');
+    } else {
+      setGreeting('晚上好');
+    }
+  }, []);
+
+  const getActiveApiKey = (): ApiKey | null => {
+    return apiKeys.find(k => k.isActive) || null;
+  };
+
+  const sendMessage = async () => {
+    if (!inputValue.trim() || isLoading) return;
+
+    const activeKey = getActiveApiKey();
+    if (!activeKey) {
+      setError('请先在设置中配置 API 密钥');
+      setShowSettings(true);
+      return;
+    }
+
+    // 如果没有当前会话，创建一个
+    let session = currentSession;
+    if (!session) {
+      session = createSession(selectedModel, activeKey.provider);
+    }
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: inputValue.trim(),
+      timestamp: new Date(),
+    };
+
+    // 添加用户消息
+    addMessage(session.id, userMessage);
+    setInputValue('');
+    setIsLoading(true);
+    setError(null);
+
+    // 构建消息历史
+    const chatMessages = [
+      { role: 'system' as const, content: '你是一个有帮助的 AI 助手。' },
+      ...(session.messages.map(m => ({ role: m.role, content: m.content }))),
+      { role: 'user' as const, content: userMessage.content },
+    ];
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: chatMessages,
+          model: selectedModel,
+          apiKey: activeKey.apiKey,
+          baseUrl: activeKey.baseUrl,
+          provider: activeKey.provider,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '请求失败');
+      }
+
+      // 流式读取响应
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('无法读取响应');
+
+      let assistantContent = '';
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed === '' || trimmed === 'data: [DONE]') continue;
+
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.content) {
+                assistantContent += data.content;
+              }
+            } catch {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+
+      // 添加助手消息
+      if (assistantContent) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: assistantContent,
+          timestamp: new Date(),
+        };
+        addMessage(session.id, assistantMessage);
+      }
+    } catch (err) {
+      console.error('Chat error:', err);
+      setError(err instanceof Error ? err.message : '请求失败，请重试');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // 清空当前对话
+  const clearCurrentChat = () => {
+    if (currentSession) {
+      updateSession(currentSession.id, { messages: [] });
+    }
+  };
+
+  const hasMessages = (currentSession?.messages.length || 0) > 0;
+  const activeKey = getActiveApiKey();
+  const messages = currentSession?.messages || [];
+
+  return (
+    <div className="h-full flex flex-col bg-background">
+      {/* 顶部工具栏 */}
+      <div className="border-b border-border bg-card/50 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {hasMessages && (
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="px-3 py-1.5 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              {activeKey?.provider === 'doubao' && (
+                <>
+                  <option value="doubao-seed-2-0-pro-260215">豆包 Seed 2.0 Pro</option>
+                  <option value="doubao-seed-2-0-lite-260215">豆包 Seed 2.0 Lite</option>
+                  <option value="doubao-seed-2-0-mini-260215">豆包 Seed 2.0 Mini</option>
+                  <option value="doubao-seed-1-8-251228">豆包 Seed 1.8</option>
+                  <option value="doubao-seed-1-6-251015">豆包 Seed 1.6</option>
+                </>
+              )}
+              {activeKey?.provider === 'openai' && (
+                <>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  <option value="gpt-4">GPT-4</option>
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </>
+              )}
+              {activeKey?.provider === 'claude' && (
+                <>
+                  <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                  <option value="claude-3-opus">Claude 3 Opus</option>
+                  <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                  <option value="claude-3-haiku">Claude 3 Haiku</option>
+                </>
+              )}
+              {activeKey?.provider === 'deepseek' && (
+                <>
+                  <option value="deepseek-chat">DeepSeek Chat</option>
+                  <option value="deepseek-coder">DeepSeek Coder</option>
+                </>
+              )}
+              {activeKey?.provider === 'custom' && (
+                <option value="default">默认模型</option>
+              )}
+            </select>
+          )}
+          {hasMessages && (
+            <button
+              onClick={clearCurrentChat}
+              className="p-2 hover:bg-accent rounded-lg transition-colors"
+              title="清空对话"
+            >
+              <Trash2 className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="p-2 hover:bg-accent rounded-lg transition-colors"
+          title="设置"
+        >
+          <Settings className="w-4 h-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      {/* 消息区域 */}
+      <div className="flex-1 overflow-y-auto">
+        {!hasMessages ? (
+          /* 欢迎界面 */
+          <div className="h-full flex flex-col items-center justify-center px-4">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-semibold text-foreground mb-2">
+                {greeting}，陈振镇
+              </h1>
+              <p className="text-muted-foreground">
+                {activeKey ? '内容由 AI 助手生成' : '请先配置 API 密钥以开始对话'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* 消息列表 */
+          <div className="max-w-3xl mx-auto py-4 px-4 space-y-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  'flex gap-3',
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                )}
+              >
+                {message.role === 'assistant' && (
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Bot className="w-4 h-4 text-primary" />
+                  </div>
+                )}
+                <div
+                  className={cn(
+                    'max-w-[80%] rounded-2xl px-4 py-3',
+                    message.role === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card border border-border'
+                  )}
+                >
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                </div>
+                {message.role === 'user' && (
+                  <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shrink-0">
+                    <User className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+            ))}
+            {isLoading && messages[messages.length - 1]?.role === 'user' && (
+              <div className="flex gap-3 justify-start">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Bot className="w-4 h-4 text-primary" />
+                </div>
+                <div className="bg-card border border-border rounded-2xl px-4 py-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      {/* 错误提示 */}
+      {error && (
+        <div className="px-4 py-2">
+          <div className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-2 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        </div>
+      )}
+
+      {/* 输入区域 */}
+      <div className="border-t border-border bg-background p-4">
+        <div className="max-w-2xl mx-auto">
+          {/* 快捷技能 */}
+          {!hasMessages && (
+            <div className="mb-4 flex flex-wrap justify-center gap-2">
+              {quickSkills.map((skill, index) => (
+                <button
+                  key={index}
+                  className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-full text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-accent transition-all"
+                >
+                  <skill.icon className={`w-4 h-4 ${skill.color}`} />
+                  <span>{skill.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 输入框 */}
+          <div className="bg-card border border-border rounded-2xl shadow-lg overflow-hidden">
+            <div className="p-4">
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={activeKey ? '发消息或输入"/"选择技能' : '请先配置 API 密钥'}
+                disabled={!activeKey}
+                className="w-full resize-none bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-base min-h-[40px] disabled:opacity-50"
+                rows={1}
+                style={{ height: 'auto' }}
+              />
+            </div>
+
+            {/* 工具栏 */}
+            <div className="px-4 pb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors">
+                  <Paperclip className="w-4 h-4" />
+                  <span>附件</span>
+                </button>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors">
+                  <Brain className="w-4 h-4" />
+                  <span>深度思考</span>
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors">
+                  <Mic className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={sendMessage}
+                  disabled={!inputValue.trim() || isLoading || !activeKey}
+                  className="p-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* API 状态提示 */}
+          {!activeKey && (
+            <div className="mt-3 text-center">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="text-sm text-primary hover:underline"
+              >
+                点击配置 API 密钥
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 设置弹窗 - 动态导入避免循环依赖 */}
+      {showSettings && (
+        <SettingsDialogWrapper
+          onClose={() => setShowSettings(false)}
+          onKeysChange={(keys) => {
+            setApiKeys(keys);
+            const activeKey = keys.find((k: ApiKey) => k.isActive);
+            if (activeKey) {
+              if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
+              else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
+              else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
+              else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// 动态导入设置弹窗
+import dynamic from 'next/dynamic';
+
+const SettingsDialogWrapper = dynamic(
+  () => import('./settings-dialog-wrapper').then(mod => mod.SettingsDialogWrapper),
+  { ssr: false }
+);
