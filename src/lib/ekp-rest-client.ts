@@ -98,7 +98,7 @@ export class EKPRestClient {
   private async post<T = unknown>(
     path: string,
     body?: Record<string, unknown>
-  ): Promise<{ status: number; result: T | null; text: string }> {
+  ): Promise<{ status: number; result: T | null; text: string; headers: Record<string, string> }> {
     const endpoint = `${this.config.baseUrl}${path}`;
 
     const headers: Record<string, string> = {
@@ -111,6 +111,7 @@ export class EKPRestClient {
         method: 'POST',
         headers,
         body: body ? JSON.stringify(body) : undefined,
+        redirect: 'manual',  // 不自动跟随重定向
       });
 
       const text = await response.text();
@@ -121,7 +122,13 @@ export class EKPRestClient {
         // 非 JSON 响应
       }
 
-      return { status: response.status, result, text };
+      // 提取响应头
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+
+      return { status: response.status, result, text, headers: responseHeaders };
 
     } catch (err) {
       throw new Error(`网络错误：${err instanceof Error ? err.message : '未知错误'}`);
@@ -141,6 +148,10 @@ export class EKPRestClient {
         : JSON.stringify(formData.formValues || {}),
     });
 
+    if (response.status === 302) {
+      return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+    }
+
     if (response.status === 401) {
       return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
     }
@@ -158,6 +169,10 @@ export class EKPRestClient {
         ? formData.formValues 
         : JSON.stringify(formData.formValues || {}),
     });
+
+    if (response.status === 302) {
+      return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+    }
 
     if (response.status === 401) {
       return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
@@ -177,6 +192,11 @@ export class EKPRestClient {
         targets: JSON.stringify({ LoginName: loginName }),
         type: type,
       });
+
+      // 302 重定向表示认证失败
+      if (response.status === 302) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
 
       // 认证失败
       if (response.status === 401) {
@@ -216,7 +236,6 @@ export class EKPRestClient {
         data: response.text,
         msg: response.status === 200 ? '请求成功' : `请求失败：HTTP ${response.status}`,
       };
-
     } catch (err) {
       return {
         success: false,
@@ -238,6 +257,23 @@ export class EKPRestClient {
         type: 0,
       });
 
+      // 302 重定向表示认证失败，被重定向到登录页面或匿名页面
+      if (response.status === 302) {
+        const location = response.headers['location'] || '';
+        if (location.includes('login') || location.includes('anonym')) {
+          return { 
+            success: false, 
+            data: null, 
+            msg: '认证失败：用户名或密码错误，请检查登录凭据' 
+          };
+        }
+        return { 
+          success: false, 
+          data: null, 
+          msg: '认证失败：请求被重定向，请检查认证信息' 
+        };
+      }
+
       // 认证失败
       if (response.status === 401) {
         return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
@@ -258,7 +294,7 @@ export class EKPRestClient {
         return { 
           success: false, 
           data: null, 
-          msg: '认证失败：服务器未接受 Basic Auth 认证，请检查：\n1. EKP 是否启用了 REST API 的 Basic Auth 认证\n2. 用户名密码是否正确\n3. 是否需要先登录获取 Session' 
+          msg: '认证失败：服务器未接受 Basic Auth 认证，请检查用户名密码是否正确' 
         };
       }
 
@@ -310,7 +346,7 @@ export class EKPRestClient {
             return { 
               success: false, 
               data: null, 
-              msg: '认证失败：服务器返回了登录页面，请检查 Basic Auth 配置' 
+              msg: '认证失败：服务器返回了登录页面，请检查用户名密码是否正确' 
             };
           }
           return { success: false, data: null, msg: `连接失败：非预期的响应格式` };
