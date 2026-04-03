@@ -574,7 +574,7 @@ function EKPOConfigPanel() {
     }
   }, []);
 
-  // 测试连接
+  // 测试连接（通过后端代理解决跨域问题）
   const testConnection = async () => {
     if (!config.baseUrl) {
       setTestError('请输入 EKP 系统地址');
@@ -587,50 +587,35 @@ function EKPOConfigPanel() {
     setTestError(null);
 
     try {
-      const auth = btoa(`${config.username}:${config.password}`);
-      const headers = {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
-      };
+      // 通过后端代理发送请求，解决跨域问题
+      const response = await fetch('/api/ekp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'test',
+          baseUrl: config.baseUrl,
+          username: config.username,
+          password: config.password,
+          apiPrefix: config.apiPrefix,
+        }),
+      });
 
-      const testEndpoints = [
-        `${config.baseUrl}/sys/user/getUserInfo`,
-        `${config.baseUrl}${config.apiPrefix}`,
-        `${config.baseUrl}/sys/webservice/rest`,
-      ];
+      const result = await response.json();
 
-      let connected = false;
-
-      for (const endpoint of testEndpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            method: 'GET',
-            headers,
-          });
-          
-          if (response.ok || response.status === 401 || response.status === 403) {
-            connected = true;
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (connected) {
+      if (result.success) {
         setTestResult('success');
-        setTimeout(() => {
-          setTestError('EKP 服务可达，但认证可能失败（401）。请确认用户名密码正确。');
-        }, 500);
+        setTestError('连接成功！EKP 服务已可达。');
       } else {
         setTestResult('failed');
-        setTestError('无法连接到 EKP 系统，请检查地址是否正确。');
+        setTestError(result.error || '无法连接到 EKP 系统，请检查配置是否正确。');
       }
     } catch (err) {
       setTestResult('failed');
       setTestError(err instanceof Error ? err.message : '连接测试失败');
     } finally {
-      setIsSaving(false);
+      setIsTesting(false);
     }
   };
 
