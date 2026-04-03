@@ -550,8 +550,8 @@ function EKPOConfigPanel() {
     baseUrl: '',
     username: '',
     password: '',
-    apiPath: '/api/km-review/kmReviewRestService',
-    serviceId: 'kmReviewRestService',
+    apiPath: '',  // 不再需要用户填写，使用内置路径
+    serviceId: '',  // 不再需要用户填写
     leaveTemplateId: '',
     expenseTemplateId: '',
     enabled: false,
@@ -576,12 +576,11 @@ function EKPOConfigPanel() {
     }
   }, []);
 
-  // 测试连接（通过后端代理，使用 SOAP + Basic Auth）
+  // 测试连接（通过后端代理，使用 REST API + Basic Auth）
   const testConnection = async () => {
     // 收集所有缺失的必填字段
     const missingFields: string[] = [];
     if (!config.baseUrl) missingFields.push('EKP 系统地址');
-    if (!config.apiPath) missingFields.push('REST 访问路径');
     if (!config.username) missingFields.push('用户名');
     if (!config.password) missingFields.push('密码');
 
@@ -605,8 +604,6 @@ function EKPOConfigPanel() {
           baseUrl: config.baseUrl,
           username: config.username,
           password: config.password,
-          apiPath: config.apiPath,
-          serviceId: config.serviceId,
         }),
       });
 
@@ -648,6 +645,8 @@ function EKPOConfigPanel() {
           <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
           <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
             <p><strong>蓝凌EKP 使用 REST Service 接口</strong>，支持 Basic Auth 认证。</p>
+            <p>系统将自动使用以下接口路径进行连接测试和待办查询：</p>
+            <p className="font-mono text-[10px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">/ekp/api/sys-notify/sysNotifyTodoRestService/getTodo</p>
             <p>配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
           </div>
         </div>
@@ -666,40 +665,6 @@ function EKPOConfigPanel() {
           className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <p className="text-xs text-muted-foreground mt-1">填写蓝凌EKP系统的访问地址</p>
-      </div>
-
-      {/* 访问路径 */}
-      <div>
-        <label className="block text-xs font-medium mb-1.5">
-          REST 访问路径 <span className="text-destructive ml-1">*</span>
-        </label>
-        <input
-          type="text"
-          value={config.apiPath}
-          onChange={(e) => setConfig({ ...config, apiPath: e.target.value })}
-          placeholder="/api/km-review/kmReviewRestService"
-          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          流程审批服务: /api/km-review/kmReviewRestService
-        </p>
-      </div>
-
-      {/* 服务标识 */}
-      <div>
-        <label className="block text-xs font-medium mb-1.5">
-          服务标识
-        </label>
-        <input
-          type="text"
-          value={config.serviceId}
-          onChange={(e) => setConfig({ ...config, serviceId: e.target.value })}
-          placeholder="kmReviewRestService"
-          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          REST服务标识: kmReviewRestService
-        </p>
       </div>
 
       {/* 用户名 */}

@@ -2,6 +2,10 @@
  * 蓝凌EKP REST 客户端
  * 
  * 使用 Basic Auth 认证，通过 REST API 调用 EKP 服务
+ * 
+ * 支持的接口：
+ * 1. 获取待办数量：/ekp/api/sys-notify/sysNotifyTodoRestService/getTodo
+ * 2. 获取待办列表：/ekp/api/sys-notify/sysNotifyTodoRestService/getTodoList
  */
 
 // ============================================
@@ -12,7 +16,7 @@ export interface EKPConfig {
   baseUrl: string;
   username: string;
   password: string;
-  apiPath: string;      // REST服务路径，如 /api/km-review/kmReviewRestService
+  apiPath: string;      // REST服务路径（用于测试连接）
   serviceId: string;    // 服务标识
 }
 
@@ -38,6 +42,35 @@ export interface EKPResponse<T = unknown> {
   code?: string;
 }
 
+// 待办数量返回结果
+export interface TodoCountResult {
+  returnState: number;  // 0未操作, 1失败, 2成功
+  message: string;      // 返回信息或错误信息
+}
+
+// 待办类型
+export type TodoType = -1 | 0 | 1 | 2 | 3 | 13;
+// -1: 所有已办
+// 0: 所有待办
+// 1: 审批类待办
+// 2: 通知类待办
+// 3: 暂挂类待办
+// 13: 审批类待办、暂挂类待办
+
+// EKP 预定义的 REST 服务路径
+export const EKP_REST_PATHS = {
+  // 待办通知服务
+  notify: {
+    getTodo: '/ekp/api/sys-notify/sysNotifyTodoRestService/getTodo',
+    getTodoList: '/ekp/api/sys-notify/sysNotifyTodoRestService/getTodoList',
+  },
+  // 流程管理服务
+  review: {
+    addReview: '/ekp/api/km-review/kmReviewRestService/addReview',
+    approve: '/ekp/api/km-review/kmReviewRestService/approveProcess',
+  },
+};
+
 // ============================================
 // REST 客户端
 // ============================================
@@ -60,14 +93,13 @@ export class EKPRestClient {
   }
 
   /**
-   * 发送 REST 请求
+   * 发送 REST 请求到指定路径
    */
-  async request<T = unknown>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-    action: string,
-    data?: Record<string, unknown>
-  ): Promise<EKPResponse<T>> {
-    const endpoint = `${this.config.baseUrl}${this.config.apiPath}/${action}`;
+  private async post<T = unknown>(
+    path: string,
+    body?: Record<string, unknown>
+  ): Promise<{ status: number; result: T | null; text: string }> {
+    const endpoint = `${this.config.baseUrl}${path}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -76,30 +108,23 @@ export class EKPRestClient {
 
     try {
       const response = await fetch(endpoint, {
-        method,
+        method: 'POST',
         headers,
-        body: data ? JSON.stringify(data) : undefined,
+        body: body ? JSON.stringify(body) : undefined,
       });
 
-      const result = await response.json() as EKPResponse<T>;
-
-      // 处理认证失败
-      if (response.status === 401 || result.code === 'error.httpStatus.401') {
-        return {
-          success: false,
-          data: null,
-          msg: '认证失败：用户名或密码错误',
-        };
+      const text = await response.text();
+      let result: T | null = null;
+      try {
+        result = JSON.parse(text) as T;
+      } catch {
+        // 非 JSON 响应
       }
 
-      return result;
+      return { status: response.status, result, text };
 
     } catch (err) {
-      return {
-        success: false,
-        data: null,
-        msg: `网络错误：${err instanceof Error ? err.message : '未知错误'}`,
-      };
+      throw new Error(`网络错误：${err instanceof Error ? err.message : '未知错误'}`);
     }
   }
 
@@ -107,109 +132,145 @@ export class EKPRestClient {
    * 发起流程
    */
   async addReview(formData: EKPRequest): Promise<EKPResponse<string>> {
-    const payload = {
+    const response = await this.post<EKPResponse<string>>(EKP_REST_PATHS.review.addReview, {
       fdTemplateId: formData.fdTemplateId,
       docSubject: formData.docSubject,
       docContent: formData.docContent,
       formValues: typeof formData.formValues === 'string' 
         ? formData.formValues 
         : JSON.stringify(formData.formValues || {}),
-      fdId: formData.fdId,
-      docCreator: formData.docCreator,
-      authAreaId: formData.authAreaId,
-      fdKeyword: formData.fdKeyword,
-      fdSource: formData.fdSource,
-      docProperty: formData.docProperty,
-      docStatus: formData.docStatus,
-      flowParam: formData.flowParam,
-    };
+    });
 
-    return this.request<string>('POST', 'addReview', payload);
+    if (response.status === 401) {
+      return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+    }
+
+    return response.result || { success: false, data: null, msg: response.text };
   }
 
   /**
    * 审批流程
    */
   async approveReview(formData: EKPRequest): Promise<EKPResponse<string>> {
-    return this.request<string>('POST', 'approveProcess', {
+    const response = await this.post<EKPResponse<string>>(EKP_REST_PATHS.review.approve, {
       fdId: formData.fdId,
       formValues: typeof formData.formValues === 'string' 
         ? formData.formValues 
         : JSON.stringify(formData.formValues || {}),
     });
+
+    if (response.status === 401) {
+      return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+    }
+
+    return response.result || { success: false, data: null, msg: response.text };
   }
 
   /**
-   * 测试连接
+   * 获取待办数量
+   * @param loginName 登录名或用户ID
+   * @param type 待办类型：-1所有已办, 0所有待办, 1审批类, 2通知类, 3暂挂类, 13审批+暂挂
    */
-  async testConnection(): Promise<EKPResponse<string>> {
-    // 尝试访问服务端点验证连接
-    const endpoint = `${this.config.baseUrl}${this.config.apiPath}`;
-
+  async getTodoCount(loginName: string, type: TodoType = 0): Promise<EKPResponse<string>> {
     try {
-      // 使用 POST 方法测试连接（REST 服务通常需要 POST）
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': this.getBasicAuthHeader(),
-        },
-        body: JSON.stringify({}),
+      const response = await this.post<TodoCountResult>(EKP_REST_PATHS.notify.getTodo, {
+        targets: JSON.stringify({ LoginName: loginName }),
+        type: type,
       });
 
-      // 解析响应内容
-      let resultText = '';
-      try {
-        resultText = await response.text();
-      } catch {
-        // 忽略解析错误
-      }
-
-      // 401 表示认证失败
+      // 认证失败
       if (response.status === 401) {
-        return {
-          success: false,
-          data: null,
-          msg: '认证失败：用户名或密码错误',
-        };
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
       }
 
-      // 403 表示权限不足或服务不可用
+      // 权限不足
       if (response.status === 403) {
-        return {
-          success: false,
-          data: null,
-          msg: '权限不足：请检查用户是否有访问该服务的权限',
-        };
+        return { success: false, data: null, msg: '权限不足：请检查用户是否有访问该服务的权限' };
       }
 
-      // 404 表示服务路径不存在
+      // 服务不存在
       if (response.status === 404) {
-        return {
-          success: false,
-          data: null,
-          msg: '服务不存在：请检查访问路径是否正确',
-        };
+        return { success: false, data: null, msg: '服务不存在：请检查访问路径是否正确' };
       }
 
-      // 500 是服务端错误，但可能只是因为请求参数为空
-      // 如果返回了 JSON 且包含错误码，说明服务是可访问的
-      if (response.status === 500) {
-        // 尝试解析错误信息
-        try {
-          const errorResult = JSON.parse(resultText);
-          // 如果是参数错误，说明服务存在且认证通过
-          if (errorResult.code?.includes('param') || errorResult.msg?.includes('参数')) {
-            return {
-              success: true,
-              data: '连接成功',
-              msg: '服务可访问（认证通过），请配置表单模板ID后使用',
-            };
-          }
+      // 成功响应
+      if (response.result) {
+        if (response.result.returnState === 2) {
+          return {
+            success: true,
+            data: response.result.message,
+            msg: '获取待办数量成功',
+          };
+        } else if (response.result.returnState === 1) {
           return {
             success: false,
             data: null,
-            msg: `服务端错误：${errorResult.msg || errorResult.message || resultText.substring(0, 100)}`,
+            msg: `获取失败：${response.result.message}`,
+          };
+        }
+      }
+
+      // 尝试解析原始响应
+      return {
+        success: response.status === 200,
+        data: response.text,
+        msg: response.status === 200 ? '请求成功' : `请求失败：HTTP ${response.status}`,
+      };
+
+    } catch (err) {
+      return {
+        success: false,
+        data: null,
+        msg: `请求失败：${err instanceof Error ? err.message : '网络错误'}`,
+      };
+    }
+  }
+
+  /**
+   * 测试连接 - 使用获取待办数量接口验证
+   */
+  async testConnection(): Promise<EKPResponse<string>> {
+    // 使用获取待办数量接口测试连接
+    // 该接口是蓝凌EKP的标准REST服务
+    try {
+      const response = await this.post<TodoCountResult>(EKP_REST_PATHS.notify.getTodo, {
+        targets: JSON.stringify({ LoginName: this.config.username }),
+        type: 0,
+      });
+
+      // 认证失败
+      if (response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      // 权限不足
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足：请检查用户是否有访问该服务的权限' };
+      }
+
+      // 服务不存在
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '服务不存在：请检查EKP系统地址是否正确' };
+      }
+
+      // 检查是否返回了登录页面（说明认证未通过）
+      if (response.text && response.text.includes('<!doctype html') && response.text.includes('登录')) {
+        return { 
+          success: false, 
+          data: null, 
+          msg: '认证失败：服务器未接受 Basic Auth 认证，请检查：\n1. EKP 是否启用了 REST API 的 Basic Auth 认证\n2. 用户名密码是否正确\n3. 是否需要先登录获取 Session' 
+        };
+      }
+
+      // 服务端错误
+      if (response.status === 500) {
+        // 尝试解析错误信息
+        try {
+          const errorData = JSON.parse(response.text);
+          return {
+            success: false,
+            data: null,
+            msg: `服务端错误：${errorData.message || errorData.msg || response.text.substring(0, 100)}`,
           };
         } catch {
           return {
@@ -220,37 +281,55 @@ export class EKPRestClient {
         }
       }
 
-      // 200 或其他成功状态
-      if (response.ok) {
-        return {
-          success: true,
-          data: '连接成功',
-          msg: '连接成功，服务可用',
-        };
+      // 成功响应
+      if (response.result) {
+        if (response.result.returnState === 2) {
+          return {
+            success: true,
+            data: response.result.message,
+            msg: `连接成功！待办数量：${response.result.message}`,
+          };
+        } else if (response.result.returnState === 1) {
+          return {
+            success: false,
+            data: null,
+            msg: `连接成功但查询失败：${response.result.message}`,
+          };
+        }
+      }
+
+      // 其他情况
+      if (response.status === 200) {
+        // 检查响应是否为 JSON
+        try {
+          JSON.parse(response.text);
+          return { success: true, data: '连接成功', msg: '连接成功，服务可用' };
+        } catch {
+          // 非 JSON 响应，可能是登录页面
+          if (response.text.includes('<!doctype') || response.text.includes('<html')) {
+            return { 
+              success: false, 
+              data: null, 
+              msg: '认证失败：服务器返回了登录页面，请检查 Basic Auth 配置' 
+            };
+          }
+          return { success: false, data: null, msg: `连接失败：非预期的响应格式` };
+        }
       }
 
       return {
         success: false,
         data: null,
-        msg: `连接失败：HTTP ${response.status} - ${resultText.substring(0, 100)}`,
+        msg: `连接失败：HTTP ${response.status}`,
       };
 
     } catch (err) {
-      // 网络错误
       if (err instanceof Error) {
         if (err.message.includes('fetch failed') || err.message.includes('ENOTFOUND')) {
-          return {
-            success: false,
-            data: null,
-            msg: '网络错误：无法连接到EKP服务器，请检查地址是否正确',
-          };
+          return { success: false, data: null, msg: '网络错误：无法连接到EKP服务器，请检查地址是否正确' };
         }
         if (err.message.includes('certificate') || err.message.includes('SSL')) {
-          return {
-            success: false,
-            data: null,
-            msg: 'SSL证书错误：请检查服务器证书配置',
-          };
+          return { success: false, data: null, msg: 'SSL证书错误：请检查服务器证书配置' };
         }
       }
       return {
