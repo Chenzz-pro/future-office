@@ -114,11 +114,15 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Calendar,
 };
 
+// localStorage key
+const CUSTOM_SKILLS_STORAGE_KEY = 'custom_skills';
+
 type ViewMode = 'list' | 'detail';
 
 export function SkillsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [customSkills, setCustomSkills] = useState<CustomSkill[]>([]);
+  const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('全部');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -127,21 +131,28 @@ export function SkillsPage() {
   const [executing, setExecuting] = useState(false);
   const [executeResult, setExecuteResult] = useState<{ success: boolean; message: string; data: unknown } | null>(null);
 
-  // 加载自定义技能
+  // 从 localStorage 加载自定义技能
   useEffect(() => {
+    setMounted(true);
     loadCustomSkills();
   }, []);
 
-  const loadCustomSkills = async () => {
+  const loadCustomSkills = () => {
     try {
-      const response = await fetch('/api/custom-skill?action=list');
-      const data = await response.json();
-      if (data.success) {
-        setCustomSkills(data.data || []);
+      const stored = localStorage.getItem(CUSTOM_SKILLS_STORAGE_KEY);
+      if (stored) {
+        const skills = JSON.parse(stored) as CustomSkill[];
+        setCustomSkills(skills);
       }
     } catch (err) {
       console.error('加载技能失败:', err);
     }
+  };
+
+  // 保存到 localStorage
+  const saveToLocalStorage = (skills: CustomSkill[]) => {
+    localStorage.setItem(CUSTOM_SKILLS_STORAGE_KEY, JSON.stringify(skills));
+    setCustomSkills(skills);
   };
 
   // 合并内置技能和自定义技能
@@ -165,49 +176,45 @@ export function SkillsPage() {
     return matchSearch && matchCategory;
   });
 
-  const toggleSkill = async (id: string) => {
+  const toggleSkill = (id: string) => {
     // 如果是自定义技能，更新状态
-    const customSkill = customSkills.find(s => s.id === id);
-    if (customSkill) {
-      const updatedSkill = { ...customSkill, enabled: !customSkill.enabled };
-      await saveCustomSkill(updatedSkill);
+    const index = customSkills.findIndex(s => s.id === id);
+    if (index >= 0) {
+      const updatedSkills = [...customSkills];
+      updatedSkills[index] = { ...updatedSkills[index], enabled: !updatedSkills[index].enabled };
+      saveToLocalStorage(updatedSkills);
     }
   };
 
   // 保存自定义技能
-  const saveCustomSkill = async (skill: CustomSkill) => {
-    try {
-      const response = await fetch('/api/custom-skill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', skill }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        await loadCustomSkills();
-      }
-    } catch (err) {
-      console.error('保存技能失败:', err);
+  const saveCustomSkill = (skill: CustomSkill) => {
+    const now = new Date().toISOString();
+    const existingIndex = customSkills.findIndex(s => s.id === skill.id);
+    
+    let updatedSkills: CustomSkill[];
+    if (existingIndex >= 0) {
+      // 更新现有技能
+      updatedSkills = [...customSkills];
+      updatedSkills[existingIndex] = { ...skill, updatedAt: now };
+    } else {
+      // 创建新技能
+      const newSkill: CustomSkill = {
+        ...skill,
+        id: skill.id || `skill_${Date.now()}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      updatedSkills = [newSkill, ...customSkills];
     }
+    
+    saveToLocalStorage(updatedSkills);
   };
 
   // 删除自定义技能
-  const deleteCustomSkill = async (id: string) => {
+  const deleteCustomSkill = (id: string) => {
     if (!confirm('确定要删除这个技能吗？')) return;
-    
-    try {
-      const response = await fetch('/api/custom-skill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', skillId: id }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        await loadCustomSkills();
-      }
-    } catch (err) {
-      console.error('删除技能失败:', err);
-    }
+    const updatedSkills = customSkills.filter(s => s.id !== id);
+    saveToLocalStorage(updatedSkills);
   };
 
   // 执行技能
@@ -226,12 +233,13 @@ export function SkillsPage() {
         }
       }
 
+      // 传递完整的技能配置给后端执行
       const response = await fetch('/api/custom-skill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'execute',
-          skillId: skill.id,
+          skill,  // 传递完整技能配置
           params,
         }),
       });
@@ -271,8 +279,8 @@ export function SkillsPage() {
   };
 
   // 保存对话框回调
-  const handleDialogSave = async (skill: CustomSkill) => {
-    await saveCustomSkill(skill);
+  const handleDialogSave = (skill: CustomSkill) => {
+    saveCustomSkill(skill);
     setDialogOpen(false);
     setEditingSkill(null);
   };
