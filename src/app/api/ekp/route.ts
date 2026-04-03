@@ -36,10 +36,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // 方式1: 尝试Basic Auth
-        const auth = Buffer.from(`${username}:${password}`).toString('base64');
-        
-        // 先尝试登录获取cookie
+        // 步骤1: 调用登录接口获取SESSION cookie
         const loginResponse = await fetch(`${baseUrl}/sys/auth/login`, {
           method: 'POST',
           headers: {
@@ -48,68 +45,48 @@ export async function POST(request: NextRequest) {
           body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
         });
 
-        // 检查是否返回了SESSION cookie
+        // 提取SESSION cookie
         const setCookie = loginResponse.headers.get('set-cookie');
-        const location = loginResponse.headers.get('location');
-        
-        // 如果有重定向，检查是否指向登录页
-        if (location && (location.includes('login') || location.includes('anonym'))) {
-          // 尝试方式2: 直接Basic Auth获取用户信息
-          const userResponse = await fetch(`${baseUrl}/sys/user/getUserInfo`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Basic ${auth}`,
-            },
-          });
-
-          const text = await userResponse.text();
-          
-          // 检查是否返回HTML登录页
-          if (text.includes('<html') || text.includes('login') || text.includes('登录')) {
-            return makeResponse(false, '认证失败：用户名或密码错误');
-          }
-
-          // 尝试解析为JSON
-          try {
-            const userData = JSON.parse(text);
-            if (userData.userid || userData.loginname) {
-              return makeResponse(true, '认证成功！Basic Auth 连接正常', { 
-                user: userData,
-                authType: 'basic'
-              });
-            }
-          } catch {
-            // JSON解析失败，继续检查
-          }
+        if (!setCookie || !setCookie.includes('SESSION=')) {
+          return makeResponse(false, '登录接口异常：无法获取会话');
         }
 
-        // 方式3: 检查SESSION cookie是否获取成功
-        if (setCookie && setCookie.includes('SESSION=')) {
-          return makeResponse(true, '登录成功！Cookie认证连接正常', { 
-            authType: 'cookie',
-            sessionCookie: setCookie
-          });
+        const sessionMatch = setCookie.match(/SESSION=([^;]+)/);
+        const sessionId = sessionMatch ? sessionMatch[1] : '';
+
+        // 步骤2: 用SESSION cookie访问用户信息接口验证认证是否成功
+        const userResponse = await fetch(`${baseUrl}/sys/user/getUserInfo`, {
+          method: 'GET',
+          headers: {
+            'Cookie': `SESSION=${sessionId}`,
+          },
+        });
+
+        const userText = await userResponse.text();
+
+        // 如果重定向到匿名页面，说明认证失败
+        if (userText.includes('anonym.jsp') || userText.includes('登录') || userText.includes('login')) {
+          return makeResponse(false, '认证失败：用户名或密码错误');
         }
 
-        // 如果是200 OK，尝试获取响应内容
-        if (loginResponse.ok) {
-          const text = await loginResponse.text();
-          
-          // 检查是否是JSON响应
-          if (text.startsWith('{') || text.startsWith('[')) {
-            return makeResponse(true, '认证成功！', { 
-              data: JSON.parse(text),
-              authType: 'form'
+        // 如果返回JSON用户信息，说明认证成功
+        try {
+          const userData = JSON.parse(userText);
+          if (userData.userid || userData.loginname || userData.userName) {
+            return makeResponse(true, `认证成功！欢迎 ${userData.userName || userData.loginname || '用户'}`, {
+              user: userData,
             });
           }
-          
-          // 如果返回HTML，检查是否包含错误信息
-          if (text.includes('密码错误') || text.includes('用户名错误') || text.includes('登录失败')) {
-            return makeResponse(false, '认证失败：用户名或密码错误');
-          }
+        } catch {
+          // JSON解析失败
         }
 
-        return makeResponse(false, `认证方式不支持或配置错误 (HTTP ${loginResponse.status})`);
+        // 如果不是JSON也不是HTML，可能是认证成功但接口格式不同
+        if (userResponse.ok && !userText.includes('<html')) {
+          return makeResponse(true, '认证成功！');
+        }
+
+        return makeResponse(false, '认证失败：用户名或密码错误');
 
       } catch (err) {
         return makeResponse(false, `连接失败：${err instanceof Error ? err.message : '网络错误'}`);
