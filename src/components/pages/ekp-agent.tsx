@@ -12,14 +12,16 @@ import {
   Settings,
   Link2,
   RefreshCw,
-  ExternalLink,
   Clock,
   User,
   ChevronRight,
   MessageSquare,
   Zap,
+  Database,
+  BookOpen,
+  Users,
 } from 'lucide-react';
-import { useEKPIntegration, LEAVE_TYPE_MAP, EXPENSE_TYPE_MAP, EKPConfig } from '@/hooks/use-ekp-integration';
+import { useEKPIntegration, LEAVE_TYPE_MAP, EXPENSE_TYPE_MAP, EKP_REST_SERVICES, EKPConfig } from '@/hooks/use-ekp-integration';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,14 +60,14 @@ import { toast } from 'sonner';
 // 配置弹窗组件
 // ============================================
 
-interface EKPConfigData {
+interface ConfigFormData {
   baseUrl: string;
-  appKey: string;
-  appSecret: string;
+  username: string;
+  password: string;
+  apiPrefix: string;
   leaveFormId: string;
   expenseFormId: string;
   enabled: boolean;
-  authMode?: 'oauth2' | 'basic';
 }
 
 function EKPConfigDialog({
@@ -83,29 +85,60 @@ function EKPConfigDialog({
   onTest: () => Promise<boolean>;
   isLoading: boolean;
 }) {
-  const [formData, setFormData] = useState<EKPConfig>(config);
+  const [formData, setFormData] = useState<ConfigFormData>({
+    baseUrl: '',
+    username: '',
+    password: '',
+    apiPrefix: '/km/review/',
+    leaveFormId: '',
+    expenseFormId: '',
+    enabled: false,
+  });
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [selectedService, setSelectedService] = useState('review');
 
   useEffect(() => {
-    setFormData(config);
+    setFormData({
+      baseUrl: config.baseUrl,
+      username: config.username,
+      password: config.password,
+      apiPrefix: config.apiPrefix,
+      leaveFormId: config.leaveFormId,
+      expenseFormId: config.expenseFormId,
+      enabled: config.enabled,
+    });
     setTestResult(null);
   }, [config, open]);
 
   const handleTest = async () => {
-    onSave(formData);
+    const fullConfig: EKPConfig = {
+      ...formData,
+    };
+    onSave(fullConfig);
     const success = await onTest();
     setTestResult(success ? 'success' : 'error');
   };
 
   const handleSave = () => {
-    onSave(formData);
+    const fullConfig: EKPConfig = {
+      ...formData,
+    };
+    onSave(fullConfig);
     onOpenChange(false);
     toast.success('配置已保存');
   };
 
+  const handleServiceSelect = (serviceKey: string) => {
+    setSelectedService(serviceKey);
+    const service = EKP_REST_SERVICES[serviceKey as keyof typeof EKP_REST_SERVICES];
+    if (service) {
+      setFormData({ ...formData, apiPrefix: service.path });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -129,7 +162,7 @@ function EKPConfigDialog({
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={isLoading || !formData.baseUrl}
+              disabled={isLoading || !formData.baseUrl || !formData.username}
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -160,7 +193,7 @@ function EKPConfigDialog({
             <Label htmlFor="baseUrl">EKP系统地址 *</Label>
             <Input
               id="baseUrl"
-              placeholder="https://ekp.company.com"
+              placeholder="https://oa.fjhxrl.com"
               value={formData.baseUrl}
               onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
             />
@@ -169,74 +202,86 @@ function EKPConfigDialog({
             </p>
           </div>
 
-          {/* 认证模式 */}
-          <div className="space-y-2">
-            <Label>认证模式</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, authMode: 'oauth2' })}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  formData.authMode === 'oauth2'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50'
-                }`}
-              >
-                <div className="font-medium text-sm">OAuth 2.0</div>
-                <div className="text-xs text-muted-foreground">推荐，需要开放平台</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, authMode: 'basic' })}
-                className={`p-3 rounded-lg border text-left transition-all ${
-                  formData.authMode === 'basic'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50'
-                }`}
-              >
-                <div className="font-medium text-sm">Basic Auth</div>
-                <div className="text-xs text-muted-foreground">使用系统账号密码</div>
-              </button>
+          {/* 认证信息 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">用户名 *</Label>
+              <Input
+                id="username"
+                placeholder="EKP系统账号"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">密码 *</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="EKP系统密码"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              />
             </div>
           </div>
 
-          {/* App Key / 用户名 */}
+          {/* REST服务选择 */}
           <div className="space-y-2">
-            <Label htmlFor="appKey">{formData.authMode === 'basic' ? '用户名' : 'App Key'}</Label>
+            <Label>选择REST服务</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {Object.entries(EKP_REST_SERVICES).map(([key, service]) => {
+                const icons: Record<string, React.ElementType> = {
+                  review: FileText,
+                  calendar: Calendar,
+                  hr: Users,
+                  meeting: Users,
+                  kms: BookOpen,
+                  webservice: Database,
+                };
+                const Icon = icons[key] || Database;
+                
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleServiceSelect(key)}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      selectedService === key
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="h-4 w-4" />
+                      <span className="font-medium text-sm">{service.name}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {service.path}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* API路径前缀 */}
+          <div className="space-y-2">
+            <Label htmlFor="apiPrefix">REST服务路径</Label>
             <Input
-              id="appKey"
-              placeholder={formData.authMode === 'basic' ? 'EKP系统用户名' : 'EKP应用标识'}
-              value={formData.appKey}
-              onChange={(e) => setFormData({ ...formData, appKey: e.target.value })}
+              id="apiPrefix"
+              placeholder="/km/review/"
+              value={formData.apiPrefix}
+              onChange={(e) => setFormData({ ...formData, apiPrefix: e.target.value })}
             />
             <p className="text-xs text-muted-foreground">
-              {formData.authMode === 'basic'
-                ? '用于API调用的EKP系统账号'
-                : '在EKP开放平台创建应用后获取'}
+              蓝凌EKP REST服务的访问路径前缀，根据选择的REST服务自动填充
             </p>
           </div>
 
-          {/* App Secret / 密码 */}
-          <div className="space-y-2">
-            <Label htmlFor="appSecret">{formData.authMode === 'basic' ? '密码' : 'App Secret'}</Label>
-            <Input
-              id="appSecret"
-              type="password"
-              placeholder={formData.authMode === 'basic' ? 'EKP系统密码' : 'EKP应用密钥'}
-              value={formData.appSecret}
-              onChange={(e) => setFormData({ ...formData, appSecret: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              {formData.authMode === 'basic'
-                ? 'EKP系统账号的密码'
-                : '在EKP开放平台创建应用后获取'}
-            </p>
-          </div>
-
-          {/* 表单ID */}
+          {/* 表单模板ID */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="leaveFormId">请假表单ID</Label>
+              <Label htmlFor="leaveFormId">请假表单模板ID</Label>
               <Input
                 id="leaveFormId"
                 placeholder="LT_LEAVE_PERSONAL"
@@ -245,7 +290,7 @@ function EKPConfigDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="expenseFormId">报销表单ID</Label>
+              <Label htmlFor="expenseFormId">报销表单模板ID</Label>
               <Input
                 id="expenseFormId"
                 placeholder="LT_EXPENSE"
@@ -269,6 +314,22 @@ function EKPConfigDialog({
               onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
               className="w-5 h-5 rounded border-gray-300"
             />
+          </div>
+
+          {/* 帮助信息 */}
+          <div className="bg-blue-50 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <Link2 className="h-4 w-4 text-blue-600 mt-0.5" />
+              <div className="text-xs text-blue-800">
+                <p className="font-medium mb-1">配置说明：</p>
+                <ul className="space-y-1 text-blue-700">
+                  <li>1. 系统地址：如 <code>https://oa.company.com</code></li>
+                  <li>2. 用户名密码：EKP系统账号（Basic Auth）</li>
+                  <li>3. REST服务路径：在EKP「集成管理」中查看已启动的服务</li>
+                  <li>4. 表单模板ID：在表单设计器中查看表单标识</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -335,7 +396,6 @@ function LeaveRequestForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        {/* 请假类型 */}
         <div className="space-y-2">
           <Label>请假类型</Label>
           <Select value={leaveType} onValueChange={setLeaveType}>
@@ -343,8 +403,8 @@ function LeaveRequestForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(LEAVE_TYPE_MAP).map(([name, value]) => (
-                <SelectItem key={value} value={name}>
+              {Object.entries(LEAVE_TYPE_MAP).map(([name]) => (
+                <SelectItem key={name} value={name}>
                   {name}
                 </SelectItem>
               ))}
@@ -352,7 +412,6 @@ function LeaveRequestForm({
           </Select>
         </div>
 
-        {/* 请假时长 */}
         <div className="space-y-2">
           <Label>请假时长（天）</Label>
           <Input
@@ -366,7 +425,6 @@ function LeaveRequestForm({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* 开始日期 */}
         <div className="space-y-2">
           <Label>开始日期</Label>
           <Input
@@ -379,7 +437,6 @@ function LeaveRequestForm({
           />
         </div>
 
-        {/* 结束日期 */}
         <div className="space-y-2">
           <Label>结束日期</Label>
           <Input
@@ -393,7 +450,6 @@ function LeaveRequestForm({
         </div>
       </div>
 
-      {/* 请假原因 */}
       <div className="space-y-2">
         <Label>请假原因</Label>
         <Textarea
@@ -404,7 +460,6 @@ function LeaveRequestForm({
         />
       </div>
 
-      {/* 联系方式 */}
       <div className="space-y-2">
         <Label>联系方式（可选）</Label>
         <Input
@@ -469,7 +524,6 @@ function ExpenseRequestForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        {/* 费用类型 */}
         <div className="space-y-2">
           <Label>费用类型</Label>
           <Select value={expenseType} onValueChange={setExpenseType}>
@@ -477,8 +531,8 @@ function ExpenseRequestForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(EXPENSE_TYPE_MAP).map(([name, value]) => (
-                <SelectItem key={value} value={name}>
+              {Object.entries(EXPENSE_TYPE_MAP).map(([name]) => (
+                <SelectItem key={name} value={name}>
                   {name}
                 </SelectItem>
               ))}
@@ -486,7 +540,6 @@ function ExpenseRequestForm({
           </Select>
         </div>
 
-        {/* 金额 */}
         <div className="space-y-2">
           <Label>金额（元）</Label>
           <Input
@@ -500,7 +553,6 @@ function ExpenseRequestForm({
         </div>
       </div>
 
-      {/* 发生日期 */}
       <div className="space-y-2">
         <Label>发生日期</Label>
         <Input
@@ -510,7 +562,6 @@ function ExpenseRequestForm({
         />
       </div>
 
-      {/* 所属项目 */}
       <div className="space-y-2">
         <Label>所属项目（可选）</Label>
         <Input
@@ -520,7 +571,6 @@ function ExpenseRequestForm({
         />
       </div>
 
-      {/* 费用说明 */}
       <div className="space-y-2">
         <Label>费用说明</Label>
         <Textarea
@@ -622,20 +672,16 @@ function QuickActionCard({
   title,
   description,
   onClick,
-  disabled,
 }: {
   icon: React.ElementType;
   title: string;
   description: string;
   onClick: () => void;
-  disabled?: boolean;
 }) {
   return (
     <Card
-      className={`cursor-pointer hover:shadow-md transition-all ${
-        disabled ? 'opacity-50 cursor-not-allowed' : ''
-      }`}
-      onClick={disabled ? undefined : onClick}
+      className="cursor-pointer hover:shadow-md transition-all"
+      onClick={onClick}
     >
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
@@ -667,7 +713,6 @@ export default function EKPAgent() {
     error,
     createLeaveForm,
     createExpenseForm,
-    queryLeaveRecords,
   } = useEKPIntegration();
 
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -678,7 +723,6 @@ export default function EKPAgent() {
     data?: { processId: string; dataId: string };
   } | null>(null);
 
-  // 处理请假提交
   const handleLeaveSubmit = async (data: {
     leaveType: string;
     startDate: string;
@@ -714,7 +758,6 @@ export default function EKPAgent() {
     }
   };
 
-  // 处理报销提交
   const handleExpenseSubmit = async (data: {
     expenseType: string;
     amount: number;
@@ -758,7 +801,7 @@ export default function EKPAgent() {
           </div>
           <h2 className="text-xl font-semibold mb-2">蓝凌EKP 智能助手</h2>
           <p className="text-muted-foreground mb-6">
-            连接企业EKP系统，通过自然语言快速提交请假、报销等申请，一键发起审批流程
+            连接企业EKP系统，通过自然语言快速提交请假、报销等申请，自动发起审批流程
           </p>
 
           <Button onClick={() => setConfigDialogOpen(true)} className="gap-2">
@@ -773,9 +816,9 @@ export default function EKPAgent() {
             </h3>
             <ul className="text-sm text-muted-foreground space-y-2">
               <li>1. 联系EKP管理员获取 API 地址和凭证</li>
-              <li>2. 在EKP开放平台创建应用，获取 App Key/Secret</li>
-              <li>3. 申请表单API和流程API的调用权限</li>
-              <li>4. 填写请假表单和报销表单的模板ID</li>
+              <li>2. 选择已启动的REST服务（流程启动Rest）</li>
+              <li>3. 填写请假/报销表单模板ID</li>
+              <li>4. 点击「测试连接」验证配置</li>
             </ul>
           </div>
         </div>
@@ -809,6 +852,8 @@ export default function EKPAgent() {
                 <span>{isConnected ? '已连接' : '未连接'}</span>
                 <span>|</span>
                 <span>{config.baseUrl}</span>
+                <span>|</span>
+                <span>服务: {config.apiPrefix}</span>
               </div>
             </div>
           </div>
@@ -975,7 +1020,6 @@ export default function EKPAgent() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {/* 示例记录 */}
                   <ApplicationCard
                     type="leave"
                     title="年假 3天"

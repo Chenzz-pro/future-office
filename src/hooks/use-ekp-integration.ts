@@ -7,14 +7,14 @@ import { useState, useCallback, useEffect } from 'react';
 // ============================================
 
 export interface EKPConfig {
-  /** EKP系统访问地址，如 https://ekp.company.com */
+  /** EKP系统访问地址，如 https://oa.company.com */
   baseUrl: string;
-  /** OAuth App Key */
-  appKey: string;
-  /** OAuth App Secret */
-  appSecret: string;
-  /** 授权模式：oauth2 | basic */
-  authMode: 'oauth2' | 'basic';
+  /** 认证用户名 */
+  username: string;
+  /** 认证密码 */
+  password: string;
+  /** REST服务路径前缀，如 /sys/webservice/rest 或 /km/review/ */
+  apiPrefix: string;
   /** 表单模板ID - 请假申请 */
   leaveFormId: string;
   /** 表单模板ID - 报销申请 */
@@ -23,15 +23,48 @@ export interface EKPConfig {
   enabled: boolean;
 }
 
-export interface EKPToken {
-  access_token: string;
-  refresh_token?: string;
-  expires_in: number;
-  token_type: string;
-  obtained_at: number;
-  /** 认证模式 */
-  authMode?: 'oauth2' | 'basic';
-}
+// ============================================
+// 预设的REST服务路径
+// ============================================
+
+export const EKP_REST_SERVICES = {
+  // 流程管理 - 用于请假、报销等审批流程
+  review: {
+    name: '流程管理',
+    path: '/km/review/',
+    description: '请假、报销等审批流程',
+  },
+  // 日程管理
+  calendar: {
+    name: '日程管理',
+    path: '/km/calendar/',
+    description: '日程创建和查询',
+  },
+  // 人事档案
+  hr: {
+    name: '人事档案',
+    path: '/hr/staff/',
+    description: '员工信息查询',
+  },
+  // 会议管理
+  meeting: {
+    name: '会议管理',
+    path: '/km/meeting/',
+    description: '会议预约和管理',
+  },
+  // 文档知识库
+  kms: {
+    name: '知识库',
+    path: '/kms/doc/',
+    description: '文档和知识库管理',
+  },
+  // 通用的WebService路径
+  webservice: {
+    name: '通用WebService',
+    path: '/sys/webservice/rest',
+    description: '蓝凌标准REST服务',
+  },
+};
 
 export interface LeaveRequest {
   /** 请假类型：事假|病假|年假|婚假|产假|其他 */
@@ -125,24 +158,30 @@ export const EXPENSE_TYPE_MAP: Record<string, string> = {
 
 const DEFAULT_CONFIG: EKPConfig = {
   baseUrl: '',
-  appKey: '',
-  appSecret: '',
-  authMode: 'oauth2',
-  leaveFormId: 'LT_LEAVE_PERSONAL',
-  expenseFormId: 'LT_EXPENSE',
+  username: '',
+  password: '',
+  apiPrefix: '/km/review/',
+  leaveFormId: '',
+  expenseFormId: '',
   enabled: false,
 };
 
 // ============================================
-// 工具函数：Base64 编码
+// 工具函数
 // ============================================
 
 function base64Encode(str: string): string {
   if (typeof window !== 'undefined') {
     return btoa(str);
   }
-  // Node.js 环境
   return Buffer.from(str).toString('base64');
+}
+
+/**
+ * 获取Basic Auth认证头
+ */
+function getBasicAuthHeader(username: string, password: string): string {
+  return `Basic ${base64Encode(`${username}:${password}`)}`;
 }
 
 // ============================================
@@ -151,7 +190,6 @@ function base64Encode(str: string): string {
 
 export function useEKPIntegration() {
   const [config, setConfig] = useState<EKPConfig>(DEFAULT_CONFIG);
-  const [token, setToken] = useState<EKPToken | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,17 +198,15 @@ export function useEKPIntegration() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedConfig = localStorage.getItem(EKP_CONFIG_KEY);
-      const savedToken = localStorage.getItem(EKP_TOKEN_KEY);
-
       if (savedConfig) {
-        setConfig(JSON.parse(savedConfig));
-      }
-      if (savedToken) {
-        const parsedToken = JSON.parse(savedToken);
-        // 检查token是否过期（Basic Auth 模式下永不过期）
-        if (parsedToken.authMode === 'basic' || parsedToken.obtained_at + parsedToken.expires_in * 1000 > Date.now()) {
-          setToken(parsedToken);
-          setIsConnected(true);
+        try {
+          const parsed = JSON.parse(savedConfig);
+          setConfig(parsed);
+          if (parsed.enabled && parsed.username && parsed.password) {
+            setIsConnected(true);
+          }
+        } catch {
+          // ignore parse error
         }
       }
     }
@@ -184,81 +220,13 @@ export function useEKPIntegration() {
     }
   }, []);
 
-  // 获取访问令牌（支持 OAuth2 和 Basic Auth）
-  const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!config.enabled || !config.baseUrl || !config.appKey) {
-      setError('EKP配置不完整，请先配置连接信息');
-      return null;
-    }
-
-    // Basic Auth 模式：直接返回 base64 编码的凭证
-    if (config.authMode === 'basic') {
-      const credentials = base64Encode(`${config.appKey}:${config.appSecret}`);
-      setIsConnected(true);
-      return credentials;
-    }
-
-    // OAuth2 模式：检查现有 token 是否有效
-    if (token && token.authMode === 'oauth2' && Date.now() < token.obtained_at + token.expires_in * 1000 - 60000) {
-      return token.access_token;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const tokenUrl = `${config.baseUrl}/api/oauth2/token`;
-
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: config.appKey,
-          client_secret: config.appSecret,
-          scope: 'form:create form:read process:start process:read',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error_description || `认证失败: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const newToken: EKPToken = {
-        ...data,
-        obtained_at: Date.now(),
-        authMode: 'oauth2',
-      };
-
-      setToken(newToken);
-      setIsConnected(true);
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(EKP_TOKEN_KEY, JSON.stringify(newToken));
-      }
-
-      return newToken.access_token;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '获取访问令牌失败';
-      setError(message);
-      setIsConnected(false);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [config, token]);
-
-  // 构建认证头（根据认证模式返回正确的 Authorization 头）
-  const buildAuthHeader = useCallback((credentials: string): string => {
-    if (config.authMode === 'basic') {
-      return `Basic ${credentials}`;
-    }
-    return `Bearer ${credentials}`;
-  }, [config.authMode]);
+  // 构建认证头
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    return {
+      'Authorization': getBasicAuthHeader(config.username, config.password),
+      'Content-Type': 'application/json',
+    };
+  }, [config.username, config.password]);
 
   // 测试连接
   const testConnection = useCallback(async (testConfig?: EKPConfig): Promise<boolean> => {
@@ -269,67 +237,61 @@ export function useEKPIntegration() {
       return false;
     }
 
+    if (!targetConfig.username || !targetConfig.password) {
+      setError('请输入用户名和密码');
+      return false;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // 简单测试：尝试访问EKP的用户信息接口
-      const testUrl = `${targetConfig.baseUrl}/api/user/info`;
+      // 测试多个可能的用户信息接口
+      const testUrls = [
+        `${targetConfig.baseUrl}/sys/user/getUserInfo`,
+        `${targetConfig.baseUrl}/sys/user/personInfo`,
+        `${targetConfig.baseUrl}/sys/organization/sysOrgElement/getUserInfo`,
+        // 尝试直接访问流程服务
+        `${targetConfig.baseUrl}${targetConfig.apiPrefix}`,
+      ];
 
-      const headers: Record<string, string> = {
+      const headers = {
+        'Authorization': getBasicAuthHeader(targetConfig.username, targetConfig.password),
         'Content-Type': 'application/json',
       };
 
-      // 如果配置了认证信息
-      if (targetConfig.appKey && targetConfig.appSecret) {
-        if (targetConfig.authMode === 'basic') {
-          // Basic Auth 模式
-          const credentials = base64Encode(`${targetConfig.appKey}:${targetConfig.appSecret}`);
-          headers['Authorization'] = `Basic ${credentials}`;
-        } else {
-          // OAuth2 模式
-          const tokenUrl = `${targetConfig.baseUrl}/api/oauth2/token`;
-          const response = await fetch(tokenUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-              grant_type: 'client_credentials',
-              client_id: targetConfig.appKey,
-              client_secret: targetConfig.appSecret,
-            }),
+      let connected = false;
+      let successUrl = '';
+
+      for (const url of testUrls) {
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers,
           });
-
-          if (!response.ok) {
-            throw new Error('OAuth认证失败，请检查 App Key 和 App Secret');
+          
+          // 只要不是404或网络错误就算连接成功
+          if (response.ok || response.status === 401 || response.status === 403) {
+            connected = true;
+            successUrl = url;
+            break;
           }
-
-          const data = await response.json();
-          headers['Authorization'] = `Bearer ${data.access_token}`;
+        } catch {
+          continue;
         }
       }
 
-      const response = await fetch(testUrl, {
-        method: 'GET',
-        headers,
-      });
-
-      // 如果返回401/403，可能是认证问题，但至少说明服务可达
-      if (response.status === 401 || response.status === 403) {
+      if (connected) {
         setIsConnected(true);
+        if (testConfig) {
+          saveConfig(testConfig);
+        }
         return true;
       }
 
-      if (!response.ok) {
-        throw new Error(`连接测试失败: HTTP ${response.status}`);
-      }
-
-      setIsConnected(true);
-      if (testConfig) {
-        saveConfig(testConfig);
-      }
-      return true;
+      setError('无法连接到EKP系统，请检查地址和凭证');
+      setIsConnected(false);
+      return false;
     } catch (err) {
       const message = err instanceof Error ? err.message : '连接测试失败';
       setError(message);
@@ -342,8 +304,8 @@ export function useEKPIntegration() {
 
   // 创建请假表单
   const createLeaveForm = useCallback(async (leaveData: LeaveRequest): Promise<LeaveFormResult | null> => {
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
+    if (!config.enabled || !config.baseUrl) {
+      setError('EKP配置未启用');
       return null;
     }
 
@@ -351,44 +313,36 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      const apiUrl = `${config.baseUrl}/api/form/data/create`;
+      // 蓝凌EKP流程启动REST API
+      const apiUrl = `${config.baseUrl}${config.apiPrefix}kmReviewRestService`;
 
-      // 构建表单数据（蓝凌EKP格式）
-      const formData = {
-        formId: config.leaveFormId,
-        data: {
-          // 请假类型映射
-          leave_type: LEAVE_TYPE_MAP[leaveData.leaveType] || leaveData.leaveType,
-          start_date: leaveData.startDate,
-          end_date: leaveData.endDate,
-          duration: leaveData.duration,
-          reason: leaveData.reason,
-          contact_phone: leaveData.contactPhone || '',
-          // 申请人信息（从token中获取）
-          applicant_name: '当前用户',
-          applicant_dept: '当前部门',
-        },
-        // 启动流程选项
-        startProcess: true,
-        // 可选：指定审批人
-        approverId: leaveData.approverId,
+      const requestBody = {
+        // 表单数据
+        fdId: config.leaveFormId || 'LT_LEAVE_PERSONAL',
+        // 请假信息
+        docSubject: `${leaveData.leaveType}申请 - ${leaveData.startDate}至${leaveData.endDate}`,
+        fdLeaveType: LEAVE_TYPE_MAP[leaveData.leaveType] || leaveData.leaveType,
+        fdStartDate: leaveData.startDate,
+        fdEndDate: leaveData.endDate,
+        fdDuration: leaveData.duration,
+        fdReason: leaveData.reason,
+        fdContactPhone: leaveData.contactPhone || '',
+        // 审批人
+        approverId: leaveData.approverId || '',
       };
 
       const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': buildAuthHeader(accessToken),
-        },
-        body: JSON.stringify(formData),
+        headers: getAuthHeaders(),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `创建表单失败: ${response.status}`);
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`创建失败: HTTP ${response.status} ${errorText}`);
       }
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
 
       return {
         processId: result.processId || result.id || '',
@@ -406,12 +360,12 @@ export function useEKPIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [config, getAccessToken]);
+  }, [config, getAuthHeaders]);
 
   // 创建报销表单
   const createExpenseForm = useCallback(async (expenseData: ExpenseRequest): Promise<ExpenseFormResult | null> => {
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
+    if (!config.enabled || !config.baseUrl) {
+      setError('EKP配置未启用');
       return null;
     }
 
@@ -419,35 +373,30 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      const apiUrl = `${config.baseUrl}/api/form/data/create`;
+      const apiUrl = `${config.baseUrl}${config.apiPrefix}kmReviewRestService`;
 
-      const formData = {
-        formId: config.expenseFormId,
-        data: {
-          expense_type: EXPENSE_TYPE_MAP[expenseData.expenseType] || expenseData.expenseType,
-          amount: expenseData.amount,
-          description: expenseData.description,
-          expense_date: expenseData.expenseDate,
-          project_name: expenseData.projectName || '',
-        },
-        startProcess: true,
+      const requestBody = {
+        fdId: config.expenseFormId || 'LT_EXPENSE',
+        docSubject: `${expenseData.expenseType}报销 - ¥${expenseData.amount}`,
+        fdExpenseType: EXPENSE_TYPE_MAP[expenseData.expenseType] || expenseData.expenseType,
+        fdAmount: expenseData.amount,
+        fdDescription: expenseData.description,
+        fdExpenseDate: expenseData.expenseDate,
+        fdProjectName: expenseData.projectName || '',
       };
 
       const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': buildAuthHeader(accessToken),
-        },
-        body: JSON.stringify(formData),
+        headers: getAuthHeaders(),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `创建表单失败: ${response.status}`);
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`创建失败: HTTP ${response.status} ${errorText}`);
       }
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
 
       return {
         processId: result.processId || result.id || '',
@@ -465,7 +414,7 @@ export function useEKPIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [config, getAccessToken, buildAuthHeader]);
+  }, [config, getAuthHeaders]);
 
   // 查询请假记录
   const queryLeaveRecords = useCallback(async (filters?: {
@@ -473,42 +422,37 @@ export function useEKPIntegration() {
     startDate?: string;
     endDate?: string;
   }): Promise<LeaveFormResult[]> => {
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
+    if (!config.enabled || !config.baseUrl) {
       return [];
     }
 
     try {
       const params = new URLSearchParams();
-      params.append('formId', config.leaveFormId);
       if (filters?.status) params.append('status', filters.status);
       if (filters?.startDate) params.append('startDate', filters.startDate);
       if (filters?.endDate) params.append('endDate', filters.endDate);
 
-      const apiUrl = `${config.baseUrl}/api/form/data/list?${params.toString()}`;
+      const apiUrl = `${config.baseUrl}${config.apiPrefix}kmReviewRestService/list?${params.toString()}`;
 
       const response = await fetch(apiUrl, {
         method: 'GET',
-        headers: {
-          'Authorization': buildAuthHeader(accessToken),
-        },
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
-        throw new Error(`查询失败: ${response.status}`);
+        return [];
       }
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       return result.data || [];
     } catch (err) {
       console.error('查询请假记录失败:', err);
       return [];
     }
-  }, [config, getAccessToken, buildAuthHeader]);
+  }, [config, getAuthHeaders]);
 
   // 清除连接
   const disconnect = useCallback(() => {
-    setToken(null);
     setIsConnected(false);
     if (typeof window !== 'undefined') {
       localStorage.removeItem(EKP_TOKEN_KEY);
@@ -518,7 +462,6 @@ export function useEKPIntegration() {
   return {
     // 状态
     config,
-    token,
     isLoading,
     isConnected,
     error,
@@ -532,7 +475,7 @@ export function useEKPIntegration() {
     createExpenseForm,
     queryLeaveRecords,
     // 工具方法
-    getAccessToken,
+    getAuthHeaders,
   };
 }
 
@@ -541,38 +484,24 @@ export function useEKPIntegration() {
 // ============================================
 
 export interface ParsedLeaveIntent {
-  /** 是否识别为请假意图 */
   isLeaveIntent: boolean;
-  /** 请假类型 */
   leaveType?: string;
-  /** 开始日期 */
   startDate?: string;
-  /** 结束日期 */
   endDate?: string;
-  /** 请假时长（天） */
   duration?: number;
-  /** 请假原因 */
   reason?: string;
 }
 
-/**
- * 从用户输入中识别请假意图
- * 适用于接入AI对话时的意图解析
- */
 export function parseLeaveIntent(userInput: string): ParsedLeaveIntent {
   const result: ParsedLeaveIntent = { isLeaveIntent: false };
 
-  // 检测关键词
   const leaveKeywords = ['请假', '休息', '休假', '离开'];
-  const hasLeaveKeyword = leaveKeywords.some(k => userInput.includes(k));
-
-  if (!hasLeaveKeyword) {
+  if (!leaveKeywords.some(k => userInput.includes(k))) {
     return result;
   }
 
   result.isLeaveIntent = true;
 
-  // 识别请假类型
   const leaveTypes = ['事假', '病假', '年假', '婚假', '产假', '陪产假', '丧假'];
   for (const type of leaveTypes) {
     if (userInput.includes(type)) {
@@ -580,19 +509,10 @@ export function parseLeaveIntent(userInput: string): ParsedLeaveIntent {
       break;
     }
   }
-  // 默认年假
   result.leaveType = result.leaveType || '年假';
-
-  // 识别日期 - 简化版，实际需要更复杂的NLP
-  const datePatterns = [
-    /(\d{1,2})月(\d{1,2})日/,
-    /(\d{4})-(\d{1,2})-(\d{1,2})/,
-    /(\d{4})\/(\d{1,2})\/(\d{1,2})/,
-  ];
 
   const today = new Date();
 
-  // 识别"下周一"等相对日期
   if (userInput.includes('下周一')) {
     const nextMonday = new Date(today);
     const dayOfWeek = today.getDay();
@@ -608,23 +528,16 @@ export function parseLeaveIntent(userInput: string): ParsedLeaveIntent {
     result.endDate = nextFriday.toISOString().split('T')[0];
   }
 
-  // 识别时长
   const durationMatch = userInput.match(/(\d+)\s*(天|日|周|半天|小时)/);
   if (durationMatch) {
     const value = parseInt(durationMatch[1], 10);
     const unit = durationMatch[2];
-    if (unit === '天' || unit === '日') {
-      result.duration = value;
-    } else if (unit === '周') {
-      result.duration = value * 7;
-    } else if (unit === '半天') {
-      result.duration = 0.5;
-    } else if (unit === '小时') {
-      result.duration = value / 8; // 按8小时工作制折算
-    }
+    if (unit === '天' || unit === '日') result.duration = value;
+    else if (unit === '周') result.duration = value * 7;
+    else if (unit === '半天') result.duration = 0.5;
+    else if (unit === '小时') result.duration = value / 8;
   }
 
-  // 提取请假原因
   const reasonKeywords = ['因为', '由于', '原因', '需要'];
   for (const keyword of reasonKeywords) {
     const index = userInput.indexOf(keyword);
