@@ -28,37 +28,43 @@ export interface EKPConfig {
 // ============================================
 
 export const EKP_REST_SERVICES = {
-  // 流程管理 - 用于请假、报销等审批流程
+  // 流程管理 - 用于请假、报销等审批流程（推荐）
   review: {
     name: '流程管理',
-    path: '/km/review/',
+    path: '/api/km-review/',
     description: '请假、报销等审批流程',
   },
   // 日程管理
   calendar: {
     name: '日程管理',
-    path: '/km/calendar/',
+    path: '/api/km-calendar/',
     description: '日程创建和查询',
+  },
+  // 旧版日程服务
+  calendarOld: {
+    name: '日程服务(v2)',
+    path: '/km/calendar/',
+    description: '日程创建和查询(v2)',
   },
   // 人事档案
   hr: {
     name: '人事档案',
-    path: '/hr/staff/',
+    path: '/api/hr-staff/',
     description: '员工信息查询',
   },
   // 会议管理
   meeting: {
     name: '会议管理',
-    path: '/km/meeting/',
+    path: '/api/km-meeting/',
     description: '会议预约和管理',
   },
-  // 文档知识库
+  // 知识库
   kms: {
     name: '知识库',
-    path: '/kms/doc/',
+    path: '/api/kms-doc/',
     description: '文档和知识库管理',
   },
-  // 通用的WebService路径
+  // 通用的WebService路径（旧版）
   webservice: {
     name: '通用WebService',
     path: '/sys/webservice/rest',
@@ -160,7 +166,7 @@ const DEFAULT_CONFIG: EKPConfig = {
   baseUrl: '',
   username: '',
   password: '',
-  apiPrefix: '/km/review/',
+  apiPrefix: '/api/km-review/',
   leaveFormId: '',
   expenseFormId: '',
   enabled: false,
