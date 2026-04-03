@@ -3,8 +3,9 @@ import { NextRequest } from 'next/server';
 interface EKPProxyRequest {
   action: 'test' | 'login' | 'submit_leave' | 'submit_expense' | 'query_records';
   baseUrl: string;
-  username: string;
-  password: string;
+  username?: string;
+  password?: string;
+  sessionCookie?: string;  // 支持直接传入 SESSION cookie
   apiPrefix: string;
   data?: Record<string, unknown>;
 }
@@ -12,7 +13,7 @@ interface EKPProxyRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: EKPProxyRequest = await request.json();
-    const { action, baseUrl, username, password, apiPrefix, data } = body;
+    const { action, baseUrl, username, password, sessionCookie, apiPrefix, data } = body;
 
     if (!baseUrl) {
       return new Response(
@@ -29,14 +30,21 @@ export async function POST(request: NextRequest) {
       );
     };
 
-    // 测试连接 / 获取用户信息
-    if (action === 'test') {
-      if (!username || !password) {
-        return makeResponse(false, '请输入用户名和密码');
+    // 获取 SESSION cookie（优先使用传入的 cookie，否则尝试登录获取）
+    const getSessionCookie = async (): Promise<{ success: boolean; session?: string; message?: string }> => {
+      // 如果直接传入了 sessionCookie，直接使用
+      if (sessionCookie) {
+        return { success: true, session: sessionCookie };
       }
 
+      // 否则尝试用用户名密码登录
+      if (!username || !password) {
+        return { success: false, message: '请提供 SESSION Cookie 或用户名密码' };
+      }
+
+      // 尝试蓝凌EKP的登录接口（加密版本需要在前端完成）
+      // 由于蓝凌EKP使用DES加密，这里只能尝试明文登录（大多数系统不支持）
       try {
-        // 步骤1: 调用登录接口获取SESSION cookie
         const loginResponse = await fetch(`${baseUrl}/sys/auth/login`, {
           method: 'POST',
           headers: {
@@ -45,48 +53,88 @@ export async function POST(request: NextRequest) {
           body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
         });
 
-        // 提取SESSION cookie
         const setCookie = loginResponse.headers.get('set-cookie');
-        if (!setCookie || !setCookie.includes('SESSION=')) {
-          return makeResponse(false, '登录接口异常：无法获取会话');
-        }
-
-        const sessionMatch = setCookie.match(/SESSION=([^;]+)/);
-        const sessionId = sessionMatch ? sessionMatch[1] : '';
-
-        // 步骤2: 用SESSION cookie访问用户信息接口验证认证是否成功
-        const userResponse = await fetch(`${baseUrl}/sys/user/getUserInfo`, {
-          method: 'GET',
-          headers: {
-            'Cookie': `SESSION=${sessionId}`,
-          },
-        });
-
-        const userText = await userResponse.text();
-
-        // 如果重定向到匿名页面，说明认证失败
-        if (userText.includes('anonym.jsp') || userText.includes('登录') || userText.includes('login')) {
-          return makeResponse(false, '认证失败：用户名或密码错误');
-        }
-
-        // 如果返回JSON用户信息，说明认证成功
-        try {
-          const userData = JSON.parse(userText);
-          if (userData.userid || userData.loginname || userData.userName) {
-            return makeResponse(true, `认证成功！欢迎 ${userData.userName || userData.loginname || '用户'}`, {
-              user: userData,
-            });
+        if (setCookie && setCookie.includes('SESSION=')) {
+          const sessionMatch = setCookie.match(/SESSION=([^;]+)/);
+          if (sessionMatch) {
+            return { success: true, session: sessionMatch[1] };
           }
-        } catch {
-          // JSON解析失败
         }
 
-        // 如果不是JSON也不是HTML，可能是认证成功但接口格式不同
-        if (userResponse.ok && !userText.includes('<html')) {
-          return makeResponse(true, '认证成功！');
+        return { success: false, message: '登录失败：无法获取会话，请使用 SESSION Cookie 方式' };
+      } catch (err) {
+        return { success: false, message: `登录失败：${err instanceof Error ? err.message : '网络错误'}` };
+      }
+    };
+
+    // 测试连接 / 获取用户信息
+    if (action === 'test') {
+      const sessionResult = await getSessionCookie();
+      if (!sessionResult.success || !sessionResult.session) {
+        return makeResponse(false, sessionResult.message || '获取会话失败');
+      }
+
+      const sessionId = sessionResult.session;
+
+      try {
+        // 尝试多个用户信息接口
+        const userEndpoints = [
+          '/sys/user/getUserInfo',
+          '/api/sys/user/getUserInfo',
+          '/sys/portal/sysPortalPortlet/getUserInfo.jsp',
+          '/sys/person/getMyInfo',
+        ];
+
+        let userData = null;
+        let lastText = '';
+
+        for (const endpoint of userEndpoints) {
+          const userResponse = await fetch(`${baseUrl}${endpoint}`, {
+            method: 'GET',
+            headers: {
+              'Cookie': `SESSION=${sessionId}`,
+            },
+          });
+
+          const userText = await userResponse.text();
+          lastText = userText;
+
+          // 如果重定向到匿名页面，说明认证失败
+          if (userText.includes('anonym.jsp') || userText.includes('登录') || userText.includes('login.jsp')) {
+            continue;
+          }
+
+          // 尝试解析JSON
+          try {
+            const parsed = JSON.parse(userText);
+            if (parsed.userid || parsed.loginname || parsed.userName || parsed.fdName || parsed.fdLoginName) {
+              userData = parsed;
+              break;
+            }
+          } catch {
+            // 不是JSON，检查是否包含用户信息
+            if (userText.includes('fdName') || userText.includes('fdLoginName')) {
+              // 可能是JSONP或其他格式
+              userData = { raw: userText.substring(0, 500) };
+              break;
+            }
+          }
         }
 
-        return makeResponse(false, '认证失败：用户名或密码错误');
+        if (userData) {
+          const displayName = userData.fdName || userData.userName || userData.loginname || userData.fdLoginName || '用户';
+          return makeResponse(true, `认证成功！欢迎 ${displayName}`, {
+            user: userData,
+            sessionCookie: sessionId,
+          });
+        }
+
+        // 如果所有接口都失败，检查最后响应
+        if (lastText && lastText.includes('anonym.jsp')) {
+          return makeResponse(false, 'SESSION Cookie 无效或已过期，请重新获取');
+        }
+
+        return makeResponse(false, '无法获取用户信息，SESSION Cookie 可能无效');
 
       } catch (err) {
         return makeResponse(false, `连接失败：${err instanceof Error ? err.message : '网络错误'}`);
@@ -95,30 +143,14 @@ export async function POST(request: NextRequest) {
 
     // 提交请假
     if (action === 'submit_leave') {
-      if (!username || !password) {
-        return makeResponse(false, '请输入用户名和密码');
+      const sessionResult = await getSessionCookie();
+      if (!sessionResult.success || !sessionResult.session) {
+        return makeResponse(false, sessionResult.message || '获取会话失败');
       }
 
+      const sessionId = sessionResult.session;
+
       try {
-        const loginResponse = await fetch(`${baseUrl}/sys/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-        });
-
-        const setCookie = loginResponse.headers.get('set-cookie');
-        
-        if (!setCookie || !setCookie.includes('SESSION=')) {
-          return makeResponse(false, '登录失败：无法获取会话');
-        }
-
-        // 提取SESSION
-        const sessionMatch = setCookie.match(/SESSION=([^;]+)/);
-        const sessionId = sessionMatch ? sessionMatch[1] : '';
-
-        // 提交请假申请
         const submitResponse = await fetch(`${baseUrl}${apiPrefix}`, {
           method: 'POST',
           headers: {
@@ -143,28 +175,14 @@ export async function POST(request: NextRequest) {
 
     // 提交报销
     if (action === 'submit_expense') {
-      if (!username || !password) {
-        return makeResponse(false, '请输入用户名和密码');
+      const sessionResult = await getSessionCookie();
+      if (!sessionResult.success || !sessionResult.session) {
+        return makeResponse(false, sessionResult.message || '获取会话失败');
       }
 
+      const sessionId = sessionResult.session;
+
       try {
-        const loginResponse = await fetch(`${baseUrl}/sys/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-        });
-
-        const setCookie = loginResponse.headers.get('set-cookie');
-        
-        if (!setCookie || !setCookie.includes('SESSION=')) {
-          return makeResponse(false, '登录失败：无法获取会话');
-        }
-
-        const sessionMatch = setCookie.match(/SESSION=([^;]+)/);
-        const sessionId = sessionMatch ? sessionMatch[1] : '';
-
         const submitResponse = await fetch(`${baseUrl}${apiPrefix}`, {
           method: 'POST',
           headers: {
@@ -189,28 +207,14 @@ export async function POST(request: NextRequest) {
 
     // 查询记录
     if (action === 'query_records') {
-      if (!username || !password) {
-        return makeResponse(false, '请输入用户名和密码');
+      const sessionResult = await getSessionCookie();
+      if (!sessionResult.success || !sessionResult.session) {
+        return makeResponse(false, sessionResult.message || '获取会话失败');
       }
 
+      const sessionId = sessionResult.session;
+
       try {
-        const loginResponse = await fetch(`${baseUrl}/sys/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-        });
-
-        const setCookie = loginResponse.headers.get('set-cookie');
-        
-        if (!setCookie || !setCookie.includes('SESSION=')) {
-          return makeResponse(false, '登录失败：无法获取会话');
-        }
-
-        const sessionMatch = setCookie.match(/SESSION=([^;]+)/);
-        const sessionId = sessionMatch ? sessionMatch[1] : '';
-
         const queryResponse = await fetch(`${baseUrl}${apiPrefix}`, {
           method: 'GET',
           headers: {

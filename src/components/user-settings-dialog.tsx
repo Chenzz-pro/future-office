@@ -35,6 +35,7 @@ interface EKPConfig {
   baseUrl: string;
   username: string;
   password: string;
+  sessionCookie: string;  // SESSION Cookie，用于蓝凌EKP加密认证
   apiPrefix: string;
   leaveFormId: string;
   expenseFormId: string;
@@ -549,6 +550,7 @@ function EKPOConfigPanel() {
     baseUrl: '',
     username: '',
     password: '',
+    sessionCookie: '',
     apiPrefix: '/api/km-review/',
     leaveFormId: '',
     expenseFormId: '',
@@ -582,6 +584,13 @@ function EKPOConfigPanel() {
       return;
     }
 
+    // 检查是否提供了 SESSION Cookie 或用户名密码
+    if (!config.sessionCookie && (!config.username || !config.password)) {
+      setTestError('请输入 SESSION Cookie 或用户名密码');
+      setTestResult('failed');
+      return;
+    }
+
     setIsTesting(true);
     setTestResult(null);
     setTestError(null);
@@ -598,6 +607,7 @@ function EKPOConfigPanel() {
           baseUrl: config.baseUrl,
           username: config.username,
           password: config.password,
+          sessionCookie: config.sessionCookie,
           apiPrefix: config.apiPrefix,
         }),
       });
@@ -606,12 +616,16 @@ function EKPOConfigPanel() {
 
       if (result.success) {
         setTestResult('success');
-        setTestError('连接成功！Basic Auth 认证通过。');
+        setTestError(result.message || '连接成功！');
+        // 如果返回了新的 sessionCookie，更新配置
+        if (result.sessionCookie) {
+          setConfig(prev => ({ ...prev, sessionCookie: result.sessionCookie }));
+        }
       } else {
         setTestResult('failed');
         // 显示更详细的错误信息
         const errorMsg = result.message || result.error || '认证失败';
-        setTestError(`${errorMsg}。请检查用户名和密码是否正确。`);
+        setTestError(errorMsg);
       }
     } catch (err) {
       setTestResult('failed');
@@ -641,8 +655,11 @@ function EKPOConfigPanel() {
         <div className="flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
           <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-            <p>蓝凌EKP使用 Basic Auth 认证方式，请确保系统已开启此认证方式。</p>
-            <p>配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
+            <p><strong>蓝凌EKP 使用加密登录</strong>，推荐使用 SESSION Cookie 方式认证：</p>
+            <p>1. 在浏览器中登录蓝凌EKP系统</p>
+            <p>2. 按 F12 打开开发者工具 → Application → Cookies</p>
+            <p>3. 找到 SESSION 的值并复制粘贴到下方</p>
+            <p className="text-muted-foreground">配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
           </div>
         </div>
       </div>
@@ -675,10 +692,34 @@ function EKPOConfigPanel() {
         <p className="text-xs text-muted-foreground mt-1">蓝凌EKP的REST服务路径，如 /api/km-review/</p>
       </div>
 
+      {/* SESSION Cookie（推荐方式） */}
+      <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-lg p-3">
+        <label className="block text-xs font-medium mb-1.5 text-green-700 dark:text-green-300">
+          SESSION Cookie <span className="text-green-600">(推荐)</span>
+        </label>
+        <input
+          type="text"
+          value={config.sessionCookie}
+          onChange={(e) => setConfig({ ...config, sessionCookie: e.target.value.trim() })}
+          placeholder="粘贴 SESSION Cookie 值"
+          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          从浏览器开发者工具中获取 SESSION Cookie，适用于加密登录系统
+        </p>
+      </div>
+
+      {/* 分隔线 */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex-1 h-px bg-border" />
+        <span>或者使用用户名密码（不推荐）</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
       {/* 用户名 */}
       <div>
         <label className="block text-xs font-medium mb-1.5">
-          用户名 <span className="text-destructive ml-1">*</span>
+          用户名
         </label>
         <input
           type="text"
@@ -692,7 +733,7 @@ function EKPOConfigPanel() {
       {/* 密码 */}
       <div>
         <label className="block text-xs font-medium mb-1.5">
-          密码 <span className="text-destructive ml-1">*</span>
+          密码
         </label>
         <div className="relative">
           <input

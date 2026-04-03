@@ -13,6 +13,8 @@ export interface EKPConfig {
   username: string;
   /** 认证密码 */
   password: string;
+  /** SESSION Cookie，用于蓝凌EKP加密认证 */
+  sessionCookie: string;
   /** REST服务路径前缀，如 /sys/webservice/rest 或 /km/review/ */
   apiPrefix: string;
   /** 表单模板ID - 请假申请 */
@@ -166,6 +168,7 @@ const DEFAULT_CONFIG: EKPConfig = {
   baseUrl: '',
   username: '',
   password: '',
+  sessionCookie: '',
   apiPrefix: '/api/km-review/',
   leaveFormId: '',
   expenseFormId: '',
@@ -315,47 +318,54 @@ export function useEKPIntegration() {
       return null;
     }
 
+    if (!config.sessionCookie && (!config.username || !config.password)) {
+      setError('请配置 SESSION Cookie 或用户名密码');
+      return null;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // 蓝凌EKP流程启动REST API
-      const apiUrl = `${config.baseUrl}${config.apiPrefix}kmReviewRestService`;
-
-      const requestBody = {
-        // 表单数据
-        fdId: config.leaveFormId || 'LT_LEAVE_PERSONAL',
-        // 请假信息
-        docSubject: `${leaveData.leaveType}申请 - ${leaveData.startDate}至${leaveData.endDate}`,
-        fdLeaveType: LEAVE_TYPE_MAP[leaveData.leaveType] || leaveData.leaveType,
-        fdStartDate: leaveData.startDate,
-        fdEndDate: leaveData.endDate,
-        fdDuration: leaveData.duration,
-        fdReason: leaveData.reason,
-        fdContactPhone: leaveData.contactPhone || '',
-        // 审批人
-        approverId: leaveData.approverId || '',
-      };
-
-      const response = await fetch(apiUrl, {
+      // 通过后端代理发送请求
+      const response = await fetch('/api/ekp', {
         method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'submit_leave',
+          baseUrl: config.baseUrl,
+          username: config.username,
+          password: config.password,
+          sessionCookie: config.sessionCookie,
+          apiPrefix: config.apiPrefix,
+          data: {
+            fdId: config.leaveFormId || 'LT_LEAVE_PERSONAL',
+            docSubject: `${leaveData.leaveType}申请 - ${leaveData.startDate}至${leaveData.endDate}`,
+            fdLeaveType: LEAVE_TYPE_MAP[leaveData.leaveType] || leaveData.leaveType,
+            fdStartDate: leaveData.startDate,
+            fdEndDate: leaveData.endDate,
+            fdDuration: leaveData.duration,
+            fdReason: leaveData.reason,
+            fdContactPhone: leaveData.contactPhone || '',
+            approverId: leaveData.approverId || '',
+          },
+        }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`创建失败: HTTP ${response.status} ${errorText}`);
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.message || '创建失败');
       }
 
-      const result = await response.json().catch(() => ({}));
-
       return {
-        processId: result.processId || result.id || '',
-        dataId: result.dataId || result.id || '',
-        taskId: result.taskId || '',
-        currentNode: result.currentNode || '审批中',
-        nextApprover: result.nextApprover || '待指定',
+        processId: result.data?.processId || result.data?.id || '',
+        dataId: result.data?.dataId || result.data?.id || '',
+        taskId: result.data?.taskId || '',
+        currentNode: result.data?.currentNode || '审批中',
+        nextApprover: result.data?.nextApprover || '待指定',
         createdAt: new Date().toISOString(),
         status: 'pending',
       };
@@ -366,7 +376,7 @@ export function useEKPIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [config, getAuthHeaders]);
+  }, [config]);
 
   // 创建报销表单
   const createExpenseForm = useCallback(async (expenseData: ExpenseRequest): Promise<ExpenseFormResult | null> => {
@@ -375,41 +385,52 @@ export function useEKPIntegration() {
       return null;
     }
 
+    if (!config.sessionCookie && (!config.username || !config.password)) {
+      setError('请配置 SESSION Cookie 或用户名密码');
+      return null;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const apiUrl = `${config.baseUrl}${config.apiPrefix}kmReviewRestService`;
-
-      const requestBody = {
-        fdId: config.expenseFormId || 'LT_EXPENSE',
-        docSubject: `${expenseData.expenseType}报销 - ¥${expenseData.amount}`,
-        fdExpenseType: EXPENSE_TYPE_MAP[expenseData.expenseType] || expenseData.expenseType,
-        fdAmount: expenseData.amount,
-        fdDescription: expenseData.description,
-        fdExpenseDate: expenseData.expenseDate,
-        fdProjectName: expenseData.projectName || '',
-      };
-
-      const response = await fetch(apiUrl, {
+      // 通过后端代理发送请求
+      const response = await fetch('/api/ekp', {
         method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'submit_expense',
+          baseUrl: config.baseUrl,
+          username: config.username,
+          password: config.password,
+          sessionCookie: config.sessionCookie,
+          apiPrefix: config.apiPrefix,
+          data: {
+            fdId: config.expenseFormId || 'LT_EXPENSE',
+            docSubject: `${expenseData.expenseType}报销 - ¥${expenseData.amount}`,
+            fdExpenseType: EXPENSE_TYPE_MAP[expenseData.expenseType] || expenseData.expenseType,
+            fdAmount: expenseData.amount,
+            fdDescription: expenseData.description,
+            fdExpenseDate: expenseData.expenseDate,
+            fdProjectName: expenseData.projectName || '',
+          },
+        }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`创建失败: HTTP ${response.status} ${errorText}`);
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.message || '创建失败');
       }
 
-      const result = await response.json().catch(() => ({}));
-
       return {
-        processId: result.processId || result.id || '',
-        dataId: result.dataId || result.id || '',
-        taskId: result.taskId || '',
-        currentNode: result.currentNode || '审批中',
-        nextApprover: result.nextApprover || '待指定',
+        processId: result.data?.processId || result.data?.id || '',
+        dataId: result.data?.dataId || result.data?.id || '',
+        taskId: result.data?.taskId || '',
+        currentNode: result.data?.currentNode || '审批中',
+        nextApprover: result.data?.nextApprover || '待指定',
         createdAt: new Date().toISOString(),
         status: 'pending',
       };
@@ -420,7 +441,7 @@ export function useEKPIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [config, getAuthHeaders]);
+  }, [config]);
 
   // 查询请假记录
   const queryLeaveRecords = useCallback(async (filters?: {
