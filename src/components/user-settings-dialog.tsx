@@ -30,6 +30,25 @@ interface ApiKey {
   isActive: boolean;
 }
 
+// EKP 配置接口
+interface EKPConfig {
+  baseUrl: string;
+  username: string;
+  password: string;
+  apiPrefix: string;
+  leaveFormId: string;
+  expenseFormId: string;
+  enabled: boolean;
+}
+
+// REST服务路径选项
+const EKP_REST_OPTIONS = [
+  { label: '流程管理 (/api/km-review/)', value: '/api/km-review/', desc: '请假、报销等审批流程' },
+  { label: '日程管理 (/api/km-calendar/)', value: '/api/km-calendar/', desc: '日程创建和查询' },
+  { label: '知识库 (/api/kms-doc/)', value: '/api/kms-doc/', desc: '文档和知识库管理' },
+  { label: '通用WebService (/sys/webservice/rest)', value: '/sys/webservice/rest', desc: '蓝凌标准REST服务' },
+];
+
 interface ProviderConfig {
   name: string;
   nameEn: string;
@@ -94,6 +113,7 @@ interface UserSettingsDialogProps {
 export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettingsDialogProps) {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'llm' | 'ekp'>('llm'); // 页签状态
   const [newKey, setNewKey] = useState<Partial<ApiKey>>({
     provider: 'doubao',
     name: '',
@@ -197,282 +217,305 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
           </button>
         </div>
 
-        {/* 蓝凌EKP配置入口 */}
-        <div className="px-4 pt-4 pb-2 border-b border-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <div>
-                <h4 className="text-sm font-medium">蓝凌EKP 企业OA</h4>
-                <p className="text-xs text-muted-foreground">请假、报销等审批申请</p>
-              </div>
-            </div>
-            <EKPConfigButton />
+        {/* 页签切换 */}
+        <div className="px-4 pt-4">
+          <div className="flex gap-2 border-b border-border">
+            <button
+              onClick={() => setActiveTab('llm')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition-colors -mb-px",
+                activeTab === 'llm'
+                  ? "border-b-2 border-primary text-primary bg-primary/5"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Plug className="w-4 h-4" />
+              大模型配置
+            </button>
+            <button
+              onClick={() => setActiveTab('ekp')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition-colors -mb-px",
+                activeTab === 'ekp'
+                  ? "border-b-2 border-primary text-primary bg-primary/5"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              蓝凌OA配置
+            </button>
           </div>
         </div>
 
         {/* 内容 */}
         <div className="p-4 overflow-y-auto flex-1">
-          {/* 提示 */}
-          <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-lg p-3 mb-4">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                API 密钥仅存储在本地浏览器中，不会上传到服务器。请妥善保管您的密钥。
-              </p>
-            </div>
-          </div>
-
-          {/* 已添加的密钥列表 */}
-          {apiKeys.length > 0 && (
-            <div className="space-y-3 mb-4">
-              {apiKeys.map((key) => (
-                <div
-                  key={key.id}
-                  className={cn(
-                    'border rounded-lg p-3 transition-colors',
-                    key.isActive ? 'border-primary/50 bg-primary/5' : 'border-border'
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium',
-                        key.isActive ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'
-                      )}>
-                        {providerConfig[key.provider]?.nameEn?.slice(0, 2) || '自定义'}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-medium text-foreground">{key.name}</h4>
-                        <p className="text-xs text-muted-foreground">
-                          {providerConfig[key.provider]?.name || '自定义'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleKey(key.id)}
-                        className={cn(
-                          'px-2 py-1 rounded text-xs transition-colors',
-                          key.isActive
-                            ? 'bg-primary/10 text-primary'
-                            : 'bg-accent text-muted-foreground'
-                        )}
-                      >
-                        {key.isActive ? '已启用' : '已禁用'}
-                      </button>
-                      <button
-                        onClick={() => deleteKey(key.id)}
-                        className="p-1.5 hover:bg-accent rounded text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-background px-2 py-1 rounded font-mono">
-                      {showKeyMap[key.id] ? key.apiKey : maskApiKey(key.apiKey)}
-                    </code>
-                    <button
-                      onClick={() => setShowKeyMap({ ...showKeyMap, [key.id]: !showKeyMap[key.id] })}
-                      className="p-1.5 hover:bg-accent rounded transition-colors"
-                    >
-                      {showKeyMap[key.id] ? (
-                        <EyeOff className="w-4 h-4 text-muted-foreground" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-muted-foreground" />
-                      )}
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 truncate">
-                    {key.baseUrl}
+          {/* 大模型配置内容 */}
+          {activeTab === 'llm' && (
+            <>
+              {/* 提示 */}
+              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-lg p-3 mb-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                    API 密钥仅存储在本地浏览器中，不会上传到服务器。请妥善保管您的密钥。
                   </p>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
 
-          {/* 添加新密钥表单 */}
-          {showAddForm ? (
-            <div className="border border-border rounded-lg p-4 space-y-4">
-              <h3 className="text-sm font-medium text-foreground">添加新密钥</h3>
-              
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">服务提供商</label>
-                <select
-                  value={newKey.provider}
-                  onChange={(e) => {
-                    const provider = e.target.value as ApiKey['provider'];
-                    const config = providerConfig[provider];
-                    setNewKey({ 
-                      ...newKey, 
-                      provider,
-                      baseUrl: config.defaultBaseUrl,
-                    });
-                  }}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  {Object.entries(providerConfig).map(([key, config]) => (
-                    <option key={key} value={key}>{config.name}</option>
+              {/* 已添加的密钥列表 */}
+              {apiKeys.length > 0 && (
+                <div className="space-y-3 mb-4">
+                  {apiKeys.map((key) => (
+                    <div
+                      key={key.id}
+                      className={cn(
+                        'border rounded-lg p-3 transition-colors',
+                        key.isActive ? 'border-primary/50 bg-primary/5' : 'border-border'
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            'w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium',
+                            key.isActive ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'
+                          )}>
+                            {providerConfig[key.provider]?.nameEn?.slice(0, 2) || '自定义'}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium text-foreground">{key.name}</h4>
+                            <p className="text-xs text-muted-foreground">
+                              {providerConfig[key.provider]?.name || '自定义'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleKey(key.id)}
+                            className={cn(
+                              'px-2 py-1 rounded text-xs transition-colors',
+                              key.isActive
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-accent text-muted-foreground'
+                            )}
+                          >
+                            {key.isActive ? '已启用' : '已禁用'}
+                          </button>
+                          <button
+                            onClick={() => deleteKey(key.id)}
+                            className="p-1.5 hover:bg-accent rounded text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-xs bg-background px-2 py-1 rounded font-mono">
+                          {showKeyMap[key.id] ? key.apiKey : maskApiKey(key.apiKey)}
+                        </code>
+                        <button
+                          onClick={() => setShowKeyMap({ ...showKeyMap, [key.id]: !showKeyMap[key.id] })}
+                          className="p-1.5 hover:bg-accent rounded transition-colors"
+                        >
+                          {showKeyMap[key.id] ? (
+                            <EyeOff className="w-4 h-4 text-muted-foreground" />
+                          ) : (
+                            <Eye className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                        {key.baseUrl}
+                      </p>
+                    </div>
                   ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">名称</label>
-                <input
-                  type="text"
-                  value={newKey.name}
-                  onChange={(e) => setNewKey({ ...newKey, name: e.target.value })}
-                  placeholder="例如：我的豆包 API"
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
-                  API Key {newKey.provider === 'doubao' && <span className="text-orange-500">*</span>}
-                </label>
-                <input
-                  type="password"
-                  value={newKey.apiKey}
-                  onChange={(e) => setNewKey({ ...newKey, apiKey: e.target.value })}
-                  placeholder={newKey.provider === 'doubao' ? '请输入豆包 API Key' : 'sk-...'}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
-                {newKey.provider === 'doubao' && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    请从火山引擎控制台获取 API Key：
-                    <a 
-                      href="https://console.volcengine.com/iam/keymanage/" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline ml-1 inline-flex items-center gap-1"
-                    >
-                      获取 Key <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
-                  Base URL <span className="text-muted-foreground/50">(通常不需要修改)</span>
-                </label>
-                <input
-                  type="text"
-                  value={newKey.baseUrl}
-                  onChange={(e) => setNewKey({ ...newKey, baseUrl: e.target.value })}
-                  placeholder={currentConfig.defaultBaseUrl}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
-                />
-                {newKey.provider === 'doubao' && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    默认使用北京区域 endpoint，如需其他区域请参考：
-                    <a 
-                      href="https://www.volcengine.com/docs/82379/1263482" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline ml-1"
-                    >
-                      区域说明
-                    </a>
-                  </p>
-                )}
-              </div>
-
-              {/* 模型选择提示 */}
-              {currentConfig.models.length > 0 && (
-                <div className="bg-accent/50 rounded-lg p-3">
-                  <h4 className="text-xs font-medium text-foreground mb-2">可用模型</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {currentConfig.models.slice(0, 6).map((model) => (
-                      <span key={model} className="text-xs px-2 py-0.5 bg-background rounded">
-                        {model}
-                      </span>
-                    ))}
-                    {currentConfig.models.length > 6 && (
-                      <span className="text-xs text-muted-foreground">+{currentConfig.models.length - 6} 更多</span>
-                    )}
-                  </div>
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 pt-2">
+              {/* 添加新密钥表单 */}
+              {showAddForm ? (
+                <div className="border border-border rounded-lg p-4 space-y-4">
+                  <h3 className="text-sm font-medium text-foreground">添加新密钥</h3>
+                  
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">服务提供商</label>
+                    <select
+                      value={newKey.provider}
+                      onChange={(e) => {
+                        const provider = e.target.value as ApiKey['provider'];
+                        const config = providerConfig[provider];
+                        setNewKey({ 
+                          ...newKey, 
+                          provider,
+                          baseUrl: config.defaultBaseUrl,
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      {Object.entries(providerConfig).map(([key, config]) => (
+                        <option key={key} value={key}>{config.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">名称</label>
+                    <input
+                      type="text"
+                      value={newKey.name}
+                      onChange={(e) => setNewKey({ ...newKey, name: e.target.value })}
+                      placeholder="例如：我的豆包 API"
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      API Key {newKey.provider === 'doubao' && <span className="text-orange-500">*</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={newKey.apiKey}
+                      onChange={(e) => setNewKey({ ...newKey, apiKey: e.target.value })}
+                      placeholder={newKey.provider === 'doubao' ? '请输入豆包 API Key' : 'sk-...'}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    {newKey.provider === 'doubao' && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        请从火山引擎控制台获取 API Key：
+                        <a 
+                          href="https://console.volcengine.com/iam/keymanage/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline ml-1 inline-flex items-center gap-1"
+                        >
+                          获取 Key <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      Base URL <span className="text-muted-foreground/50">(通常不需要修改)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newKey.baseUrl}
+                      onChange={(e) => setNewKey({ ...newKey, baseUrl: e.target.value })}
+                      placeholder={currentConfig.defaultBaseUrl}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
+                    />
+                    {newKey.provider === 'doubao' && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        默认使用北京区域 endpoint，如需其他区域请参考：
+                        <a 
+                          href="https://www.volcengine.com/docs/82379/1263482" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline ml-1"
+                        >
+                          区域说明
+                        </a>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 模型选择提示 */}
+                  {currentConfig.models.length > 0 && (
+                    <div className="bg-accent/50 rounded-lg p-3">
+                      <h4 className="text-xs font-medium text-foreground mb-2">可用模型</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {currentConfig.models.slice(0, 6).map((model) => (
+                          <span key={model} className="text-xs px-2 py-0.5 bg-background rounded">
+                            {model}
+                          </span>
+                        ))}
+                        {currentConfig.models.length > 6 && (
+                          <span className="text-xs text-muted-foreground">+{currentConfig.models.length - 6} 更多</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => setShowAddForm(false)}
+                      className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={addKey}
+                      disabled={!newKey.apiKey || !newKey.name}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      添加
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <button
-                  onClick={() => setShowAddForm(false)}
-                  className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowAddForm(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-border rounded-lg text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
                 >
-                  取消
+                  <Plus className="w-4 h-4" />
+                  添加 API 密钥
                 </button>
-                <button
-                  onClick={addKey}
-                  disabled={!newKey.apiKey || !newKey.name}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  添加
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-border rounded-lg text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              添加 API 密钥
-            </button>
+              )}
+
+              {/* 快速配置指南 */}
+              {apiKeys.length === 0 && (
+                <div className="mt-6 space-y-4">
+                  <h3 className="text-sm font-medium text-foreground">快速配置指南</h3>
+                  
+                  <div className="space-y-3">
+                    <div className="border border-border rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">豆</div>
+                        <h4 className="text-sm font-medium">豆包 (推荐)</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        火山引擎方舟大模型，支持 32K/128K 上下文，价格优惠
+                      </p>
+                      <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                        <li>访问 <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">火山引擎控制台</a></li>
+                        <li>开通方舟大模型服务</li>
+                        <li>创建 API Key</li>
+                        <li>复制 Key 并粘贴到此处</li>
+                      </ol>
+                    </div>
+
+                    <div className="border border-border rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">OP</div>
+                        <h4 className="text-sm font-medium">OpenAI</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        访问 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> 获取 API Key
+                      </p>
+                    </div>
+
+                    <div className="border border-border rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">DS</div>
+                        <h4 className="text-sm font-medium">DeepSeek</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        访问 <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">DeepSeek Platform</a> 获取 API Key
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
-          {/* 快速配置指南 */}
-          {apiKeys.length === 0 && (
-            <div className="mt-6 space-y-4">
-              <h3 className="text-sm font-medium text-foreground">快速配置指南</h3>
-              
-              <div className="space-y-3">
-                <div className="border border-border rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-6 h-6 rounded bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">豆</div>
-                    <h4 className="text-sm font-medium">豆包 (推荐)</h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    火山引擎方舟大模型，支持 32K/128K 上下文，价格优惠
-                  </p>
-                  <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                    <li>访问 <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">火山引擎控制台</a></li>
-                    <li>开通方舟大模型服务</li>
-                    <li>创建 API Key</li>
-                    <li>复制 Key 并粘贴到此处</li>
-                  </ol>
-                </div>
-
-                <div className="border border-border rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-6 h-6 rounded bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">OP</div>
-                    <h4 className="text-sm font-medium">OpenAI</h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    访问 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> 获取 API Key
-                  </p>
-                </div>
-
-                <div className="border border-border rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-6 h-6 rounded bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">DS</div>
-                    <h4 className="text-sm font-medium">DeepSeek</h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    访问 <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">DeepSeek Platform</a> 获取 API Key
-                  </p>
-                </div>
-              </div>
-            </div>
+          {/* 蓝凌OA配置内容 */}
+          {activeTab === 'ekp' && (
+            <EKPOConfigPanel />
           )}
-        </div>
 
         {/* 底部 */}
         <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
@@ -497,100 +540,10 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
 }
 
 // ============================================
-// EKP 配置按钮组件
+// 蓝凌OA 配置面板组件（内联在设置对话框中）
 // ============================================
 
-function EKPConfigButton() {
-  const [showDialog, setShowDialog] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-
-  // 加载保存的配置
-  useEffect(() => {
-    const loadConfig = () => {
-      if (typeof window !== 'undefined') {
-        const savedConfig = localStorage.getItem('ekp_config');
-        if (savedConfig) {
-          try {
-            const parsed = JSON.parse(savedConfig);
-            setIsConnected(parsed.enabled && parsed.baseUrl && parsed.username);
-          } catch {
-            setIsConnected(false);
-          }
-        }
-      }
-    };
-
-    loadConfig();
-
-    // 监听来自其他组件的 EKP 设置打开事件
-    const handleOpenEkpSettings = () => {
-      setShowDialog(true);
-    };
-
-    window.addEventListener('open-ekp-settings', handleOpenEkpSettings);
-    return () => {
-      window.removeEventListener('open-ekp-settings', handleOpenEkpSettings);
-    };
-  }, []);
-
-  return (
-    <>
-      <button
-        onClick={() => setShowDialog(true)}
-        className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-          isConnected
-            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-            : 'bg-accent text-muted-foreground hover:text-foreground'
-        )}
-      >
-        {isConnected ? (
-          <>
-            <Check className="w-3 h-3" />
-            已配置
-          </>
-        ) : (
-          <>
-            <Plug className="w-3 h-3" />
-            未连接
-          </>
-        )}
-        <Settings className="w-3 h-3 ml-1" />
-      </button>
-
-      <EKPConfigDialog open={showDialog} onClose={() => setShowDialog(false)} />
-    </>
-  );
-}
-
-// ============================================
-// 蓝凌EKP 配置对话框组件
-// ============================================
-
-interface EKPConfig {
-  baseUrl: string;
-  username: string;
-  password: string;
-  apiPrefix: string;
-  leaveFormId: string;
-  expenseFormId: string;
-  enabled: boolean;
-}
-
-// REST服务路径选项
-const EKP_REST_OPTIONS = [
-  { label: '流程管理 (/api/km-review/)', value: '/api/km-review/', desc: '请假、报销等审批流程' },
-  { label: '日程管理 (/api/km-calendar/)', value: '/api/km-calendar/', desc: '日程创建和查询' },
-  { label: '知识库 (/api/kms-doc/)', value: '/api/kms-doc/', desc: '文档和知识库管理' },
-  { label: '通用WebService (/sys/webservice/rest)', value: '/sys/webservice/rest', desc: '蓝凌标准REST服务' },
-];
-
-interface EKPConfigDialogProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
+function EKPOConfigPanel() {
   const [config, setConfig] = useState<EKPConfig>({
     baseUrl: '',
     username: '',
@@ -608,7 +561,7 @@ function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
 
   // 加载保存的配置
   useEffect(() => {
-    if (open && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
       const savedConfig = localStorage.getItem('ekp_config');
       if (savedConfig) {
         try {
@@ -618,7 +571,7 @@ function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
         }
       }
     }
-  }, [open]);
+  }, []);
 
   // 测试连接
   const testConnection = async () => {
@@ -633,14 +586,12 @@ function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
     setTestError(null);
 
     try {
-      // 构建Basic Auth头
       const auth = btoa(`${config.username}:${config.password}`);
       const headers = {
         'Authorization': `Basic ${auth}`,
         'Content-Type': 'application/json',
       };
 
-      // 尝试多个可能的测试端点
       const testEndpoints = [
         `${config.baseUrl}/sys/user/getUserInfo`,
         `${config.baseUrl}${config.apiPrefix}`,
@@ -656,7 +607,6 @@ function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
             headers,
           });
           
-          // 只要不是网络错误，就认为EKP服务可达
           if (response.ok || response.status === 401 || response.status === 403) {
             connected = true;
             break;
@@ -668,19 +618,18 @@ function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
 
       if (connected) {
         setTestResult('success');
-        // 如果认证失败，给出提示
         setTimeout(() => {
-          setTestError('EKP 服务可达，但认证可能失败（401）。请确认用户名密码正确，或联系管理员开启 Basic Auth。');
+          setTestError('EKP 服务可达，但认证可能失败（401）。请确认用户名密码正确。');
         }, 500);
       } else {
         setTestResult('failed');
-        setTestError('无法连接到 EKP 系统，请检查地址是否正确，或确认 EKP 服务是否正常运行。');
+        setTestError('无法连接到 EKP 系统，请检查地址是否正确。');
       }
     } catch (err) {
       setTestResult('failed');
       setTestError(err instanceof Error ? err.message : '连接测试失败');
     } finally {
-      setIsTesting(false);
+      setIsSaving(false);
     }
   };
 
@@ -691,259 +640,206 @@ function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('ekp_config', JSON.stringify(config));
       }
-      onClose();
-    } finally {
+      setIsSaving(false);
+    } catch {
       setIsSaving(false);
     }
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      {/* 背景遮罩 */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* 对话框 */}
-      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        {/* 头部 */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">蓝凌EKP 配置</h2>
-              <p className="text-xs text-muted-foreground">连接企业OA系统</p>
-            </div>
+    <div className="space-y-4">
+      {/* 提示 */}
+      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+        <div className="flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+            <p>蓝凌EKP使用 Basic Auth 认证方式，请确保系统已开启此认证方式。</p>
+            <p>配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-accent rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
+      </div>
 
-        {/* 内容 */}
-        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
-          {/* 提示 */}
-          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-              <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                <p>蓝凌EKP使用 Basic Auth 认证方式，请确保系统已开启此认证方式。</p>
-                <p>配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
-              </div>
-            </div>
-          </div>
+      {/* EKP 地址 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          EKP 系统地址 <span className="text-destructive ml-1">*</span>
+        </label>
+        <input
+          type="url"
+          value={config.baseUrl}
+          onChange={(e) => setConfig({ ...config, baseUrl: e.target.value.trim() })}
+          placeholder="https://oa.fjhxrl.com"
+          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+        />
+        <p className="text-xs text-muted-foreground mt-1">填写蓝凌EKP系统的访问地址</p>
+      </div>
 
-          {/* EKP 地址 */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5">
-              EKP 系统地址
-              <span className="text-destructive ml-1">*</span>
-            </label>
-            <input
-              type="url"
-              value={config.baseUrl}
-              onChange={(e) => setConfig({ ...config, baseUrl: e.target.value.trim() })}
-              placeholder="https://oa.fjhxrl.com"
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <p className="text-xs text-muted-foreground mt-1">填写蓝凌EKP系统的访问地址</p>
-          </div>
+      {/* REST服务路径 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">REST 服务路径</label>
+        <select
+          value={config.apiPrefix}
+          onChange={(e) => setConfig({ ...config, apiPrefix: e.target.value })}
+          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+        >
+          {EKP_REST_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
-          {/* REST服务路径 */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5">
-              REST 服务路径
-            </label>
-            <select
-              value={config.apiPrefix}
-              onChange={(e) => setConfig({ ...config, apiPrefix: e.target.value })}
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              {EKP_REST_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground mt-1">
-              {EKP_REST_OPTIONS.find(o => o.value === config.apiPrefix)?.desc}
-            </p>
-          </div>
+      {/* 用户名 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          用户名 <span className="text-destructive ml-1">*</span>
+        </label>
+        <input
+          type="text"
+          value={config.username}
+          onChange={(e) => setConfig({ ...config, username: e.target.value })}
+          placeholder="请输入EKP登录用户名"
+          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+        />
+      </div>
 
-          {/* 用户名 */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5">
-              用户名
-              <span className="text-destructive ml-1">*</span>
-            </label>
-            <input
-              type="text"
-              value={config.username}
-              onChange={(e) => setConfig({ ...config, username: e.target.value })}
-              placeholder="请输入EKP登录用户名"
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          {/* 密码 */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5">
-              密码
-              <span className="text-destructive ml-1">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={config.password}
-                onChange={(e) => setConfig({ ...config, password: e.target.value })}
-                placeholder="请输入EKP登录密码"
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-accent rounded"
-              >
-                {showPassword ? (
-                  <AlertCircle className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <Link className="w-4 h-4 text-muted-foreground" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* 表单ID（可选） */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                请假表单ID
-                <span className="text-muted-foreground ml-1">(可选)</span>
-              </label>
-              <input
-                type="text"
-                value={config.leaveFormId}
-                onChange={(e) => setConfig({ ...config, leaveFormId: e.target.value })}
-                placeholder="如: LT_LEAVE"
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                报销表单ID
-                <span className="text-muted-foreground ml-1">(可选)</span>
-              </label>
-              <input
-                type="text"
-                value={config.expenseFormId}
-                onChange={(e) => setConfig({ ...config, expenseFormId: e.target.value })}
-                placeholder="如: EXPENSE"
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-          </div>
-
-          {/* 启用开关 */}
-          <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-            <div className="flex items-center gap-2">
-              <div className={cn(
-                'w-8 h-8 rounded-lg flex items-center justify-center',
-                config.enabled ? 'bg-green-100 text-green-600' : 'bg-muted text-muted-foreground'
-              )}>
-                {config.enabled ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-              </div>
-              <div>
-                <p className="text-sm font-medium">启用 EKP 集成</p>
-                <p className="text-xs text-muted-foreground">开启后在对话中可提交审批申请</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-              className={cn(
-                'relative w-11 h-6 rounded-full transition-colors',
-                config.enabled ? 'bg-primary' : 'bg-muted'
-              )}
-            >
-              <span className={cn(
-                'absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform',
-                config.enabled && 'translate-x-5'
-              )} />
-            </button>
-          </div>
-
-          {/* 测试结果 */}
-          {testResult && (
-            <div className={cn(
-              'p-3 rounded-lg text-sm',
-              testResult === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            )}>
-              <div className="flex items-center gap-2 mb-1">
-                {testResult === 'success' ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <AlertCircle className="w-4 h-4" />
-                )}
-                <span className="font-medium">
-                  {testResult === 'success' ? '连接成功' : '连接失败'}
-                </span>
-              </div>
-              {testError && (
-                <p className="text-xs opacity-80">{testError}</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 底部 */}
-        <div className="flex items-center justify-between p-4 border-t border-border bg-muted/30">
+      {/* 密码 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          密码 <span className="text-destructive ml-1">*</span>
+        </label>
+        <div className="relative">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={config.password}
+            onChange={(e) => setConfig({ ...config, password: e.target.value })}
+            placeholder="请输入EKP登录密码"
+            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 pr-10"
+          />
           <button
-            onClick={testConnection}
-            disabled={isTesting || !config.baseUrl}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-accent rounded"
           >
-            {isTesting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                测试中...
-              </>
+            {showPassword ? (
+              <AlertCircle className="w-4 h-4 text-muted-foreground" />
             ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                测试连接
-              </>
+              <Link className="w-4 h-4 text-muted-foreground" />
             )}
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              取消
-            </button>
-            <button
-              onClick={saveConfig}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              {isSaving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Check className="w-4 h-4" />
-              )}
-              保存
-            </button>
+        </div>
+      </div>
+
+      {/* 表单ID（可选） */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium mb-1.5">
+            请假表单ID <span className="text-muted-foreground ml-1">(可选)</span>
+          </label>
+          <input
+            type="text"
+            value={config.leaveFormId}
+            onChange={(e) => setConfig({ ...config, leaveFormId: e.target.value })}
+            placeholder="如: LT_LEAVE"
+            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1.5">
+            报销表单ID <span className="text-muted-foreground ml-1">(可选)</span>
+          </label>
+          <input
+            type="text"
+            value={config.expenseFormId}
+            onChange={(e) => setConfig({ ...config, expenseFormId: e.target.value })}
+            placeholder="如: EXPENSE"
+            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+      </div>
+
+      {/* 启用开关 */}
+      <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            'w-8 h-8 rounded-lg flex items-center justify-center',
+            config.enabled ? 'bg-green-100 text-green-600' : 'bg-muted text-muted-foreground'
+          )}>
+            {config.enabled ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+          </div>
+          <div>
+            <p className="text-sm font-medium">启用 EKP 集成</p>
+            <p className="text-xs text-muted-foreground">开启后在对话中可提交审批申请</p>
           </div>
         </div>
+        <button
+          onClick={() => setConfig({ ...config, enabled: !config.enabled })}
+          className={cn(
+            'relative w-11 h-6 rounded-full transition-colors',
+            config.enabled ? 'bg-primary' : 'bg-muted'
+          )}
+        >
+          <span className={cn(
+            'absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform',
+            config.enabled && 'translate-x-5'
+          )} />
+        </button>
+      </div>
+
+      {/* 测试结果 */}
+      {testResult && (
+        <div className={cn(
+          'p-3 rounded-lg text-sm',
+          testResult === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+        )}>
+          <div className="flex items-center gap-2 mb-1">
+            {testResult === 'success' ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <AlertCircle className="w-4 h-4" />
+            )}
+            <span className="font-medium">
+              {testResult === 'success' ? '连接成功' : '连接失败'}
+            </span>
+          </div>
+          {testError && (
+            <p className="text-xs opacity-80">{testError}</p>
+          )}
+        </div>
+      )}
+
+      {/* 操作按钮 */}
+      <div className="flex items-center justify-between pt-2 border-t border-border">
+        <button
+          onClick={testConnection}
+          disabled={isTesting || !config.baseUrl}
+          className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+        >
+          {isTesting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              测试中...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4" />
+              测试连接
+            </>
+          )}
+        </button>
+        <button
+          onClick={saveConfig}
+          disabled={isSaving}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {isSaving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Check className="w-4 h-4" />
+          )}
+          保存配置
+        </button>
       </div>
     </div>
   );
