@@ -25,10 +25,12 @@ export interface EKPConfig {
 
 export interface EKPToken {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
   token_type: string;
   obtained_at: number;
+  /** 认证模式 */
+  authMode?: 'oauth2' | 'basic';
 }
 
 export interface LeaveRequest {
@@ -132,6 +134,18 @@ const DEFAULT_CONFIG: EKPConfig = {
 };
 
 // ============================================
+// 工具函数：Base64 编码
+// ============================================
+
+function base64Encode(str: string): string {
+  if (typeof window !== 'undefined') {
+    return btoa(str);
+  }
+  // Node.js 环境
+  return Buffer.from(str).toString('base64');
+}
+
+// ============================================
 // Hook 实现
 // ============================================
 
@@ -153,9 +167,8 @@ export function useEKPIntegration() {
       }
       if (savedToken) {
         const parsedToken = JSON.parse(savedToken);
-        // 检查token是否过期
-        const now = Date.now();
-        if (parsedToken.obtained_at + parsedToken.expires_in * 1000 > now) {
+        // 检查token是否过期（Basic Auth 模式下永不过期）
+        if (parsedToken.authMode === 'basic' || parsedToken.obtained_at + parsedToken.expires_in * 1000 > Date.now()) {
           setToken(parsedToken);
           setIsConnected(true);
         }
@@ -171,15 +184,22 @@ export function useEKPIntegration() {
     }
   }, []);
 
-  // 获取OAuth Token
+  // 获取访问令牌（支持 OAuth2 和 Basic Auth）
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!config.enabled || !config.baseUrl || !config.appKey || !config.appSecret) {
+    if (!config.enabled || !config.baseUrl || !config.appKey) {
       setError('EKP配置不完整，请先配置连接信息');
       return null;
     }
 
-    // 检查现有token是否有效
-    if (token && Date.now() < token.obtained_at + token.expires_in * 1000 - 60000) {
+    // Basic Auth 模式：直接返回 base64 编码的凭证
+    if (config.authMode === 'basic') {
+      const credentials = base64Encode(`${config.appKey}:${config.appSecret}`);
+      setIsConnected(true);
+      return credentials;
+    }
+
+    // OAuth2 模式：检查现有 token 是否有效
+    if (token && token.authMode === 'oauth2' && Date.now() < token.obtained_at + token.expires_in * 1000 - 60000) {
       return token.access_token;
     }
 
@@ -211,6 +231,7 @@ export function useEKPIntegration() {
       const newToken: EKPToken = {
         ...data,
         obtained_at: Date.now(),
+        authMode: 'oauth2',
       };
 
       setToken(newToken);
@@ -231,6 +252,14 @@ export function useEKPIntegration() {
     }
   }, [config, token]);
 
+  // 构建认证头（根据认证模式返回正确的 Authorization 头）
+  const buildAuthHeader = useCallback((credentials: string): string => {
+    if (config.authMode === 'basic') {
+      return `Basic ${credentials}`;
+    }
+    return `Bearer ${credentials}`;
+  }, [config.authMode]);
+
   // 测试连接
   const testConnection = useCallback(async (testConfig?: EKPConfig): Promise<boolean> => {
     const targetConfig = testConfig || config;
@@ -244,16 +273,21 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      // 简单测试：尝试访问EKP的健康检查接口或获取用户信息
+      // 简单测试：尝试访问EKP的用户信息接口
       const testUrl = `${targetConfig.baseUrl}/api/user/info`;
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
 
-      // 如果配置了认证信息，先获取token
+      // 如果配置了认证信息
       if (targetConfig.appKey && targetConfig.appSecret) {
-        const accessToken = await (async () => {
+        if (targetConfig.authMode === 'basic') {
+          // Basic Auth 模式
+          const credentials = base64Encode(`${targetConfig.appKey}:${targetConfig.appSecret}`);
+          headers['Authorization'] = `Basic ${credentials}`;
+        } else {
+          // OAuth2 模式
           const tokenUrl = `${targetConfig.baseUrl}/api/oauth2/token`;
           const response = await fetch(tokenUrl, {
             method: 'POST',
@@ -268,18 +302,12 @@ export function useEKPIntegration() {
           });
 
           if (!response.ok) {
-            throw new Error('OAuth认证失败');
+            throw new Error('OAuth认证失败，请检查 App Key 和 App Secret');
           }
 
           const data = await response.json();
-          return data.access_token;
-        })();
-
-        if (!accessToken) {
-          throw new Error('无法获取访问令牌');
+          headers['Authorization'] = `Bearer ${data.access_token}`;
         }
-
-        headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
       const response = await fetch(testUrl, {
@@ -350,7 +378,7 @@ export function useEKPIntegration() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': buildAuthHeader(accessToken),
         },
         body: JSON.stringify(formData),
       });
@@ -409,7 +437,7 @@ export function useEKPIntegration() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': buildAuthHeader(accessToken),
         },
         body: JSON.stringify(formData),
       });
@@ -437,7 +465,7 @@ export function useEKPIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [config, getAccessToken]);
+  }, [config, getAccessToken, buildAuthHeader]);
 
   // 查询请假记录
   const queryLeaveRecords = useCallback(async (filters?: {
@@ -462,7 +490,7 @@ export function useEKPIntegration() {
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': buildAuthHeader(accessToken),
         },
       });
 
@@ -476,7 +504,7 @@ export function useEKPIntegration() {
       console.error('查询请假记录失败:', err);
       return [];
     }
-  }, [config, getAccessToken]);
+  }, [config, getAccessToken, buildAuthHeader]);
 
   // 清除连接
   const disconnect = useCallback(() => {

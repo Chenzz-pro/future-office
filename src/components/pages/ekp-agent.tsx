@@ -169,27 +169,68 @@ function EKPConfigDialog({
             </p>
           </div>
 
-          {/* App Key */}
+          {/* 认证模式 */}
           <div className="space-y-2">
-            <Label htmlFor="appKey">App Key</Label>
+            <Label>认证模式</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, authMode: 'oauth2' })}
+                className={`p-3 rounded-lg border text-left transition-all ${
+                  formData.authMode === 'oauth2'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <div className="font-medium text-sm">OAuth 2.0</div>
+                <div className="text-xs text-muted-foreground">推荐，需要开放平台</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, authMode: 'basic' })}
+                className={`p-3 rounded-lg border text-left transition-all ${
+                  formData.authMode === 'basic'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <div className="font-medium text-sm">Basic Auth</div>
+                <div className="text-xs text-muted-foreground">使用系统账号密码</div>
+              </button>
+            </div>
+          </div>
+
+          {/* App Key / 用户名 */}
+          <div className="space-y-2">
+            <Label htmlFor="appKey">{formData.authMode === 'basic' ? '用户名' : 'App Key'}</Label>
             <Input
               id="appKey"
-              placeholder="EKP应用标识"
+              placeholder={formData.authMode === 'basic' ? 'EKP系统用户名' : 'EKP应用标识'}
               value={formData.appKey}
               onChange={(e) => setFormData({ ...formData, appKey: e.target.value })}
             />
+            <p className="text-xs text-muted-foreground">
+              {formData.authMode === 'basic'
+                ? '用于API调用的EKP系统账号'
+                : '在EKP开放平台创建应用后获取'}
+            </p>
           </div>
 
-          {/* App Secret */}
+          {/* App Secret / 密码 */}
           <div className="space-y-2">
-            <Label htmlFor="appSecret">App Secret</Label>
+            <Label htmlFor="appSecret">{formData.authMode === 'basic' ? '密码' : 'App Secret'}</Label>
             <Input
               id="appSecret"
               type="password"
-              placeholder="EKP应用密钥"
+              placeholder={formData.authMode === 'basic' ? 'EKP系统密码' : 'EKP应用密钥'}
               value={formData.appSecret}
               onChange={(e) => setFormData({ ...formData, appSecret: e.target.value })}
             />
+            <p className="text-xs text-muted-foreground">
+              {formData.authMode === 'basic'
+                ? 'EKP系统账号的密码'
+                : '在EKP开放平台创建应用后获取'}
+            </p>
           </div>
 
           {/* 表单ID */}
