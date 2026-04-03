@@ -522,7 +522,7 @@ export default function EKPAgent() {
                 <span>|</span>
                 <span>{config.baseUrl}</span>
                 <span>|</span>
-                <span>服务: {config.apiPrefix}</span>
+                <span>服务: {config.serviceId}</span>
               </div>
             </div>
           </div>

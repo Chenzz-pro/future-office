@@ -13,14 +13,12 @@ export interface EKPConfig {
   username: string;
   /** 认证密码 */
   password: string;
-  /** SESSION Cookie，用于蓝凌EKP加密认证 */
-  sessionCookie: string;
-  /** REST服务路径前缀，如 /sys/webservice/rest 或 /km/review/ */
-  apiPrefix: string;
-  /** 表单模板ID - 请假申请 */
-  leaveFormId: string;
-  /** 表单模板ID - 报销申请 */
-  expenseFormId: string;
+  /** SOAP 服务标识，如 kmReviewWebserviceService */
+  serviceId: string;
+  /** 请假表单模板ID */
+  leaveTemplateId: string;
+  /** 报销表单模板ID */
+  expenseTemplateId: string;
   /** 是否启用 */
   enabled: boolean;
 }
@@ -168,10 +166,9 @@ const DEFAULT_CONFIG: EKPConfig = {
   baseUrl: '',
   username: '',
   password: '',
-  sessionCookie: '',
-  apiPrefix: '/api/km-review/',
-  leaveFormId: '',
-  expenseFormId: '',
+  serviceId: 'kmReviewWebserviceService',
+  leaveTemplateId: '',
+  expenseTemplateId: '',
   enabled: false,
 };
 
@@ -237,12 +234,12 @@ export function useEKPIntegration() {
     };
   }, [config.username, config.password]);
 
-  // 测试连接
+  // 测试连接（通过后端代理，使用 SOAP + Basic Auth）
   const testConnection = useCallback(async (testConfig?: EKPConfig): Promise<boolean> => {
     const targetConfig = testConfig || config;
 
-    if (!targetConfig.enabled || !targetConfig.baseUrl) {
-      setError('EKP地址未配置');
+    if (!targetConfig.baseUrl) {
+      setError('请输入 EKP 系统地址');
       return false;
     }
 
@@ -251,46 +248,31 @@ export function useEKPIntegration() {
       return false;
     }
 
+    if (!targetConfig.serviceId) {
+      setError('请输入服务标识');
+      return false;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // 测试多个可能的用户信息接口
-      const testUrls = [
-        `${targetConfig.baseUrl}/sys/user/getUserInfo`,
-        `${targetConfig.baseUrl}/sys/user/personInfo`,
-        `${targetConfig.baseUrl}/sys/organization/sysOrgElement/getUserInfo`,
-        // 尝试直接访问流程服务
-        `${targetConfig.baseUrl}${targetConfig.apiPrefix}`,
-      ];
+      // 通过后端代理发送 SOAP 请求
+      const response = await fetch('/api/ekp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'test',
+          baseUrl: targetConfig.baseUrl,
+          username: targetConfig.username,
+          password: targetConfig.password,
+          serviceId: targetConfig.serviceId,
+        }),
+      });
 
-      const headers = {
-        'Authorization': getBasicAuthHeader(targetConfig.username, targetConfig.password),
-        'Content-Type': 'application/json',
-      };
+      const result = await response.json();
 
-      let connected = false;
-      let successUrl = '';
-
-      for (const url of testUrls) {
-        try {
-          const response = await fetch(url, {
-            method: 'GET',
-            headers,
-          });
-          
-          // 只要不是404或网络错误就算连接成功
-          if (response.ok || response.status === 401 || response.status === 403) {
-            connected = true;
-            successUrl = url;
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (connected) {
+      if (result.success) {
         setIsConnected(true);
         if (testConfig) {
           saveConfig(testConfig);
@@ -298,7 +280,7 @@ export function useEKPIntegration() {
         return true;
       }
 
-      setError('无法连接到EKP系统，请检查地址和凭证');
+      setError(result.message || '连接失败');
       setIsConnected(false);
       return false;
     } catch (err) {
@@ -311,15 +293,20 @@ export function useEKPIntegration() {
     }
   }, [config, saveConfig]);
 
-  // 创建请假表单
+  // 创建请假表单（通过 SOAP + Basic Auth）
   const createLeaveForm = useCallback(async (leaveData: LeaveRequest): Promise<LeaveFormResult | null> => {
     if (!config.enabled || !config.baseUrl) {
       setError('EKP配置未启用');
       return null;
     }
 
-    if (!config.sessionCookie && (!config.username || !config.password)) {
-      setError('请配置 SESSION Cookie 或用户名密码');
+    if (!config.username || !config.password) {
+      setError('请配置用户名和密码');
+      return null;
+    }
+
+    if (!config.serviceId) {
+      setError('请配置服务标识');
       return null;
     }
 
@@ -327,29 +314,31 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      // 通过后端代理发送请求
+      // 构建 SOAP 请求
+      const formValues = JSON.stringify({
+        fdLeaveType: LEAVE_TYPE_MAP[leaveData.leaveType] || leaveData.leaveType,
+        fdStartDate: leaveData.startDate,
+        fdEndDate: leaveData.endDate,
+        fdDuration: String(leaveData.duration),
+        fdReason: leaveData.reason,
+        fdContactPhone: leaveData.contactPhone || '',
+      });
+
+      // 通过后端代理发送 SOAP 请求
       const response = await fetch('/api/ekp', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'submit_leave',
+          action: 'addReview',
           baseUrl: config.baseUrl,
           username: config.username,
           password: config.password,
-          sessionCookie: config.sessionCookie,
-          apiPrefix: config.apiPrefix,
+          serviceId: config.serviceId,
+          templateId: config.leaveTemplateId,
           data: {
-            fdId: config.leaveFormId || 'LT_LEAVE_PERSONAL',
             docSubject: `${leaveData.leaveType}申请 - ${leaveData.startDate}至${leaveData.endDate}`,
-            fdLeaveType: LEAVE_TYPE_MAP[leaveData.leaveType] || leaveData.leaveType,
-            fdStartDate: leaveData.startDate,
-            fdEndDate: leaveData.endDate,
-            fdDuration: leaveData.duration,
-            fdReason: leaveData.reason,
-            fdContactPhone: leaveData.contactPhone || '',
-            approverId: leaveData.approverId || '',
+            docContent: leaveData.reason,
+            formValues: formValues,
           },
         }),
       });
@@ -361,11 +350,11 @@ export function useEKPIntegration() {
       }
 
       return {
-        processId: result.data?.processId || result.data?.id || '',
-        dataId: result.data?.dataId || result.data?.id || '',
-        taskId: result.data?.taskId || '',
-        currentNode: result.data?.currentNode || '审批中',
-        nextApprover: result.data?.nextApprover || '待指定',
+        processId: result.data?.processId || result.data || '',
+        dataId: result.data?.dataId || '',
+        taskId: '',
+        currentNode: '审批中',
+        nextApprover: '待指定',
         createdAt: new Date().toISOString(),
         status: 'pending',
       };
@@ -378,15 +367,20 @@ export function useEKPIntegration() {
     }
   }, [config]);
 
-  // 创建报销表单
+  // 创建报销表单（通过 SOAP + Basic Auth）
   const createExpenseForm = useCallback(async (expenseData: ExpenseRequest): Promise<ExpenseFormResult | null> => {
     if (!config.enabled || !config.baseUrl) {
       setError('EKP配置未启用');
       return null;
     }
 
-    if (!config.sessionCookie && (!config.username || !config.password)) {
-      setError('请配置 SESSION Cookie 或用户名密码');
+    if (!config.username || !config.password) {
+      setError('请配置用户名和密码');
+      return null;
+    }
+
+    if (!config.serviceId) {
+      setError('请配置服务标识');
       return null;
     }
 
@@ -394,27 +388,30 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      // 通过后端代理发送请求
+      // 构建 SOAP 请求
+      const formValues = JSON.stringify({
+        fdExpenseType: EXPENSE_TYPE_MAP[expenseData.expenseType] || expenseData.expenseType,
+        fdAmount: String(expenseData.amount),
+        fdDescription: expenseData.description,
+        fdExpenseDate: expenseData.expenseDate,
+        fdProjectName: expenseData.projectName || '',
+      });
+
+      // 通过后端代理发送 SOAP 请求
       const response = await fetch('/api/ekp', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'submit_expense',
+          action: 'addReview',
           baseUrl: config.baseUrl,
           username: config.username,
           password: config.password,
-          sessionCookie: config.sessionCookie,
-          apiPrefix: config.apiPrefix,
+          serviceId: config.serviceId,
+          templateId: config.expenseTemplateId,
           data: {
-            fdId: config.expenseFormId || 'LT_EXPENSE',
             docSubject: `${expenseData.expenseType}报销 - ¥${expenseData.amount}`,
-            fdExpenseType: EXPENSE_TYPE_MAP[expenseData.expenseType] || expenseData.expenseType,
-            fdAmount: expenseData.amount,
-            fdDescription: expenseData.description,
-            fdExpenseDate: expenseData.expenseDate,
-            fdProjectName: expenseData.projectName || '',
+            docContent: expenseData.description,
+            formValues: formValues,
           },
         }),
       });
@@ -426,11 +423,11 @@ export function useEKPIntegration() {
       }
 
       return {
-        processId: result.data?.processId || result.data?.id || '',
-        dataId: result.data?.dataId || result.data?.id || '',
-        taskId: result.data?.taskId || '',
-        currentNode: result.data?.currentNode || '审批中',
-        nextApprover: result.data?.nextApprover || '待指定',
+        processId: result.data?.processId || result.data || '',
+        dataId: result.data?.dataId || '',
+        taskId: '',
+        currentNode: '审批中',
+        nextApprover: '待指定',
         createdAt: new Date().toISOString(),
         status: 'pending',
       };
@@ -443,40 +440,11 @@ export function useEKPIntegration() {
     }
   }, [config]);
 
-  // 查询请假记录
-  const queryLeaveRecords = useCallback(async (filters?: {
-    status?: 'pending' | 'approved' | 'rejected';
-    startDate?: string;
-    endDate?: string;
-  }): Promise<LeaveFormResult[]> => {
-    if (!config.enabled || !config.baseUrl) {
-      return [];
-    }
-
-    try {
-      const params = new URLSearchParams();
-      if (filters?.status) params.append('status', filters.status);
-      if (filters?.startDate) params.append('startDate', filters.startDate);
-      if (filters?.endDate) params.append('endDate', filters.endDate);
-
-      const apiUrl = `${config.baseUrl}${config.apiPrefix}kmReviewRestService/list?${params.toString()}`;
-
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        return [];
-      }
-
-      const result = await response.json().catch(() => ({}));
-      return result.data || [];
-    } catch (err) {
-      console.error('查询请假记录失败:', err);
-      return [];
-    }
-  }, [config, getAuthHeaders]);
+  // 查询请假记录（暂不支持）
+  const queryLeaveRecords = useCallback(async (): Promise<LeaveFormResult[]> => {
+    // TODO: 需要通过其他 SOAP 接口实现
+    return [];
+  }, []);
 
   // 清除连接
   const disconnect = useCallback(() => {
@@ -487,22 +455,16 @@ export function useEKPIntegration() {
   }, []);
 
   return {
-    // 状态
     config,
     isLoading,
     isConnected,
     error,
-    // 配置方法
     saveConfig,
-    // 连接方法
     testConnection,
     disconnect,
-    // 业务方法
     createLeaveForm,
     createExpenseForm,
     queryLeaveRecords,
-    // 工具方法
-    getAuthHeaders,
   };
 }
 

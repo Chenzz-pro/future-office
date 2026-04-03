@@ -1,247 +1,127 @@
 import { NextRequest } from 'next/server';
+import { 
+  EKPSoapClient, 
+  buildLeaveFormData, 
+  buildExpenseFormData,
+  KmReviewParameterForm 
+} from '@/lib/ekp-soap-client';
 
 interface EKPProxyRequest {
-  action: 'test' | 'login' | 'submit_leave' | 'submit_expense' | 'query_records';
+  action: 'test' | 'addReview' | 'approveReview' | 'updateReview';
   baseUrl: string;
-  username?: string;
-  password?: string;
-  sessionCookie?: string;  // 支持直接传入 SESSION cookie
-  apiPrefix: string;
+  username: string;
+  password: string;
+  serviceId: string;
+  templateId?: string;
   data?: Record<string, unknown>;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: EKPProxyRequest = await request.json();
-    const { action, baseUrl, username, password, sessionCookie, apiPrefix, data } = body;
+    const { action, baseUrl, username, password, serviceId, templateId, data } = body;
 
+    // 验证必填参数
     if (!baseUrl) {
-      return new Response(
-        JSON.stringify({ error: '缺少 EKP 系统地址' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse(false, '请输入 EKP 系统地址');
     }
 
-    // 统一的响应格式
-    const makeResponse = (success: boolean, message: string, extra: Record<string, unknown> = {}) => {
-      return new Response(
-        JSON.stringify({ success, message, ...extra }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      );
-    };
+    if (!username || !password) {
+      return jsonResponse(false, '请输入用户名和密码');
+    }
 
-    // 获取 SESSION cookie（优先使用传入的 cookie，否则尝试登录获取）
-    const getSessionCookie = async (): Promise<{ success: boolean; session?: string; message?: string }> => {
-      // 如果直接传入了 sessionCookie，直接使用
-      if (sessionCookie) {
-        return { success: true, session: sessionCookie };
+    if (!serviceId) {
+      return jsonResponse(false, '请输入服务标识');
+    }
+
+    // 创建 SOAP 客户端
+    const client = new EKPSoapClient({
+      baseUrl,
+      username,
+      password,
+      serviceId,
+    });
+
+    // 执行操作
+    switch (action) {
+      case 'test': {
+        const result = await client.testConnection();
+        if (result.success) {
+          return jsonResponse(true, '连接成功！Basic Auth 认证通过，服务可用');
+        }
+        return jsonResponse(false, result.error || '连接失败');
       }
 
-      // 否则尝试用用户名密码登录
-      if (!username || !password) {
-        return { success: false, message: '请提供 SESSION Cookie 或用户名密码' };
-      }
-
-      // 尝试蓝凌EKP的登录接口（加密版本需要在前端完成）
-      // 由于蓝凌EKP使用DES加密，这里只能尝试明文登录（大多数系统不支持）
-      try {
-        const loginResponse = await fetch(`${baseUrl}/sys/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-        });
-
-        const setCookie = loginResponse.headers.get('set-cookie');
-        if (setCookie && setCookie.includes('SESSION=')) {
-          const sessionMatch = setCookie.match(/SESSION=([^;]+)/);
-          if (sessionMatch) {
-            return { success: true, session: sessionMatch[1] };
-          }
+      case 'addReview': {
+        if (!templateId) {
+          return jsonResponse(false, '请输入表单模板ID');
         }
 
-        return { success: false, message: '登录失败：无法获取会话，请使用 SESSION Cookie 方式' };
-      } catch (err) {
-        return { success: false, message: `登录失败：${err instanceof Error ? err.message : '网络错误'}` };
-      }
-    };
-
-    // 测试连接 / 获取用户信息
-    if (action === 'test') {
-      const sessionResult = await getSessionCookie();
-      if (!sessionResult.success || !sessionResult.session) {
-        return makeResponse(false, sessionResult.message || '获取会话失败');
-      }
-
-      const sessionId = sessionResult.session;
-
-      try {
-        // 尝试多个用户信息接口
-        const userEndpoints = [
-          '/sys/user/getUserInfo',
-          '/api/sys/user/getUserInfo',
-          '/sys/portal/sysPortalPortlet/getUserInfo.jsp',
-          '/sys/person/getMyInfo',
-        ];
-
-        let userData = null;
-        let lastText = '';
-
-        for (const endpoint of userEndpoints) {
-          const userResponse = await fetch(`${baseUrl}${endpoint}`, {
-            method: 'GET',
-            headers: {
-              'Cookie': `SESSION=${sessionId}`,
-            },
-          });
-
-          const userText = await userResponse.text();
-          lastText = userText;
-
-          // 如果重定向到匿名页面，说明认证失败
-          if (userText.includes('anonym.jsp') || userText.includes('登录') || userText.includes('login.jsp')) {
-            continue;
-          }
-
-          // 尝试解析JSON
-          try {
-            const parsed = JSON.parse(userText);
-            if (parsed.userid || parsed.loginname || parsed.userName || parsed.fdName || parsed.fdLoginName) {
-              userData = parsed;
-              break;
-            }
-          } catch {
-            // 不是JSON，检查是否包含用户信息
-            if (userText.includes('fdName') || userText.includes('fdLoginName')) {
-              // 可能是JSONP或其他格式
-              userData = { raw: userText.substring(0, 500) };
-              break;
-            }
-          }
+        if (!data) {
+          return jsonResponse(false, '请提供表单数据');
         }
 
-        if (userData) {
-          const displayName = userData.fdName || userData.userName || userData.loginname || userData.fdLoginName || '用户';
-          return makeResponse(true, `认证成功！欢迎 ${displayName}`, {
-            user: userData,
-            sessionCookie: sessionId,
+        // 构建 SOAP 请求参数
+        const formData: KmReviewParameterForm = {
+          fdTemplateId: templateId,
+          docSubject: String(data.docSubject || '新申请'),
+          docContent: String(data.docContent || ''),
+          formValues: typeof data.formValues === 'string' 
+            ? data.formValues 
+            : JSON.stringify(data.formValues || {}),
+        };
+
+        const result = await client.addReview(formData);
+        
+        if (result.success) {
+          return jsonResponse(true, '流程发起成功', { 
+            processId: result.data,
+            message: '申请已提交，等待审批' 
           });
         }
+        return jsonResponse(false, result.error || '流程发起失败');
+      }
 
-        // 如果所有接口都失败，检查最后响应
-        if (lastText && lastText.includes('anonym.jsp')) {
-          return makeResponse(false, 'SESSION Cookie 无效或已过期，请重新获取');
+      case 'approveReview': {
+        if (!data?.fdId) {
+          return jsonResponse(false, '请提供流程ID');
         }
 
-        return makeResponse(false, '无法获取用户信息，SESSION Cookie 可能无效');
+        const formData: KmReviewParameterForm = {
+          fdId: String(data.fdId),
+          docSubject: String(data.docSubject || ''),
+          formValues: typeof data.formValues === 'string' 
+            ? data.formValues 
+            : JSON.stringify(data.formValues || {}),
+        };
 
-      } catch (err) {
-        return makeResponse(false, `连接失败：${err instanceof Error ? err.message : '网络错误'}`);
-      }
-    }
-
-    // 提交请假
-    if (action === 'submit_leave') {
-      const sessionResult = await getSessionCookie();
-      if (!sessionResult.success || !sessionResult.session) {
-        return makeResponse(false, sessionResult.message || '获取会话失败');
-      }
-
-      const sessionId = sessionResult.session;
-
-      try {
-        const submitResponse = await fetch(`${baseUrl}${apiPrefix}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': `SESSION=${sessionId}`,
-          },
-          body: JSON.stringify(data),
-        });
-
-        const result = await submitResponse.json();
+        const result = await client.approveReview(formData);
         
-        if (submitResponse.ok && result) {
-          return makeResponse(true, '请假申请提交成功', { data: result });
-        } else {
-          return makeResponse(false, result.message || '提交失败');
+        if (result.success) {
+          return jsonResponse(true, '审批成功', { data: result.data });
         }
-
-      } catch (err) {
-        return makeResponse(false, `提交失败：${err instanceof Error ? err.message : '网络错误'}`);
+        return jsonResponse(false, result.error || '审批失败');
       }
+
+      default:
+        return jsonResponse(false, '未知操作');
     }
-
-    // 提交报销
-    if (action === 'submit_expense') {
-      const sessionResult = await getSessionCookie();
-      if (!sessionResult.success || !sessionResult.session) {
-        return makeResponse(false, sessionResult.message || '获取会话失败');
-      }
-
-      const sessionId = sessionResult.session;
-
-      try {
-        const submitResponse = await fetch(`${baseUrl}${apiPrefix}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': `SESSION=${sessionId}`,
-          },
-          body: JSON.stringify(data),
-        });
-
-        const result = await submitResponse.json();
-        
-        if (submitResponse.ok && result) {
-          return makeResponse(true, '报销申请提交成功', { data: result });
-        } else {
-          return makeResponse(false, result.message || '提交失败');
-        }
-
-      } catch (err) {
-        return makeResponse(false, `提交失败：${err instanceof Error ? err.message : '网络错误'}`);
-      }
-    }
-
-    // 查询记录
-    if (action === 'query_records') {
-      const sessionResult = await getSessionCookie();
-      if (!sessionResult.success || !sessionResult.session) {
-        return makeResponse(false, sessionResult.message || '获取会话失败');
-      }
-
-      const sessionId = sessionResult.session;
-
-      try {
-        const queryResponse = await fetch(`${baseUrl}${apiPrefix}`, {
-          method: 'GET',
-          headers: {
-            'Cookie': `SESSION=${sessionId}`,
-          },
-        });
-
-        const result = await queryResponse.json();
-        
-        if (queryResponse.ok && result) {
-          return makeResponse(true, '查询成功', { data: result });
-        } else {
-          return makeResponse(false, result.message || '查询失败');
-        }
-
-      } catch (err) {
-        return makeResponse(false, `查询失败：${err instanceof Error ? err.message : '网络错误'}`);
-      }
-    }
-
-    return makeResponse(false, '未知操作');
 
   } catch (error) {
-    console.error('EKP Proxy error:', error);
-    return new Response(
-      JSON.stringify({ success: false, message: '服务器错误' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    console.error('EKP API Error:', error);
+    return jsonResponse(false, `服务器错误：${error instanceof Error ? error.message : '未知错误'}`);
   }
+}
+
+/**
+ * 统一的 JSON 响应
+ */
+function jsonResponse(success: boolean, message: string, extra: Record<string, unknown> = {}) {
+  return new Response(
+    JSON.stringify({ success, message, ...extra }),
+    { 
+      status: 200, 
+      headers: { 'Content-Type': 'application/json' } 
+    }
+  );
 }
