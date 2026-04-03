@@ -14,6 +14,7 @@ import {
   ChevronRight,
   MessageSquare,
   Zap,
+  RefreshCw,
 } from 'lucide-react';
 import { useEKPIntegration, LEAVE_TYPE_MAP, EXPENSE_TYPE_MAP } from '@/hooks/use-ekp-integration';
 import { Button } from '@/components/ui/button';
