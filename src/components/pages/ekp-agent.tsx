@@ -405,6 +405,7 @@ export default function EKPAgent() {
     createLeaveForm,
     createExpenseForm,
     error,
+    isLoading,
   } = useEKPIntegration();
 
   const [activeTab, setActiveTab] = useState('quick');
