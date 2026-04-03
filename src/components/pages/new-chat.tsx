@@ -18,10 +18,16 @@ import {
   Loader2,
   AlertCircle,
   Settings,
-  Trash2
+  Trash2,
+  Bell,
+  Calendar,
+  Database,
+  Globe,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChatHistory, Message, ChatSession } from '@/hooks/use-chat-history';
+import { CustomSkill } from '@/types/custom-skill';
 
 interface ApiKey {
   id: string;
@@ -32,14 +38,32 @@ interface ApiKey {
   isActive: boolean;
 }
 
-const quickSkills = [
-  { icon: ImageIcon, label: '图像生成', color: 'text-purple-500' },
-  { icon: Code, label: 'AI 编程', color: 'text-blue-500' },
-  { icon: Video, label: '视频生成', color: 'text-pink-500' },
-  { icon: Search, label: 'AI 搜索', color: 'text-green-500' },
-  { icon: HelpCircle, label: '解题答疑', color: 'text-orange-500' },
-  { icon: PenTool, label: '帮我写作', color: 'text-cyan-500' },
-  { icon: MoreHorizontal, label: '更多', color: 'text-gray-500' },
+// 图标映射
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  Globe,
+  Database,
+  ImageIcon,
+  Code,
+  Video,
+  Search,
+  HelpCircle,
+  PenTool,
+  Zap,
+  Bell,
+  Calendar,
+};
+
+// localStorage key
+const CUSTOM_SKILLS_STORAGE_KEY = 'custom_skills';
+
+// 内置快捷技能
+const builtInQuickSkills = [
+  { icon: ImageIcon, label: '图像生成', color: 'text-purple-500', skillId: null },
+  { icon: Code, label: 'AI 编程', color: 'text-blue-500', skillId: null },
+  { icon: Video, label: '视频生成', color: 'text-pink-500', skillId: null },
+  { icon: Search, label: 'AI 搜索', color: 'text-green-500', skillId: null },
+  { icon: HelpCircle, label: '解题答疑', color: 'text-orange-500', skillId: null },
+  { icon: PenTool, label: '帮我写作', color: 'text-cyan-500', skillId: null },
 ];
 
 interface NewChatPageProps {
@@ -54,6 +78,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [selectedModel, setSelectedModel] = useState('gpt-4o');
+  const [customSkills, setCustomSkills] = useState<CustomSkill[]>([]);
+  const [executingSkill, setExecutingSkill] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -83,6 +109,19 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       } catch {
         setApiKeys([]);
       }
+    }
+  }, []);
+
+  // 加载自定义技能
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(CUSTOM_SKILLS_STORAGE_KEY);
+      if (stored) {
+        const skills = JSON.parse(stored) as CustomSkill[];
+        setCustomSkills(skills.filter(s => s.enabled)); // 只加载已启用的技能
+      }
+    } catch (err) {
+      console.error('加载自定义技能失败:', err);
     }
   }, []);
 
@@ -217,6 +256,98 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       sendMessage();
     }
   };
+
+  // 执行自定义技能
+  const executeCustomSkill = async (skill: CustomSkill) => {
+    if (!currentSession) {
+      // 如果没有当前会话，创建一个
+      const activeKey = getActiveApiKey();
+      if (!activeKey) {
+        setError('请先在设置中配置 API 密钥');
+        setShowSettings(true);
+        return;
+      }
+      createSession(selectedModel, activeKey.provider);
+    }
+
+    setExecutingSkill(skill.id);
+    setError(null);
+
+    // 添加用户消息
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: `🔍 执行技能：${skill.name}`,
+      timestamp: new Date(),
+    };
+    
+    if (currentSession) {
+      addMessage(currentSession.id, userMessage);
+    }
+
+    try {
+      // 构建默认参数
+      const params: Record<string, unknown> = {};
+      for (const param of skill.requestParams) {
+        if (param.defaultValue !== undefined) {
+          params[param.name] = param.defaultValue;
+        } else if (param.name === 'loginName' && skill.authConfig.type === 'basic') {
+          params[param.name] = skill.authConfig.username;
+        }
+      }
+
+      const response = await fetch('/api/custom-skill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'execute',
+          skill,
+          params,
+        }),
+      });
+
+      const data = await response.json();
+
+      // 添加助手消息
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.success 
+          ? `✅ **${skill.name}** 执行成功\n\n${data.message}\n\n\`\`\`json\n${JSON.stringify(data.data, null, 2)}\n\`\`\``
+          : `❌ **${skill.name}** 执行失败：${data.message}`,
+        timestamp: new Date(),
+      };
+
+      if (currentSession) {
+        addMessage(currentSession.id, assistantMessage);
+      }
+    } catch (err) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: `❌ 执行失败：${err instanceof Error ? err.message : '网络错误'}`,
+        timestamp: new Date(),
+      };
+
+      if (currentSession) {
+        addMessage(currentSession.id, errorMessage);
+      }
+    } finally {
+      setExecutingSkill(null);
+    }
+  };
+
+  // 合并内置技能和自定义技能
+  const allQuickSkills = [
+    ...builtInQuickSkills,
+    ...customSkills.map(skill => ({
+      icon: iconMap[skill.icon] || Zap,
+      label: skill.name,
+      color: 'text-primary',
+      skillId: skill.id,
+      skill,
+    })),
+  ];
 
   // 清空当前对话
   const clearCurrentChat = () => {
@@ -374,13 +505,32 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           {/* 快捷技能 */}
           {!hasMessages && (
             <div className="mb-4 flex flex-wrap justify-center gap-2">
-              {quickSkills.map((skill, index) => (
+              {allQuickSkills.map((skill, index) => (
                 <button
                   key={index}
-                  className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-full text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-accent transition-all"
+                  onClick={() => {
+                    if (skill.skillId && skill.skill) {
+                      executeCustomSkill(skill.skill);
+                    }
+                  }}
+                  disabled={!!executingSkill}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 border rounded-full text-sm transition-all",
+                    skill.skillId 
+                      ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20" 
+                      : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-accent",
+                    executingSkill && "opacity-50 cursor-not-allowed"
+                  )}
                 >
-                  <skill.icon className={`w-4 h-4 ${skill.color}`} />
+                  {executingSkill === skill.skillId ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <skill.icon className={`w-4 h-4 ${skill.color}`} />
+                  )}
                   <span>{skill.label}</span>
+                  {skill.skillId && (
+                    <span className="text-xs opacity-60">自定义</span>
+                  )}
                 </button>
               ))}
             </div>
