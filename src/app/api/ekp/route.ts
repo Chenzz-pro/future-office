@@ -60,25 +60,45 @@ export async function POST(request: NextRequest) {
     // 尝试获取响应内容
     let responseData;
     const contentType = response.headers.get('content-type');
+    const responseText = await response.text();
     
-    if (contentType?.includes('application/json')) {
-      responseData = await response.json();
-    } else {
-      const text = await response.text();
-      responseData = { raw: text.substring(0, 1000) };
-    }
+    // 检查响应内容判断认证状态
+    // 蓝凌EKP认证失败时返回HTML登录页面，而不是401
+    const isHtmlResponse = responseText.includes('<html') || responseText.includes('<!doctype');
+    const isLoginPage = isHtmlResponse && (
+      responseText.includes('login') || 
+      responseText.includes('登录') ||
+      responseText.includes('username') ||
+      responseText.includes('password')
+    );
+    
+    let isSuccess = false;
+    let authStatus = '';
 
-    // 判断是否成功
-    const isSuccess = response.ok || response.status === 401 || response.status === 403;
+    if (isLoginPage) {
+      // 返回HTML登录页面，说明认证失败
+      authStatus = '认证失败：用户名或密码错误';
+      responseData = { raw: '认证失败' };
+    } else if (response.ok) {
+      // 返回JSON且状态码正常，说明认证成功
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { raw: responseText.substring(0, 1000) };
+      }
+      isSuccess = true;
+      authStatus = '认证成功，连接正常';
+    } else {
+      responseData = { raw: responseText.substring(0, 1000) };
+      authStatus = `HTTP错误：${response.status}`;
+    }
 
     return new Response(
       JSON.stringify({
         success: isSuccess,
         status: response.status,
         data: responseData,
-        message: isSuccess 
-          ? 'EKP服务可达' 
-          : `请求失败: ${response.status}`,
+        message: authStatus,
       }),
       { 
         status: 200, 

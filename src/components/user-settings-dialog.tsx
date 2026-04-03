@@ -606,10 +606,12 @@ function EKPOConfigPanel() {
 
       if (result.success) {
         setTestResult('success');
-        setTestError('连接成功！EKP 服务已可达。');
+        setTestError('连接成功！Basic Auth 认证通过。');
       } else {
         setTestResult('failed');
-        setTestError(result.error || '无法连接到 EKP 系统，请检查配置是否正确。');
+        // 显示更详细的错误信息
+        const errorMsg = result.message || result.error || '认证失败';
+        setTestError(`${errorMsg}。请检查用户名和密码是否正确。`);
       }
     } catch (err) {
       setTestResult('failed');
