@@ -13,7 +13,9 @@ export interface EKPConfig {
   username: string;
   /** 认证密码 */
   password: string;
-  /** SOAP 服务标识，如 kmReviewWebserviceService */
+  /** REST服务路径，如 /api/km-review/kmReviewRestService */
+  apiPath: string;
+  /** 服务标识 */
   serviceId: string;
   /** 请假表单模板ID */
   leaveTemplateId: string;
@@ -166,7 +168,8 @@ const DEFAULT_CONFIG: EKPConfig = {
   baseUrl: '',
   username: '',
   password: '',
-  serviceId: 'kmReviewWebserviceService',
+  apiPath: '/api/km-review/kmReviewRestService',
+  serviceId: 'kmReviewRestService',
   leaveTemplateId: '',
   expenseTemplateId: '',
   enabled: false,
@@ -234,7 +237,7 @@ export function useEKPIntegration() {
     };
   }, [config.username, config.password]);
 
-  // 测试连接（通过后端代理，使用 SOAP + Basic Auth）
+  // 测试连接（通过后端代理，使用 REST + Basic Auth）
   const testConnection = useCallback(async (testConfig?: EKPConfig): Promise<boolean> => {
     const targetConfig = testConfig || config;
 
@@ -248,8 +251,8 @@ export function useEKPIntegration() {
       return false;
     }
 
-    if (!targetConfig.serviceId) {
-      setError('请输入服务标识');
+    if (!targetConfig.apiPath) {
+      setError('请输入访问路径');
       return false;
     }
 
@@ -257,7 +260,7 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      // 通过后端代理发送 SOAP 请求
+      // 通过后端代理发送 REST 请求
       const response = await fetch('/api/ekp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -266,6 +269,7 @@ export function useEKPIntegration() {
           baseUrl: targetConfig.baseUrl,
           username: targetConfig.username,
           password: targetConfig.password,
+          apiPath: targetConfig.apiPath,
           serviceId: targetConfig.serviceId,
         }),
       });
@@ -293,7 +297,7 @@ export function useEKPIntegration() {
     }
   }, [config, saveConfig]);
 
-  // 创建请假表单（通过 SOAP + Basic Auth）
+  // 创建请假表单（通过 REST + Basic Auth）
   const createLeaveForm = useCallback(async (leaveData: LeaveRequest): Promise<LeaveFormResult | null> => {
     if (!config.enabled || !config.baseUrl) {
       setError('EKP配置未启用');
@@ -305,8 +309,8 @@ export function useEKPIntegration() {
       return null;
     }
 
-    if (!config.serviceId) {
-      setError('请配置服务标识');
+    if (!config.apiPath) {
+      setError('请配置访问路径');
       return null;
     }
 
@@ -314,17 +318,17 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      // 构建 SOAP 请求
-      const formValues = JSON.stringify({
+      // 构建表单数据
+      const formValues = {
         fdLeaveType: LEAVE_TYPE_MAP[leaveData.leaveType] || leaveData.leaveType,
         fdStartDate: leaveData.startDate,
         fdEndDate: leaveData.endDate,
         fdDuration: String(leaveData.duration),
         fdReason: leaveData.reason,
         fdContactPhone: leaveData.contactPhone || '',
-      });
+      };
 
-      // 通过后端代理发送 SOAP 请求
+      // 通过后端代理发送 REST 请求
       const response = await fetch('/api/ekp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -333,6 +337,7 @@ export function useEKPIntegration() {
           baseUrl: config.baseUrl,
           username: config.username,
           password: config.password,
+          apiPath: config.apiPath,
           serviceId: config.serviceId,
           templateId: config.leaveTemplateId,
           data: {
@@ -367,7 +372,7 @@ export function useEKPIntegration() {
     }
   }, [config]);
 
-  // 创建报销表单（通过 SOAP + Basic Auth）
+  // 创建报销表单（通过 REST + Basic Auth）
   const createExpenseForm = useCallback(async (expenseData: ExpenseRequest): Promise<ExpenseFormResult | null> => {
     if (!config.enabled || !config.baseUrl) {
       setError('EKP配置未启用');
@@ -379,8 +384,8 @@ export function useEKPIntegration() {
       return null;
     }
 
-    if (!config.serviceId) {
-      setError('请配置服务标识');
+    if (!config.apiPath) {
+      setError('请配置访问路径');
       return null;
     }
 
@@ -388,16 +393,16 @@ export function useEKPIntegration() {
     setError(null);
 
     try {
-      // 构建 SOAP 请求
-      const formValues = JSON.stringify({
+      // 构建表单数据
+      const formValues = {
         fdExpenseType: EXPENSE_TYPE_MAP[expenseData.expenseType] || expenseData.expenseType,
         fdAmount: String(expenseData.amount),
         fdDescription: expenseData.description,
         fdExpenseDate: expenseData.expenseDate,
         fdProjectName: expenseData.projectName || '',
-      });
+      };
 
-      // 通过后端代理发送 SOAP 请求
+      // 通过后端代理发送 REST 请求
       const response = await fetch('/api/ekp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -406,6 +411,7 @@ export function useEKPIntegration() {
           baseUrl: config.baseUrl,
           username: config.username,
           password: config.password,
+          apiPath: config.apiPath,
           serviceId: config.serviceId,
           templateId: config.expenseTemplateId,
           data: {

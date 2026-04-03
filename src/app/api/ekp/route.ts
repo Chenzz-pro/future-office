@@ -1,16 +1,17 @@
 import { NextRequest } from 'next/server';
 import { 
-  EKPSoapClient, 
+  EKPRestClient, 
   buildLeaveFormData, 
   buildExpenseFormData,
-  KmReviewParameterForm 
-} from '@/lib/ekp-soap-client';
+  EKPRequest 
+} from '@/lib/ekp-rest-client';
 
 interface EKPProxyRequest {
   action: 'test' | 'addReview' | 'approveReview' | 'updateReview';
   baseUrl: string;
   username: string;
   password: string;
+  apiPath: string;
   serviceId: string;
   templateId?: string;
   data?: Record<string, unknown>;
@@ -19,7 +20,7 @@ interface EKPProxyRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: EKPProxyRequest = await request.json();
-    const { action, baseUrl, username, password, serviceId, templateId, data } = body;
+    const { action, baseUrl, username, password, apiPath, serviceId, templateId, data } = body;
 
     // 验证必填参数
     if (!baseUrl) {
@@ -30,15 +31,20 @@ export async function POST(request: NextRequest) {
       return jsonResponse(false, '请输入用户名和密码');
     }
 
+    if (!apiPath) {
+      return jsonResponse(false, '请输入访问路径');
+    }
+
     if (!serviceId) {
       return jsonResponse(false, '请输入服务标识');
     }
 
-    // 创建 SOAP 客户端
-    const client = new EKPSoapClient({
+    // 创建 REST 客户端
+    const client = new EKPRestClient({
       baseUrl,
       username,
       password,
+      apiPath,
       serviceId,
     });
 
@@ -47,9 +53,9 @@ export async function POST(request: NextRequest) {
       case 'test': {
         const result = await client.testConnection();
         if (result.success) {
-          return jsonResponse(true, '连接成功！Basic Auth 认证通过，服务可用');
+          return jsonResponse(true, result.msg || '连接成功！Basic Auth 认证通过，服务可用');
         }
-        return jsonResponse(false, result.error || '连接失败');
+        return jsonResponse(false, result.msg || '连接失败');
       }
 
       case 'addReview': {
@@ -61,14 +67,12 @@ export async function POST(request: NextRequest) {
           return jsonResponse(false, '请提供表单数据');
         }
 
-        // 构建 SOAP 请求参数
-        const formData: KmReviewParameterForm = {
+        // 构建请求参数
+        const formData: EKPRequest = {
           fdTemplateId: templateId,
           docSubject: String(data.docSubject || '新申请'),
           docContent: String(data.docContent || ''),
-          formValues: typeof data.formValues === 'string' 
-            ? data.formValues 
-            : JSON.stringify(data.formValues || {}),
+          formValues: (data.formValues as Record<string, unknown>) || {},
         };
 
         const result = await client.addReview(formData);
@@ -79,7 +83,7 @@ export async function POST(request: NextRequest) {
             message: '申请已提交，等待审批' 
           });
         }
-        return jsonResponse(false, result.error || '流程发起失败');
+        return jsonResponse(false, result.msg || '流程发起失败');
       }
 
       case 'approveReview': {
@@ -87,12 +91,9 @@ export async function POST(request: NextRequest) {
           return jsonResponse(false, '请提供流程ID');
         }
 
-        const formData: KmReviewParameterForm = {
+        const formData: EKPRequest = {
           fdId: String(data.fdId),
-          docSubject: String(data.docSubject || ''),
-          formValues: typeof data.formValues === 'string' 
-            ? data.formValues 
-            : JSON.stringify(data.formValues || {}),
+          formValues: (data.formValues as Record<string, unknown>) || {},
         };
 
         const result = await client.approveReview(formData);
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
         if (result.success) {
           return jsonResponse(true, '审批成功', { data: result.data });
         }
-        return jsonResponse(false, result.error || '审批失败');
+        return jsonResponse(false, result.msg || '审批失败');
       }
 
       default:

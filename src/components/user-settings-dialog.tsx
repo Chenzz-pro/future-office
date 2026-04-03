@@ -35,9 +35,10 @@ interface EKPConfig {
   baseUrl: string;
   username: string;
   password: string;
-  serviceId: string;  // SOAP 服务标识
-  leaveTemplateId: string;  // 请假表单模板ID
-  expenseTemplateId: string;  // 报销表单模板ID
+  apiPath: string;      // REST 服务路径
+  serviceId: string;    // 服务标识
+  leaveTemplateId: string;
+  expenseTemplateId: string;
   enabled: boolean;
 }
 
@@ -549,7 +550,8 @@ function EKPOConfigPanel() {
     baseUrl: '',
     username: '',
     password: '',
-    serviceId: 'kmReviewWebserviceService',
+    apiPath: '/api/km-review/kmReviewRestService',
+    serviceId: 'kmReviewRestService',
     leaveTemplateId: '',
     expenseTemplateId: '',
     enabled: false,
@@ -588,8 +590,8 @@ function EKPOConfigPanel() {
       return;
     }
 
-    if (!config.serviceId) {
-      setTestError('请输入服务标识');
+    if (!config.apiPath) {
+      setTestError('请输入访问路径');
       setTestResult('failed');
       return;
     }
@@ -599,7 +601,7 @@ function EKPOConfigPanel() {
     setTestError(null);
 
     try {
-      // 通过后端代理发送 SOAP 请求
+      // 通过后端代理发送 REST 请求
       const response = await fetch('/api/ekp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -608,6 +610,7 @@ function EKPOConfigPanel() {
           baseUrl: config.baseUrl,
           username: config.username,
           password: config.password,
+          apiPath: config.apiPath,
           serviceId: config.serviceId,
         }),
       });
@@ -649,7 +652,7 @@ function EKPOConfigPanel() {
         <div className="flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
           <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-            <p><strong>蓝凌EKP 使用 SOAP WebService 接口</strong>，支持 Basic Auth 认证。</p>
+            <p><strong>蓝凌EKP 使用 REST Service 接口</strong>，支持 Basic Auth 认证。</p>
             <p>配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
           </div>
         </div>
@@ -670,20 +673,37 @@ function EKPOConfigPanel() {
         <p className="text-xs text-muted-foreground mt-1">填写蓝凌EKP系统的访问地址</p>
       </div>
 
+      {/* 访问路径 */}
+      <div>
+        <label className="block text-xs font-medium mb-1.5">
+          REST 访问路径 <span className="text-destructive ml-1">*</span>
+        </label>
+        <input
+          type="text"
+          value={config.apiPath}
+          onChange={(e) => setConfig({ ...config, apiPath: e.target.value })}
+          placeholder="/api/km-review/kmReviewRestService"
+          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          流程审批服务: /api/km-review/kmReviewRestService
+        </p>
+      </div>
+
       {/* 服务标识 */}
       <div>
         <label className="block text-xs font-medium mb-1.5">
-          SOAP 服务标识 <span className="text-destructive ml-1">*</span>
+          服务标识
         </label>
         <input
           type="text"
           value={config.serviceId}
           onChange={(e) => setConfig({ ...config, serviceId: e.target.value })}
-          placeholder="kmReviewWebserviceService"
+          placeholder="kmReviewRestService"
           className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
         />
         <p className="text-xs text-muted-foreground mt-1">
-          流程审批服务: kmReviewWebserviceService
+          REST服务标识: kmReviewRestService
         </p>
       </div>
 
