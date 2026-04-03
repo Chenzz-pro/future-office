@@ -48,6 +48,21 @@ export interface TodoCountResult {
   message: string;      // 返回信息或错误信息
 }
 
+// 待办列表解析结果
+export interface TodoListData {
+  count: number;        // 待办总数
+  pageCount: number;    // 页数
+  pageno: number;       // 当前页
+  docs: Array<{
+    id: string;
+    subject: string;
+    type: number;
+    createTime: string;
+    link: string;
+    moduleName: string;
+  }>;
+}
+
 // 待办类型
 export type TodoType = -1 | 0 | 1 | 2 | 3 | 13;
 // -1: 所有已办
@@ -61,13 +76,13 @@ export type TodoType = -1 | 0 | 1 | 2 | 3 | 13;
 export const EKP_REST_PATHS = {
   // 待办通知服务
   notify: {
-    getTodo: '/ekp/api/sys-notify/sysNotifyTodoRestService/getTodo',
-    getTodoList: '/ekp/api/sys-notify/sysNotifyTodoRestService/getTodoList',
+    getTodo: '/api/sys-notify/sysNotifyTodoRestService/getTodo',
+    getTodoList: '/api/sys-notify/sysNotifyTodoRestService/getTodoList',
   },
   // 流程管理服务
   review: {
-    addReview: '/ekp/api/km-review/kmReviewRestService/addReview',
-    approve: '/ekp/api/km-review/kmReviewRestService/approveProcess',
+    addReview: '/api/km-review/kmReviewRestService/addReview',
+    approve: '/api/km-review/kmReviewRestService/approveProcess',
   },
 };
 
@@ -213,21 +228,35 @@ export class EKPRestClient {
         return { success: false, data: null, msg: '服务不存在：请检查访问路径是否正确' };
       }
 
+      // 415 不支持的媒体类型
+      if (response.status === 415) {
+        return { success: false, data: null, msg: '请求格式错误：服务器不支持当前的 Content-Type' };
+      }
+
       // 成功响应
-      if (response.result) {
-        if (response.result.returnState === 2) {
+      if (response.result && response.result.returnState === 2) {
+        // 解析 message 中的 JSON 数据
+        try {
+          const todoData: TodoListData = JSON.parse(response.result.message);
+          return {
+            success: true,
+            data: String(todoData.count),
+            msg: `获取待办数量成功，共 ${todoData.count} 条待办`,
+          };
+        } catch {
+          // message 不是 JSON，直接返回
           return {
             success: true,
             data: response.result.message,
             msg: '获取待办数量成功',
           };
-        } else if (response.result.returnState === 1) {
-          return {
-            success: false,
-            data: null,
-            msg: `获取失败：${response.result.message}`,
-          };
         }
+      } else if (response.result && response.result.returnState === 1) {
+        return {
+          success: false,
+          data: null,
+          msg: `获取失败：${response.result.message}`,
+        };
       }
 
       // 尝试解析原始响应
@@ -320,11 +349,21 @@ export class EKPRestClient {
       // 成功响应
       if (response.result) {
         if (response.result.returnState === 2) {
-          return {
-            success: true,
-            data: response.result.message,
-            msg: `连接成功！待办数量：${response.result.message}`,
-          };
+          // 解析 message 中的 JSON 数据
+          try {
+            const todoData: TodoListData = JSON.parse(response.result.message);
+            return {
+              success: true,
+              data: String(todoData.count),
+              msg: `连接成功！待办数量：${todoData.count}`,
+            };
+          } catch {
+            return {
+              success: true,
+              data: response.result.message,
+              msg: `连接成功！返回：${response.result.message}`,
+            };
+          }
         } else if (response.result.returnState === 1) {
           return {
             success: false,

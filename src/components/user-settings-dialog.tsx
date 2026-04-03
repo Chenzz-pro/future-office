@@ -646,7 +646,7 @@ function EKPOConfigPanel() {
           <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
             <p><strong>蓝凌EKP 使用 REST Service 接口</strong>，支持 Basic Auth 认证。</p>
             <p>系统将自动使用以下接口路径进行连接测试和待办查询：</p>
-            <p className="font-mono text-[10px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">/ekp/api/sys-notify/sysNotifyTodoRestService/getTodo</p>
+            <p className="font-mono text-[10px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">/api/sys-notify/sysNotifyTodoRestService/getTodo</p>
             <p>配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
           </div>
         </div>
