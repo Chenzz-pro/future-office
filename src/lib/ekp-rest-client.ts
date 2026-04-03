@@ -147,43 +147,80 @@ export class EKPRestClient {
     const endpoint = `${this.config.baseUrl}${this.config.apiPath}`;
 
     try {
+      // 使用 POST 方法测试连接（REST 服务通常需要 POST）
       const response = await fetch(endpoint, {
-        method: 'GET',
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': this.getBasicAuthHeader(),
         },
+        body: JSON.stringify({}),
       });
 
-      // 401 表示服务存在但需要认证
+      // 解析响应内容
+      let resultText = '';
+      try {
+        resultText = await response.text();
+      } catch {
+        // 忽略解析错误
+      }
+
+      // 401 表示认证失败
       if (response.status === 401) {
-        // 尝试用 Basic Auth 认证
-        const authResponse = await fetch(endpoint, {
-          method: 'GET',
-          headers: {
-            'Authorization': this.getBasicAuthHeader(),
-            'Content-Type': 'application/json',
-          },
-        });
-
-        const result = await authResponse.json();
-        
-        if (result.code === 'error.httpStatus.401') {
-          return {
-            success: false,
-            data: null,
-            msg: '认证失败：用户名或密码错误',
-          };
-        }
-
-        // 认证成功
         return {
-          success: true,
-          data: '连接成功',
-          msg: 'Basic Auth 认证通过，服务可用',
+          success: false,
+          data: null,
+          msg: '认证失败：用户名或密码错误',
         };
       }
 
-      // 200 或其他状态表示服务可访问
+      // 403 表示权限不足或服务不可用
+      if (response.status === 403) {
+        return {
+          success: false,
+          data: null,
+          msg: '权限不足：请检查用户是否有访问该服务的权限',
+        };
+      }
+
+      // 404 表示服务路径不存在
+      if (response.status === 404) {
+        return {
+          success: false,
+          data: null,
+          msg: '服务不存在：请检查访问路径是否正确',
+        };
+      }
+
+      // 500 是服务端错误，但可能只是因为请求参数为空
+      // 如果返回了 JSON 且包含错误码，说明服务是可访问的
+      if (response.status === 500) {
+        // 尝试解析错误信息
+        try {
+          const errorResult = JSON.parse(resultText);
+          // 如果是参数错误，说明服务存在且认证通过
+          if (errorResult.code?.includes('param') || errorResult.msg?.includes('参数')) {
+            return {
+              success: true,
+              data: '连接成功',
+              msg: '服务可访问（认证通过），请配置表单模板ID后使用',
+            };
+          }
+          return {
+            success: false,
+            data: null,
+            msg: `服务端错误：${errorResult.msg || errorResult.message || resultText.substring(0, 100)}`,
+          };
+        } catch {
+          return {
+            success: false,
+            data: null,
+            msg: '服务端错误（HTTP 500），请检查EKP服务状态',
+          };
+        }
+      }
+
+      // 200 或其他成功状态
       if (response.ok) {
         return {
           success: true,
@@ -195,10 +232,27 @@ export class EKPRestClient {
       return {
         success: false,
         data: null,
-        msg: `连接失败：HTTP ${response.status}`,
+        msg: `连接失败：HTTP ${response.status} - ${resultText.substring(0, 100)}`,
       };
 
     } catch (err) {
+      // 网络错误
+      if (err instanceof Error) {
+        if (err.message.includes('fetch failed') || err.message.includes('ENOTFOUND')) {
+          return {
+            success: false,
+            data: null,
+            msg: '网络错误：无法连接到EKP服务器，请检查地址是否正确',
+          };
+        }
+        if (err.message.includes('certificate') || err.message.includes('SSL')) {
+          return {
+            success: false,
+            data: null,
+            msg: 'SSL证书错误：请检查服务器证书配置',
+          };
+        }
+      }
       return {
         success: false,
         data: null,
