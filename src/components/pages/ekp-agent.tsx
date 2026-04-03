@@ -515,8 +515,8 @@ export default function EKPAgent() {
             <div>
               <h1 className="text-lg font-semibold">蓝凌EKP 智能助手</h1>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span>{isConnected ? '已连接' : '未连接'}</span>
+                <div className={`w-2 h-2 rounded-full ${!!config.baseUrl ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span>{!!config.baseUrl ? '已连接' : '未连接'}</span>
                 <span>|</span>
                 <span>{config.baseUrl}</span>
                 <span>|</span>
