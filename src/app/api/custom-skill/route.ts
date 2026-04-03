@@ -34,8 +34,11 @@ export async function POST(request: NextRequest) {
         }
 
         // 验证必填配置
-        if (!skill.apiConfig.baseUrl) {
+        if (!skill.apiConfig?.baseUrl) {
           return jsonResponse(false, '请填写服务地址');
+        }
+        if (!skill.authConfig) {
+          return jsonResponse(false, '请配置认证信息');
         }
         if (skill.authConfig.type === 'basic') {
           if (!skill.authConfig.username || !skill.authConfig.password) {
@@ -51,6 +54,10 @@ export async function POST(request: NextRequest) {
         // 执行技能
         if (!skill) {
           return jsonResponse(false, '缺少技能配置');
+        }
+
+        if (!skill.authConfig) {
+          return jsonResponse(false, '技能配置不完整：缺少认证配置');
         }
 
         if (!skill.enabled) {

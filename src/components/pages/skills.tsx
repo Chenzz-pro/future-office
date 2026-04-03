@@ -203,10 +203,17 @@ export function SkillsPage() {
         id: skill.id || `skill_${Date.now()}`,
         createdAt: now,
         updatedAt: now,
+        // 确保必填字段存在
+        enabled: skill.enabled ?? true,
+        apiConfig: skill.apiConfig,
+        authConfig: skill.authConfig,
+        requestParams: skill.requestParams || [],
+        responseParsing: skill.responseParsing,
       };
       updatedSkills = [newSkill, ...customSkills];
     }
     
+    console.log('[Skills] 保存技能:', updatedSkills.length, '个');
     saveToLocalStorage(updatedSkills);
   };
 

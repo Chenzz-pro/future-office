@@ -116,9 +116,12 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(CUSTOM_SKILLS_STORAGE_KEY);
+      console.log('[NewChat] 加载自定义技能:', stored ? '有数据' : '无数据');
       if (stored) {
         const skills = JSON.parse(stored) as CustomSkill[];
-        setCustomSkills(skills.filter(s => s.enabled)); // 只加载已启用的技能
+        const enabledSkills = skills.filter(s => s.enabled);
+        console.log('[NewChat] 已启用的技能数量:', enabledSkills.length, enabledSkills.map(s => s.name));
+        setCustomSkills(enabledSkills);
       }
     } catch (err) {
       console.error('加载自定义技能失败:', err);
