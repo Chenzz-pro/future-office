@@ -188,30 +188,31 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
           <div>
             <h2 className="text-lg font-semibold text-foreground">设置</h2>
             <p className="text-sm text-muted-foreground">管理您的 AI 服务 API 密钥</p>
-            {/* 蓝凌EKP配置入口 */}
-          <div className="mt-4 pt-4 border-t border-border">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium">蓝凌EKP 企业OA</h4>
-                  <p className="text-xs text-muted-foreground">请假、报销等审批申请</p>
-                </div>
-              </div>
-              <EKPConfigButton />
-            </div>
           </div>
-        </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-accent rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* 蓝凌EKP配置入口 */}
+        <div className="px-4 pt-4 pb-2 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium">蓝凌EKP 企业OA</h4>
+                <p className="text-xs text-muted-foreground">请假、报销等审批申请</p>
+              </div>
+            </div>
+            <EKPConfigButton />
+          </div>
         </div>
 
         {/* 内容 */}
@@ -503,18 +504,33 @@ function EKPConfigButton() {
   const [showDialog, setShowDialog] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
+  // 加载保存的配置
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedConfig = localStorage.getItem('ekp_config');
-      if (savedConfig) {
-        try {
-          const parsed = JSON.parse(savedConfig);
-          setIsConnected(parsed.enabled && parsed.baseUrl && parsed.username);
-        } catch {
-          setIsConnected(false);
+    const loadConfig = () => {
+      if (typeof window !== 'undefined') {
+        const savedConfig = localStorage.getItem('ekp_config');
+        if (savedConfig) {
+          try {
+            const parsed = JSON.parse(savedConfig);
+            setIsConnected(parsed.enabled && parsed.baseUrl && parsed.username);
+          } catch {
+            setIsConnected(false);
+          }
         }
       }
-    }
+    };
+
+    loadConfig();
+
+    // 监听来自其他组件的 EKP 设置打开事件
+    const handleOpenEkpSettings = () => {
+      setShowDialog(true);
+    };
+
+    window.addEventListener('open-ekp-settings', handleOpenEkpSettings);
+    return () => {
+      window.removeEventListener('open-ekp-settings', handleOpenEkpSettings);
+    };
   }, []);
 
   return (

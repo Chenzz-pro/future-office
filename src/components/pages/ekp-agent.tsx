@@ -55,296 +55,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-
-// ============================================
-// 配置弹窗组件
-// ============================================
-
-interface ConfigFormData {
-  baseUrl: string;
-  username: string;
-  password: string;
-  apiPrefix: string;
-  leaveFormId: string;
-  expenseFormId: string;
-  enabled: boolean;
-}
-
-function EKPConfigDialog({
-  open,
-  onOpenChange,
-  config,
-  onSave,
-  onTest,
-  isLoading,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  config: EKPConfig;
-  onSave: (config: EKPConfig) => void;
-  onTest: () => Promise<boolean>;
-  isLoading: boolean;
-}) {
-  const [formData, setFormData] = useState<ConfigFormData>({
-    baseUrl: '',
-    username: '',
-    password: '',
-    apiPrefix: '/km/review/',
-    leaveFormId: '',
-    expenseFormId: '',
-    enabled: false,
-  });
-  const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
-  const [selectedService, setSelectedService] = useState('review');
-
-  useEffect(() => {
-    setFormData({
-      baseUrl: config.baseUrl,
-      username: config.username,
-      password: config.password,
-      apiPrefix: config.apiPrefix,
-      leaveFormId: config.leaveFormId,
-      expenseFormId: config.expenseFormId,
-      enabled: config.enabled,
-    });
-    setTestResult(null);
-  }, [config, open]);
-
-  const handleTest = async () => {
-    const fullConfig: EKPConfig = {
-      ...formData,
-    };
-    onSave(fullConfig);
-    const success = await onTest();
-    setTestResult(success ? 'success' : 'error');
-  };
-
-  const handleSave = () => {
-    const fullConfig: EKPConfig = {
-      ...formData,
-    };
-    onSave(fullConfig);
-    onOpenChange(false);
-    toast.success('配置已保存');
-  };
-
-  const handleServiceSelect = (serviceKey: string) => {
-    setSelectedService(serviceKey);
-    const service = EKP_REST_SERVICES[serviceKey as keyof typeof EKP_REST_SERVICES];
-    if (service) {
-      setFormData({ ...formData, apiPrefix: service.path });
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            蓝凌EKP 系统配置
-          </DialogTitle>
-          <DialogDescription>
-            配置与蓝凌EKP系统的连接信息，请联系EKP管理员获取相关凭证
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          {/* 连接状态 */}
-          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${formData.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
-              <span className="text-sm font-medium">
-                {formData.enabled ? '已启用' : '未启用'}
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTest}
-              disabled={isLoading || !formData.baseUrl || !formData.username}
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              测试连接
-            </Button>
-          </div>
-
-          {testResult && (
-            <div className={`flex items-center gap-2 p-3 rounded-lg ${
-              testResult === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}>
-              {testResult === 'success' ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
-              <span className="text-sm">
-                {testResult === 'success' ? '连接成功！' : '连接失败，请检查配置'}
-              </span>
-            </div>
-          )}
-
-          {/* 系统地址 */}
-          <div className="space-y-2">
-            <Label htmlFor="baseUrl">EKP系统地址 *</Label>
-            <Input
-              id="baseUrl"
-              placeholder="https://oa.fjhxrl.com"
-              value={formData.baseUrl}
-              onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              蓝凌EKP系统的访问地址，通常由IT管理员提供
-            </p>
-          </div>
-
-          {/* 认证信息 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">用户名 *</Label>
-              <Input
-                id="username"
-                placeholder="EKP系统账号"
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">密码 *</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="EKP系统密码"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              />
-            </div>
-          </div>
-
-          {/* REST服务选择 */}
-          <div className="space-y-2">
-            <Label>选择REST服务</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(EKP_REST_SERVICES).map(([key, service]) => {
-                const icons: Record<string, React.ElementType> = {
-                  review: FileText,
-                  calendar: Calendar,
-                  hr: Users,
-                  meeting: Users,
-                  kms: BookOpen,
-                  webservice: Database,
-                };
-                const Icon = icons[key] || Database;
-                
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleServiceSelect(key)}
-                    className={`p-3 rounded-lg border text-left transition-all ${
-                      selectedService === key
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon className="h-4 w-4" />
-                      <span className="font-medium text-sm">{service.name}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {service.path}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* API路径前缀 */}
-          <div className="space-y-2">
-            <Label htmlFor="apiPrefix">REST服务路径</Label>
-            <Input
-              id="apiPrefix"
-              placeholder="/km/review/"
-              value={formData.apiPrefix}
-              onChange={(e) => setFormData({ ...formData, apiPrefix: e.target.value })}
-            />
-            <p className="text-xs text-muted-foreground">
-              蓝凌EKP REST服务的访问路径前缀，根据选择的REST服务自动填充
-            </p>
-          </div>
-
-          {/* 表单模板ID */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="leaveFormId">请假表单模板ID</Label>
-              <Input
-                id="leaveFormId"
-                placeholder="LT_LEAVE_PERSONAL"
-                value={formData.leaveFormId}
-                onChange={(e) => setFormData({ ...formData, leaveFormId: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="expenseFormId">报销表单模板ID</Label>
-              <Input
-                id="expenseFormId"
-                placeholder="LT_EXPENSE"
-                value={formData.expenseFormId}
-                onChange={(e) => setFormData({ ...formData, expenseFormId: e.target.value })}
-              />
-            </div>
-          </div>
-
-          {/* 启用开关 */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>启用EKP对接</Label>
-              <p className="text-xs text-muted-foreground">
-                开启后可在本系统直接提交EKP表单
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              checked={formData.enabled}
-              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-              className="w-5 h-5 rounded border-gray-300"
-            />
-          </div>
-
-          {/* 帮助信息 */}
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <Link2 className="h-4 w-4 text-blue-600 mt-0.5" />
-              <div className="text-xs text-blue-800">
-                <p className="font-medium mb-1">配置说明：</p>
-                <ul className="space-y-1 text-blue-700">
-                  <li>1. 系统地址：如 <code>https://oa.company.com</code></li>
-                  <li>2. 用户名密码：EKP系统账号（Basic Auth）</li>
-                  <li>3. REST服务路径：在EKP「集成管理」中查看已启动的服务</li>
-                  <li>4. 表单模板ID：在表单设计器中查看表单标识</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button onClick={handleSave}>
-            保存配置
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { useRouter } from 'next/navigation';
 
 // ============================================
 // 请假申请表单
@@ -714,8 +425,8 @@ export default function EKPAgent() {
     createLeaveForm,
     createExpenseForm,
   } = useEKPIntegration();
+  const router = useRouter();
 
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('quick');
   const [submitResult, setSubmitResult] = useState<{
     type: 'success' | 'error';
@@ -804,9 +515,9 @@ export default function EKPAgent() {
             连接企业EKP系统，通过自然语言快速提交请假、报销等申请，自动发起审批流程
           </p>
 
-          <Button onClick={() => setConfigDialogOpen(true)} className="gap-2">
+          <Button onClick={() => window.dispatchEvent(new CustomEvent('open-ekp-settings'))} className="gap-2">
             <Settings className="h-4 w-4" />
-            配置EKP连接
+            去设置中配置
           </Button>
 
           <div className="mt-8 text-left bg-muted/50 rounded-lg p-4">
@@ -815,22 +526,13 @@ export default function EKPAgent() {
               配置说明
             </h3>
             <ul className="text-sm text-muted-foreground space-y-2">
-              <li>1. 联系EKP管理员获取 API 地址和凭证</li>
-              <li>2. 选择已启动的REST服务（流程启动Rest）</li>
-              <li>3. 填写请假/报销表单模板ID</li>
+              <li>1. 点击上方按钮打开「设置」</li>
+              <li>2. 在设置中找到「蓝凌EKP 企业OA」配置</li>
+              <li>3. 输入EKP系统地址、用户名、密码</li>
               <li>4. 点击「测试连接」验证配置</li>
             </ul>
           </div>
         </div>
-
-        <EKPConfigDialog
-          open={configDialogOpen}
-          onOpenChange={setConfigDialogOpen}
-          config={config}
-          onSave={saveConfig}
-          onTest={testConnection}
-          isLoading={isLoading}
-        />
       </div>
     );
   }
@@ -861,11 +563,11 @@ export default function EKPAgent() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setConfigDialogOpen(true)}
+              onClick={() => window.dispatchEvent(new CustomEvent('open-ekp-settings'))}
               className="gap-2"
             >
               <Settings className="h-4 w-4" />
-              配置
+              设置
             </Button>
           </div>
         </div>
@@ -1050,16 +752,6 @@ export default function EKPAgent() {
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* 配置弹窗 */}
-      <EKPConfigDialog
-        open={configDialogOpen}
-        onOpenChange={setConfigDialogOpen}
-        config={config}
-        onSave={saveConfig}
-        onTest={testConnection}
-        isLoading={isLoading}
-      />
     </div>
   );
 }
