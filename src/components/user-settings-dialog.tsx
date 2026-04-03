@@ -578,20 +578,15 @@ function EKPOConfigPanel() {
 
   // 测试连接（通过后端代理，使用 SOAP + Basic Auth）
   const testConnection = async () => {
-    if (!config.baseUrl) {
-      setTestError('请输入 EKP 系统地址');
-      setTestResult('failed');
-      return;
-    }
+    // 收集所有缺失的必填字段
+    const missingFields: string[] = [];
+    if (!config.baseUrl) missingFields.push('EKP 系统地址');
+    if (!config.apiPath) missingFields.push('REST 访问路径');
+    if (!config.username) missingFields.push('用户名');
+    if (!config.password) missingFields.push('密码');
 
-    if (!config.username || !config.password) {
-      setTestError('请输入用户名和密码');
-      setTestResult('failed');
-      return;
-    }
-
-    if (!config.apiPath) {
-      setTestError('请输入访问路径');
+    if (missingFields.length > 0) {
+      setTestError(`请填写必填项：${missingFields.join('、')}`);
       setTestResult('failed');
       return;
     }
