@@ -10,7 +10,14 @@ import {
   EyeOff, 
   Check,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Settings,
+  Loader2,
+  Plug,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Link
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -181,7 +188,24 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
           <div>
             <h2 className="text-lg font-semibold text-foreground">设置</h2>
             <p className="text-sm text-muted-foreground">管理您的 AI 服务 API 密钥</p>
+            {/* 蓝凌EKP配置入口 */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium">蓝凌EKP 企业OA</h4>
+                  <p className="text-xs text-muted-foreground">请假、报销等审批申请</p>
+                </div>
+              </div>
+              <EKPConfigButton />
+            </div>
           </div>
+        </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-accent rounded-lg transition-colors"
@@ -465,6 +489,444 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
           >
             完成
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// EKP 配置按钮组件
+// ============================================
+
+function EKPConfigButton() {
+  const [showDialog, setShowDialog] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedConfig = localStorage.getItem('ekp_config');
+      if (savedConfig) {
+        try {
+          const parsed = JSON.parse(savedConfig);
+          setIsConnected(parsed.enabled && parsed.baseUrl && parsed.username);
+        } catch {
+          setIsConnected(false);
+        }
+      }
+    }
+  }, []);
+
+  return (
+    <>
+      <button
+        onClick={() => setShowDialog(true)}
+        className={cn(
+          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+          isConnected
+            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+            : 'bg-accent text-muted-foreground hover:text-foreground'
+        )}
+      >
+        {isConnected ? (
+          <>
+            <Check className="w-3 h-3" />
+            已配置
+          </>
+        ) : (
+          <>
+            <Plug className="w-3 h-3" />
+            未连接
+          </>
+        )}
+        <Settings className="w-3 h-3 ml-1" />
+      </button>
+
+      <EKPConfigDialog open={showDialog} onClose={() => setShowDialog(false)} />
+    </>
+  );
+}
+
+// ============================================
+// 蓝凌EKP 配置对话框组件
+// ============================================
+
+interface EKPConfig {
+  baseUrl: string;
+  username: string;
+  password: string;
+  apiPrefix: string;
+  leaveFormId: string;
+  expenseFormId: string;
+  enabled: boolean;
+}
+
+// REST服务路径选项
+const EKP_REST_OPTIONS = [
+  { label: '流程管理 (/api/km-review/)', value: '/api/km-review/', desc: '请假、报销等审批流程' },
+  { label: '日程管理 (/api/km-calendar/)', value: '/api/km-calendar/', desc: '日程创建和查询' },
+  { label: '知识库 (/api/kms-doc/)', value: '/api/kms-doc/', desc: '文档和知识库管理' },
+  { label: '通用WebService (/sys/webservice/rest)', value: '/sys/webservice/rest', desc: '蓝凌标准REST服务' },
+];
+
+interface EKPConfigDialogProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+function EKPConfigDialog({ open, onClose }: EKPConfigDialogProps) {
+  const [config, setConfig] = useState<EKPConfig>({
+    baseUrl: '',
+    username: '',
+    password: '',
+    apiPrefix: '/api/km-review/',
+    leaveFormId: '',
+    expenseFormId: '',
+    enabled: false,
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<'success' | 'failed' | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 加载保存的配置
+  useEffect(() => {
+    if (open && typeof window !== 'undefined') {
+      const savedConfig = localStorage.getItem('ekp_config');
+      if (savedConfig) {
+        try {
+          setConfig(JSON.parse(savedConfig));
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [open]);
+
+  // 测试连接
+  const testConnection = async () => {
+    if (!config.baseUrl) {
+      setTestError('请输入 EKP 系统地址');
+      setTestResult('failed');
+      return;
+    }
+
+    setIsTesting(true);
+    setTestResult(null);
+    setTestError(null);
+
+    try {
+      // 构建Basic Auth头
+      const auth = btoa(`${config.username}:${config.password}`);
+      const headers = {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+      };
+
+      // 尝试多个可能的测试端点
+      const testEndpoints = [
+        `${config.baseUrl}/sys/user/getUserInfo`,
+        `${config.baseUrl}${config.apiPrefix}`,
+        `${config.baseUrl}/sys/webservice/rest`,
+      ];
+
+      let connected = false;
+
+      for (const endpoint of testEndpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            headers,
+          });
+          
+          // 只要不是网络错误，就认为EKP服务可达
+          if (response.ok || response.status === 401 || response.status === 403) {
+            connected = true;
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      if (connected) {
+        setTestResult('success');
+        // 如果认证失败，给出提示
+        setTimeout(() => {
+          setTestError('EKP 服务可达，但认证可能失败（401）。请确认用户名密码正确，或联系管理员开启 Basic Auth。');
+        }, 500);
+      } else {
+        setTestResult('failed');
+        setTestError('无法连接到 EKP 系统，请检查地址是否正确，或确认 EKP 服务是否正常运行。');
+      }
+    } catch (err) {
+      setTestResult('failed');
+      setTestError(err instanceof Error ? err.message : '连接测试失败');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  // 保存配置
+  const saveConfig = () => {
+    setIsSaving(true);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ekp_config', JSON.stringify(config));
+      }
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      {/* 背景遮罩 */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* 对话框 */}
+      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        {/* 头部 */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">蓝凌EKP 配置</h2>
+              <p className="text-xs text-muted-foreground">连接企业OA系统</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* 内容 */}
+        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* 提示 */}
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+              <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                <p>蓝凌EKP使用 Basic Auth 认证方式，请确保系统已开启此认证方式。</p>
+                <p>配置信息仅存储在本地浏览器中，不会上传到服务器。</p>
+              </div>
+            </div>
+          </div>
+
+          {/* EKP 地址 */}
+          <div>
+            <label className="block text-sm font-medium mb-1.5">
+              EKP 系统地址
+              <span className="text-destructive ml-1">*</span>
+            </label>
+            <input
+              type="url"
+              value={config.baseUrl}
+              onChange={(e) => setConfig({ ...config, baseUrl: e.target.value.trim() })}
+              placeholder="https://oa.fjhxrl.com"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <p className="text-xs text-muted-foreground mt-1">填写蓝凌EKP系统的访问地址</p>
+          </div>
+
+          {/* REST服务路径 */}
+          <div>
+            <label className="block text-sm font-medium mb-1.5">
+              REST 服务路径
+            </label>
+            <select
+              value={config.apiPrefix}
+              onChange={(e) => setConfig({ ...config, apiPrefix: e.target.value })}
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              {EKP_REST_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {EKP_REST_OPTIONS.find(o => o.value === config.apiPrefix)?.desc}
+            </p>
+          </div>
+
+          {/* 用户名 */}
+          <div>
+            <label className="block text-sm font-medium mb-1.5">
+              用户名
+              <span className="text-destructive ml-1">*</span>
+            </label>
+            <input
+              type="text"
+              value={config.username}
+              onChange={(e) => setConfig({ ...config, username: e.target.value })}
+              placeholder="请输入EKP登录用户名"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+
+          {/* 密码 */}
+          <div>
+            <label className="block text-sm font-medium mb-1.5">
+              密码
+              <span className="text-destructive ml-1">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={config.password}
+                onChange={(e) => setConfig({ ...config, password: e.target.value })}
+                placeholder="请输入EKP登录密码"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-accent rounded"
+              >
+                {showPassword ? (
+                  <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <Link className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* 表单ID（可选） */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">
+                请假表单ID
+                <span className="text-muted-foreground ml-1">(可选)</span>
+              </label>
+              <input
+                type="text"
+                value={config.leaveFormId}
+                onChange={(e) => setConfig({ ...config, leaveFormId: e.target.value })}
+                placeholder="如: LT_LEAVE"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5">
+                报销表单ID
+                <span className="text-muted-foreground ml-1">(可选)</span>
+              </label>
+              <input
+                type="text"
+                value={config.expenseFormId}
+                onChange={(e) => setConfig({ ...config, expenseFormId: e.target.value })}
+                placeholder="如: EXPENSE"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+          </div>
+
+          {/* 启用开关 */}
+          <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                'w-8 h-8 rounded-lg flex items-center justify-center',
+                config.enabled ? 'bg-green-100 text-green-600' : 'bg-muted text-muted-foreground'
+              )}>
+                {config.enabled ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+              </div>
+              <div>
+                <p className="text-sm font-medium">启用 EKP 集成</p>
+                <p className="text-xs text-muted-foreground">开启后在对话中可提交审批申请</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setConfig({ ...config, enabled: !config.enabled })}
+              className={cn(
+                'relative w-11 h-6 rounded-full transition-colors',
+                config.enabled ? 'bg-primary' : 'bg-muted'
+              )}
+            >
+              <span className={cn(
+                'absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform',
+                config.enabled && 'translate-x-5'
+              )} />
+            </button>
+          </div>
+
+          {/* 测试结果 */}
+          {testResult && (
+            <div className={cn(
+              'p-3 rounded-lg text-sm',
+              testResult === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            )}>
+              <div className="flex items-center gap-2 mb-1">
+                {testResult === 'success' ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <AlertCircle className="w-4 h-4" />
+                )}
+                <span className="font-medium">
+                  {testResult === 'success' ? '连接成功' : '连接失败'}
+                </span>
+              </div>
+              {testError && (
+                <p className="text-xs opacity-80">{testError}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 底部 */}
+        <div className="flex items-center justify-between p-4 border-t border-border bg-muted/30">
+          <button
+            onClick={testConnection}
+            disabled={isTesting || !config.baseUrl}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+          >
+            {isTesting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                测试中...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                测试连接
+              </>
+            )}
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={saveConfig}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4" />
+              )}
+              保存
+            </button>
+          </div>
         </div>
       </div>
     </div>
