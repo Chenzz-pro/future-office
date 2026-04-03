@@ -23,7 +23,6 @@ import {
   Building2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { EKPAgentPage } from './ekp-agent-page';
 
 interface Agent {
   id: string;
@@ -78,7 +77,7 @@ export function AgentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [ekpActive, setEkpActive] = useState(false); // 控制是否显示EKP智能体页面
+  const [activeTab, setActiveTab] = useState<'llm' | 'oa'>('llm'); // 页签状态
   const [createForm, setCreateForm] = useState({
     name: '',
     description: '',
@@ -159,74 +158,85 @@ export function AgentsPage() {
 
         {/* 智能体列表 */}
         <div className="flex-1 overflow-y-auto p-4">
-          {/* 蓝凌EKP智能体 - 特殊卡片 */}
-          <div
-            className="mb-4 p-4 border-2 border-dashed border-blue-300 rounded-xl bg-blue-50/50 hover:bg-blue-50 transition-colors cursor-pointer group"
-            onClick={() => setEkpActive(true)}
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                <Building2 className="w-7 h-7 text-white" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-foreground">蓝凌EKP 智能助手</h3>
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">企业集成</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  连接企业OA系统，自然语言提交请假、报销等申请，自动发起审批流程
-                </p>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Sparkles className="w-3 h-3" /> 智能表单创建
-                  </span>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Zap className="w-3 h-3" /> 审批流自动触发
-                  </span>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <MessageSquare className="w-3 h-3" /> 状态实时同步
-                  </span>
-                </div>
-              </div>
-              <ChevronRight className="w-6 h-6 text-muted-foreground group-hover:text-blue-600 transition-colors" />
-            </div>
+          {/* 页签切换 */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setActiveTab('llm')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                activeTab === 'llm'
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              <Sparkles className="w-4 h-4" />
+              大模型集成
+            </button>
+            <button
+              onClick={() => setActiveTab('oa')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                activeTab === 'oa'
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              <Building2 className="w-4 h-4" />
+              OA系统集成
+            </button>
           </div>
 
-          {/* EKP智能体页面 */}
-          {ekpActive && <EKPAgentPage onBack={() => setEkpActive(false)} />}
+          {/* 大模型集成内容 */}
+          {activeTab === 'llm' && (
+            filteredAgents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <Bot className="w-16 h-16 text-muted-foreground/50 mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">暂无智能体</h3>
+                <p className="text-sm text-muted-foreground mb-4">创建您的第一个智能体，开启 AI 之旅</p>
+                <button
+                  onClick={handleCreateAgent}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  创建智能体
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredAgents.map((agent) => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    onEdit={() => {
+                      setSelectedAgent(agent);
+                      setViewMode('edit');
+                    }}
+                    onDelete={() => {
+                      setAgents(agents.filter(a => a.id !== agent.id));
+                    }}
+                    onChat={() => {
+                      setSelectedAgent(agent);
+                      setViewMode('detail');
+                    }}
+                  />
+                ))}
+              </div>
+            )
+          )}
 
-          {filteredAgents.length === 0 ? (
+          {/* OA系统集成内容 */}
+          {activeTab === 'oa' && (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <Bot className="w-16 h-16 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">暂无智能体</h3>
-              <p className="text-sm text-muted-foreground mb-4">创建您的第一个智能体，开启 AI 之旅</p>
+              <Building2 className="w-16 h-16 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">OA系统集成</h3>
+              <p className="text-sm text-muted-foreground mb-4">在设置中配置您的企业OA系统</p>
               <button
-                onClick={handleCreateAgent}
+                onClick={() => setViewMode('list')}
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
               >
-                <Plus className="w-4 h-4" />
-                创建智能体
+                <Settings className="w-4 h-4" />
+                前往设置
               </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onEdit={() => {
-                    setSelectedAgent(agent);
-                    setViewMode('edit');
-                  }}
-                  onDelete={() => {
-                    setAgents(agents.filter(a => a.id !== agent.id));
-                  }}
-                  onChat={() => {
-                    setSelectedAgent(agent);
-                    setViewMode('detail');
-                  }}
-                />
-              ))}
             </div>
           )}
         </div>
