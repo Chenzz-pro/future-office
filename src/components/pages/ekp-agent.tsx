@@ -9,19 +9,13 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Settings,
-  Link2,
-  RefreshCw,
   Clock,
   User,
   ChevronRight,
   MessageSquare,
   Zap,
-  Database,
-  BookOpen,
-  Users,
 } from 'lucide-react';
-import { useEKPIntegration, LEAVE_TYPE_MAP, EXPENSE_TYPE_MAP, EKP_REST_SERVICES, EKPConfig } from '@/hooks/use-ekp-integration';
+import { useEKPIntegration, LEAVE_TYPE_MAP, EXPENSE_TYPE_MAP } from '@/hooks/use-ekp-integration';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,14 +33,6 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -55,7 +41,6 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
 
 // ============================================
 // 请假申请表单
@@ -417,15 +402,10 @@ function QuickActionCard({
 export default function EKPAgent() {
   const {
     config,
-    saveConfig,
-    testConnection,
-    isLoading,
-    isConnected,
-    error,
     createLeaveForm,
     createExpenseForm,
+    error,
   } = useEKPIntegration();
-  const router = useRouter();
 
   const [activeTab, setActiveTab] = useState('quick');
   const [submitResult, setSubmitResult] = useState<{
@@ -502,7 +482,7 @@ export default function EKPAgent() {
     }
   };
 
-  // 未配置状态
+  // 未配置状态 - 提示用户去设置中配置
   if (!config.enabled) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8">
@@ -514,24 +494,9 @@ export default function EKPAgent() {
           <p className="text-muted-foreground mb-6">
             连接企业EKP系统，通过自然语言快速提交请假、报销等申请，自动发起审批流程
           </p>
-
-          <Button onClick={() => window.dispatchEvent(new CustomEvent('open-ekp-settings'))} className="gap-2">
-            <Settings className="h-4 w-4" />
-            去设置中配置
-          </Button>
-
-          <div className="mt-8 text-left bg-muted/50 rounded-lg p-4">
-            <h3 className="font-medium mb-2 flex items-center gap-2">
-              <Link2 className="h-4 w-4" />
-              配置说明
-            </h3>
-            <ul className="text-sm text-muted-foreground space-y-2">
-              <li>1. 点击上方按钮打开「设置」</li>
-              <li>2. 在设置中找到「蓝凌EKP 企业OA」配置</li>
-              <li>3. 输入EKP系统地址、用户名、密码</li>
-              <li>4. 点击「测试连接」验证配置</li>
-            </ul>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            请先在侧边栏「设置」中配置蓝凌EKP连接
+          </p>
         </div>
       </div>
     );
@@ -558,17 +523,6 @@ export default function EKPAgent() {
                 <span>服务: {config.apiPrefix}</span>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.dispatchEvent(new CustomEvent('open-ekp-settings'))}
-              className="gap-2"
-            >
-              <Settings className="h-4 w-4" />
-              设置
-            </Button>
           </div>
         </div>
       </div>
