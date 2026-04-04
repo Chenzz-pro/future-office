@@ -98,3 +98,15 @@ Desktop.ini
 .turbo
 
 .coze-logs
+
+# Prettier
+.prettiercache
+
+# Secrets (important for collaboration)
+*.pem
+*.key
+secrets/
+.secrets/
+
+# Editor
+*.vscode/settings.json

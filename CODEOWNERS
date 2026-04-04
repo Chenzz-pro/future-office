@@ -1,0 +1,31 @@
+# CODEOWNERS - 定义代码审查责任人
+# 文档：https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# 默认所有者
+* @team-lead
+
+# 模块所有权
+/src/modules/chat/ @developer-a
+/src/modules/skills/ @developer-b
+/src/modules/ekp/ @developer-c
+/src/modules/shared/ @team-lead
+
+# API 路由
+/src/app/api/chat/ @developer-a
+/src/app/api/custom-skill/ @developer-b
+/src/app/api/ekp/ @developer-c
+
+# UI 组件库
+/src/components/ui/ @ui-team
+
+# 配置文件
+/package.json @team-lead
+/tsconfig.json @team-lead
+/.eslintrc.* @team-lead
+/.prettierrc @team-lead
+/.github/ @team-lead
+
+# 文档
+/README.md @team-lead
+/CONTRIBUTING.md @team-lead
+/AGENTS.md @team-lead
