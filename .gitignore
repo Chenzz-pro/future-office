@@ -1,61 +1,113 @@
-node_modules
-dist
-.DS_Store
-*.swp
-.git/*
-__pycache__/
-*.pyc
-.venv/*
-*.o
-*.a
-/vendor
-*.egg-info/
-/.env
-.env
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
 
-# JS/TS bundlers & build outputs
-.next
+# Production build
+dist/
+build/
+out/
+.next/
 .nuxt
 .turbo
 .vercel
 .parcel-cache
-.cache
-coverage
-storybook-static
+.rsbuild/
 
-# Package manager artifacts
-pnpm-lock.yaml
-package-lock.json
-yarn.lock
-.pnp*
-.npm
+# Testing
+coverage/
+*.lcov
+.nyc_output
 
-# Python tooling
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.tox/
-
-# Go tooling
-bin/
-*.test
-
-# Editor / IDE
-.vscode/
-.idea/
-*.iml
-
-# OS / misc
-Thumbs.db
-ehthumbs.db
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Logs
 output.log
 *.log
 *.log.*
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# 视频文件
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Cache
+.cache/
+.eslintcache
+.stylelintcache
+.npm
+.pnpm*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+node-compile-cache/
+__pycache__/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.tox/
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Editor directories and files
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+*.iml
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# OS files / misc
+vendor/
+*.o
+*.a
+*.egg-info/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Optional files
+*.tgz
+.gz
+.zip
+.tar
+.iso
+.dmg
+.rar
+
+# Video files
 *.mp4
 *.avi
 *.mov
@@ -71,20 +123,40 @@ logs/
 *.rmvb
 *.vob
 
-# 归档文件
-*.iso
-*.dmg
-*.rar
-*.zip
-*.gz
-
-# 文档类也默认加入
+# Document files
 *.pdf
-*.docx
-*.doc
-*.xlsx
-*.xls
-*.ppt
-*.pptx
-*.xlsx
-*.csv
+.docx
+.doc
+.xlsx
+.xls
+.ppt
+.pptx
+.csv
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+.coze-logs
+.vercel
+.turbo
+
+# Prettier
+.prettiercache
+
+# Secrets (important for collaboration)
+*.pem
+*.key
+secrets/
+.secrets/
+
+# Python
+*.pyc
+.venv/*
+
+# Go tooling
+bin/
+*.test
+
+# Storybook
+storybook-static
