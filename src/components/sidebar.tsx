@@ -1,18 +1,20 @@
 'use client';
 
-import { 
-  MessageSquarePlus, 
-  LayoutDashboard, 
-  Bot, 
-  Sparkles, 
+import {
+  MessageSquarePlus,
+  LayoutDashboard,
+  Bot,
+  Sparkles,
   History,
   Settings,
   User,
   ChevronRight,
-  Key
+  Key,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { UserSettingsDialog } from './user-settings-dialog';
 import { useChatHistory, ChatSession } from '@/hooks/use-chat-history';
 
@@ -43,6 +45,8 @@ const menuItems = [
 export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, onSelectSession }: SidebarProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const router = useRouter();
   const { sessions, getRecentSessions } = useChatHistory();
 
   const activeKey = apiKeys.find(k => k.isActive);
@@ -58,7 +62,23 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
         setApiKeys([]);
       }
     }
+
+    // 加载当前用户信息
+    const userStr = localStorage.getItem('currentUser');
+    if (userStr) {
+      try {
+        setCurrentUser(JSON.parse(userStr));
+      } catch {
+        setCurrentUser(null);
+      }
+    }
   }, []);
+
+  // 退出登录
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser');
+    router.push('/login');
+  };
 
   return (
     <>
@@ -145,7 +165,7 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
         {/* 底部用户区域 */}
         <div className="p-4 border-t border-sidebar-border">
           {/* API 状态指示 */}
-          <div 
+          <div
             onClick={() => setShowSettings(true)}
             className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-sidebar-accent/30 cursor-pointer hover:bg-sidebar-accent/50 transition-colors"
           >
@@ -155,15 +175,20 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* 用户信息 */}
+          <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center">
               <User className="w-4 h-4 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">陈振镇</p>
-              <p className="text-xs text-muted-foreground">在线</p>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {currentUser?.username || '用户'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {currentUser?.role === 'admin' ? '管理员' : '在线'}
+              </p>
             </div>
-            <button 
+            <button
               onClick={() => setShowSettings(true)}
               className="p-1.5 hover:bg-sidebar-accent rounded-lg transition-colors"
               title="设置"
@@ -171,6 +196,15 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
               <Settings className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
+
+          {/* 退出登录按钮 */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 hover:border hover:border-red-200 transition-all duration-200"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>退出登录</span>
+          </button>
         </div>
       </div>
 
