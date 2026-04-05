@@ -621,6 +621,75 @@ export async function GET() {
       }
     }
 
+    // 检查是否有环境变量配置，尝试使用环境变量重新连接
+    if (error instanceof Error && error.message === '数据库未连接') {
+      const envDbConfig = {
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_PORT || '3306'),
+        username: process.env.DB_USER,
+        password: process.env.DB_PASSWORD || '',
+        databaseName: process.env.DB_NAME,
+      };
+
+      if (envDbConfig.host && envDbConfig.databaseName && envDbConfig.username) {
+        console.log('[GET] 检测到环境变量配置，尝试重新连接...');
+
+        try {
+          const config = {
+            id: 'env-config',
+            name: '环境变量配置',
+            type: 'mysql' as const,
+            host: envDbConfig.host,
+            port: envDbConfig.port,
+            username: envDbConfig.username,
+            password: envDbConfig.password,
+            databaseName: envDbConfig.databaseName,
+            isActive: true,
+            isDefault: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          // 测试连接
+          const testPool = mysql.createPool({
+            host: config.host,
+            port: config.port,
+            user: config.username,
+            password: config.password,
+            database: config.databaseName,
+            waitForConnections: true,
+            connectionLimit: 1,
+          });
+
+          await testPool.getConnection();
+          await testPool.end();
+
+          // 连接成功
+          await dbManager.connect(config);
+          console.log('[GET] ✅ 通过环境变量重新连接成功');
+
+          // 更新缓存
+          lastActiveConfig = config;
+
+          // 重新读取配置列表
+          const configs = await databaseConfigRepository.findAll();
+          const isConnected = dbManager.isConnected();
+          const currentConfig = dbManager.getConfig();
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              configs,
+              isConnected,
+              currentConfig,
+            },
+          });
+        } catch (envError) {
+          console.error('[GET] 环境变量连接失败:', envError);
+        }
+      }
+    }
+
     return NextResponse.json(
       {
         success: false,
