@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       const results: string[] = [];
       for (const sql of tables) {
         try {
-          await dbManager.execute(sql);
+          await dbManager.query(sql);
           results.push('成功');
         } catch (error: any) {
           results.push(`失败: ${error.message}`);
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       // 插入初始化数据
       try {
         // 插入根机构
-        await dbManager.execute(`
+        await dbManager.query(`
           INSERT IGNORE INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo)
           VALUES (?, 1, ?, 0, ?, 1, 1, ?)
         `, [crypto.randomUUID(), '未来办公集团', 'ORG001', '根机构']);
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
         // 插入职务级别
         const levels = ['普通员工', '组长', '主管', '经理', '总监', '副总经理', '总经理'];
         for (let i = 0; i < levels.length; i++) {
-          await dbManager.execute(`
+          await dbManager.query(`
             INSERT IGNORE INTO sys_org_staffing_level (fd_id, fd_name, fd_level, fd_is_default, fd_is_available)
             VALUES (?, ?, ?, ?, 1)
           `, [crypto.randomUUID(), levels[i], i + 1, i === 0 ? 1 : 0]);

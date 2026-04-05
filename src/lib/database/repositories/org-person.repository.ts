@@ -2,7 +2,7 @@
  * 人员 Repository
  */
 
-import { dbManager } from './manager';
+import { dbManager } from '../manager';
 import {
   OrgPerson,
   OrgPersonDTO,
@@ -70,7 +70,7 @@ export class OrgPersonRepository {
     const password = dto.fd_password || '123456';
     const hashedPassword = this.hashPassword(password);
 
-    await dbManager.execute(sql, [
+    await dbManager.query(sql, [
       id,
       dto.fd_name,
       dto.fd_nickname || null,
@@ -114,7 +114,7 @@ export class OrgPersonRepository {
 
     // 更新部门人员数量
     if (dto.fd_dept_id) {
-      await orgElementRepository.decrementPersonCount(dto.fd_dept_id);
+      await orgElementRepository.incrementPersonCount(dto.fd_dept_id);
     }
 
     return id;
@@ -248,12 +248,12 @@ export class OrgPersonRepository {
     const sql = `UPDATE ${this.tableName} SET ${fields.join(', ')} WHERE fd_id = ?`;
     values.push(id);
 
-    await dbManager.execute(sql, values);
+    await dbManager.query(sql, values);
 
     // 处理岗位关联变更
     if (dto.fd_post_ids !== undefined) {
       // 删除旧关联
-      await dbManager.execute(
+      await dbManager.query(
         `DELETE FROM ${this.postPersonTableName} WHERE fd_person_id = ?`,
         [id]
       );
@@ -275,7 +275,7 @@ export class OrgPersonRepository {
     if (!person) return;
 
     const sql = `DELETE FROM ${this.tableName} WHERE fd_id = ?`;
-    await dbManager.execute(sql, [id]);
+    await dbManager.query(sql, [id]);
 
     // 更新部门人员数量
     if (person.fd_dept_id) {
@@ -302,7 +302,8 @@ export class OrgPersonRepository {
       WHERE p.fd_id = ?
     `;
 
-    const rows = await dbManager.query(sql, [id]);
+    const result = await dbManager.query(sql, [id]);
+    const rows = result.rows;
     if (rows.length === 0) return null;
 
     const person = this.mapRowToEntity(rows[0]);
@@ -314,9 +315,10 @@ export class OrgPersonRepository {
       JOIN sys_org_element post ON pp.fd_post_id = post.fd_id
       WHERE pp.fd_person_id = ?
     `;
-    const postRows = await dbManager.query(postSql, [id]);
-    person.post_ids = postRows.map(row => row.fd_id);
-    person.post_names = postRows.map(row => row.fd_name);
+    const postResult = await dbManager.query(postSql, [id]);
+    const postRows = postResult.rows;
+    person.post_ids = postRows.map((row: any) => row.fd_id);
+    person.post_names = postRows.map((row: any) => row.fd_name);
 
     return person;
   }
@@ -326,7 +328,8 @@ export class OrgPersonRepository {
    */
   async findByLoginName(loginName: string): Promise<OrgPerson | null> {
     const sql = `SELECT * FROM ${this.tableName} WHERE fd_login_name = ?`;
-    const rows = await dbManager.query(sql, [loginName]);
+    const result = await dbManager.query(sql, [loginName]);
+    const rows = result.rows;
     return rows.length > 0 ? this.mapRowToEntity(rows[0]) : null;
   }
 
@@ -375,7 +378,7 @@ export class OrgPersonRepository {
     // 查询总数
     const countSql = `SELECT COUNT(*) as total FROM ${this.tableName} p WHERE ${conditions.join(' AND ')}`;
     const countResult = await dbManager.query(countSql, values);
-    const total = countResult[0].total;
+    const total = (countResult.rows[0] as any).total;
 
     // 查询数据
     const dataSql = `
@@ -395,8 +398,8 @@ export class OrgPersonRepository {
       LIMIT ? OFFSET ?
     `;
 
-    const rows = await dbManager.query(dataSql, [...values, pageSize, offset]);
-    const data = rows.map(row => this.mapRowToEntity(row));
+    const dataResult = await dbManager.query(dataSql, [...values, pageSize, offset]);
+    const data = dataResult.rows.map((row: any) => this.mapRowToEntity(row));
 
     return {
       data,
@@ -416,7 +419,7 @@ export class OrgPersonRepository {
       ON DUPLICATE KEY UPDATE fd_create_time = NOW()
     `;
 
-    await dbManager.execute(sql, [crypto.randomUUID(), postId, personId]);
+    await dbManager.query(sql, [crypto.randomUUID(), postId, personId]);
   }
 
   /**
@@ -424,7 +427,7 @@ export class OrgPersonRepository {
    */
   private async removePostPersonRelation(postId: string, personId: string): Promise<void> {
     const sql = `DELETE FROM ${this.postPersonTableName} WHERE fd_post_id = ? AND fd_person_id = ?`;
-    await dbManager.execute(sql, [postId, personId]);
+    await dbManager.query(sql, [postId, personId]);
   }
 
   /**
@@ -470,7 +473,7 @@ export class OrgPersonRepository {
       fd_alter_time: new Date(row.fd_alter_time),
       fd_creator_id: row.fd_creator_id,
       fd_creator_name: row.fd_creator_name,
-      fd_lock_time: row.fd_lock_time ? new Date(row.fd_lock_time) : null,
+      fd_lock_time: row.fd_lock_time ? new Date(row.fd_lock_time) : undefined,
       fd_staffing_level_id: row.fd_staffing_level_id,
       fd_staffing_level_name: row.fd_staffing_level_name,
       fd_user_type: row.fd_user_type,
