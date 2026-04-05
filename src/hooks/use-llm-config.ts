@@ -1,11 +1,27 @@
 import { useState, useEffect } from 'react';
 
+interface LLMConfig {
+  name: string;
+  provider: string;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+}
+
+interface LLMConfigResponse {
+  success: boolean;
+  config: LLMConfig | null;
+  source: 'none' | 'global';
+  sourceName?: string;
+  message?: string;
+}
+
 /**
  * LLM 配置管理 Hook
  * 只返回全局配置，个人配置功能已移除
  */
 export function useLLMConfig() {
-  const [config, setConfig] = useState<any>(null);
+  const [config, setConfig] = useState<LLMConfig | null>(null);
   const [source, setSource] = useState<'none' | 'global'>('none');
   const [sourceName, setSourceName] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -22,7 +38,7 @@ export function useLLMConfig() {
 
       // 获取全局配置
       const response = await fetch('/api/config/llm');
-      const data = await response.json();
+      const data: LLMConfigResponse = await response.json();
 
       if (data.success && data.config) {
         setConfig(data.config);

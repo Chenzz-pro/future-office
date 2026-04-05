@@ -164,7 +164,7 @@ export default function DatabaseConfigPage() {
         let errorMessage = '初始化失败: ' + data.error;
         if (data.failedStatements && data.failedStatements.length > 0) {
           errorMessage += '\n\n失败的SQL语句：\n' +
-            data.failedStatements.map((fs: any, i: number) =>
+            data.failedStatements.map((fs: { error: string; sql: string }, i: number) =>
               `${i + 1}. ${fs.error}\n   ${fs.sql.substring(0, 80)}...`
             ).join('\n\n');
         }
@@ -195,7 +195,7 @@ export default function DatabaseConfigPage() {
         let errorMessage = '重新创建失败: ' + data.error;
         if (data.failedStatements && data.failedStatements.length > 0) {
           errorMessage += `\n\n失败 ${data.failedStatements.length} 条 SQL:\n` +
-            data.failedStatements.map((fs: any, i: number) =>
+            data.failedStatements.map((fs: { error: string; sql: string }, i: number) =>
               `${i + 1}. ${fs.error}\n   ${fs.sql.substring(0, 100)}...`
             ).join('\n\n');
         }

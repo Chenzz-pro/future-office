@@ -69,11 +69,11 @@ export default function OrganizationStructure() {
   const [currentView, setCurrentView] = useState<ViewType>('organization');
   const [treeData, setTreeData] = useState<OrgTreeNode[]>([]);
   const [selectedNode, setSelectedNode] = useState<OrgTreeNode | null>(null);
-  const [listData, setListData] = useState<any[]>([]);
+  const [listData, setListData] = useState<(OrgElement | OrgPerson)[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<OrgElement | OrgPerson | null>(null);
 
   const currentConfig = viewConfigs.find(c => c.type === currentView);
 
@@ -140,7 +140,7 @@ export default function OrganizationStructure() {
     setDialogOpen(true);
   };
 
-  const handleEdit = (item: any) => {
+  const handleEdit = (item: OrgElement | OrgPerson) => {
     setEditingItem(item);
     setDialogOpen(true);
   };
@@ -298,7 +298,7 @@ export default function OrganizationStructure() {
               </div>
             ) : listData.length > 0 ? (
               <div className="space-y-2">
-                {listData.map((item: any) => (
+                {listData.map((item: OrgElement | OrgPerson) => (
                   <div
                     key={item.fd_id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
@@ -310,9 +310,12 @@ export default function OrganizationStructure() {
                       <div>
                         <h3 className="font-medium text-gray-900">{item.fd_name}</h3>
                         <p className="text-sm text-gray-500">
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                           {item.fd_no && `编号: ${item.fd_no}`}
-                          {item.fd_no && item.fd_email && ' | '}
-                          {item.fd_email && `邮箱: ${item.fd_email}`}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {item.fd_no && ((item as any).fd_email || (item as any).fd_org_email) && ' | '}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {((item as any).fd_email || (item as any).fd_org_email) && `邮箱: ${((item as any).fd_email || (item as any).fd_org_email)}`}
                         </p>
                       </div>
                     </div>

@@ -125,7 +125,7 @@ export class OrgPersonRepository {
    */
   async update(id: string, dto: Partial<OrgPersonDTO>): Promise<void> {
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
 
     // 检查登录名是否已存在
     if (dto.fd_login_name !== undefined) {
@@ -316,9 +316,9 @@ export class OrgPersonRepository {
       WHERE pp.fd_person_id = ?
     `;
     const postResult = await dbManager.query(postSql, [id]);
-    const postRows = postResult.rows;
-    person.post_ids = postRows.map((row: any) => row.fd_id);
-    person.post_names = postRows.map((row: any) => row.fd_name);
+    const postRows = postResult.rows as Record<string, unknown>[];
+    person.post_ids = postRows.map((row: Record<string, unknown>) => String(row.fd_id));
+    person.post_names = postRows.map((row: Record<string, unknown>) => String(row.fd_name));
 
     return person;
   }
@@ -338,7 +338,7 @@ export class OrgPersonRepository {
    */
   async findList(query: PersonQuery = {}): Promise<PageResult<OrgPerson>> {
     const conditions: string[] = ['1=1'];
-    const values: any[] = [];
+    const values: unknown[] = [];
 
     if (query.fd_dept_id !== undefined) {
       conditions.push('p.fd_dept_id = ?');
@@ -378,7 +378,7 @@ export class OrgPersonRepository {
     // 查询总数
     const countSql = `SELECT COUNT(*) as total FROM ${this.tableName} p WHERE ${conditions.join(' AND ')}`;
     const countResult = await dbManager.query(countSql, values);
-    const total = (countResult.rows[0] as any).total;
+    const total = (countResult.rows[0] as Record<string, unknown>).total as number;
 
     // 查询数据
     const dataSql = `
@@ -399,6 +399,7 @@ export class OrgPersonRepository {
     `;
 
     const dataResult = await dbManager.query(dataSql, [...values, pageSize, offset]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = dataResult.rows.map((row: any) => this.mapRowToEntity(row));
 
     return {
@@ -441,6 +442,7 @@ export class OrgPersonRepository {
   /**
    * 将数据库行映射为实体
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapRowToEntity(row: any): OrgPerson {
     return {
       fd_id: row.fd_id,
@@ -457,27 +459,27 @@ export class OrgPersonRepository {
       fd_default_language: row.fd_default_language,
       fd_keyword: row.fd_keyword,
       fd_order: row.fd_order,
-      fd_position: row.fd_position,
-      fd_post_id: row.fd_post_id,
-      fd_post_name: row.fd_post_name,
-      fd_rtx_account: row.fd_rtx_account,
-      fd_dynamic_password: row.fd_dynamic_password,
-      fd_gender: row.fd_gender,
-      fd_wechat: row.fd_wechat,
-      fd_short_no: row.fd_short_no,
+      fd_position: row.fd_position as string | undefined,
+      fd_post_id: row.fd_post_id as string | undefined,
+      fd_post_name: row.fd_post_name as string | undefined,
+      fd_rtx_account: row.fd_rtx_account as string | undefined,
+      fd_dynamic_password: row.fd_dynamic_password as string | undefined,
+      fd_gender: row.fd_gender as Gender,
+      fd_wechat: row.fd_wechat as string | undefined,
+      fd_short_no: row.fd_short_no as string | undefined,
       fd_double_validation: !!row.fd_double_validation,
       fd_is_business_related: !!row.fd_is_business_related,
       fd_is_login_enabled: !!row.fd_is_login_enabled,
-      fd_memo: row.fd_memo,
-      fd_create_time: new Date(row.fd_create_time),
-      fd_alter_time: new Date(row.fd_alter_time),
-      fd_creator_id: row.fd_creator_id,
-      fd_creator_name: row.fd_creator_name,
-      fd_lock_time: row.fd_lock_time ? new Date(row.fd_lock_time) : undefined,
-      fd_staffing_level_id: row.fd_staffing_level_id,
-      fd_staffing_level_name: row.fd_staffing_level_name,
-      fd_user_type: row.fd_user_type,
-      fd_person_to_more_dept: row.fd_person_to_more_dept,
+      fd_memo: row.fd_memo as string | undefined,
+      fd_create_time: new Date(row.fd_create_time as string | number | Date),
+      fd_alter_time: new Date(row.fd_alter_time as string | number | Date),
+      fd_creator_id: row.fd_creator_id as string | undefined,
+      fd_creator_name: row.fd_creator_name as string | undefined,
+      fd_lock_time: row.fd_lock_time ? new Date(row.fd_lock_time as string | number) : undefined,
+      fd_staffing_level_id: row.fd_staffing_level_id as string | undefined,
+      fd_staffing_level_name: row.fd_staffing_level_name as string | undefined,
+      fd_user_type: row.fd_user_type as UserType,
+      fd_person_to_more_dept: row.fd_person_to_more_dept as number,
       post_ids: [],
       post_names: []
     };

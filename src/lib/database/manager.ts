@@ -118,9 +118,9 @@ export class DatabaseManager {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const [results] = await this.pool.execute(sql, params as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       return {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         rows: results as T[],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         affectedRows: (results as any).affectedRows,
