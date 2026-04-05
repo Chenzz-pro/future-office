@@ -292,27 +292,35 @@ export default function OrganizationStructurePage() {
           )}
 
           {/* 图标 */}
-          <div
-            className={`w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center text-white flex-shrink-0 ${
-              node.type === 1 ? 'from-blue-500 to-blue-600' :
-              node.type === 2 ? 'from-green-500 to-green-600' :
-              'from-purple-500 to-purple-600'
-            }`}
-          >
-            {node.type === 1 ? (
-              <Building2 className="w-4 h-4" />
-            ) : node.type === 2 ? (
-              <Briefcase className="w-4 h-4" />
-            ) : (
-              <Users className="w-4 h-4" />
-            )}
-          </div>
+          {node.type === 4 ? (
+            // 人员节点 - 显示用户图标
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white flex-shrink-0">
+              <User className="w-4 h-4" />
+            </div>
+          ) : (
+            // 组织节点（机构/部门/岗位）
+            <div
+              className={`w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center text-white flex-shrink-0 ${
+                node.type === 1 ? 'from-blue-500 to-blue-600' :
+                node.type === 2 ? 'from-green-500 to-green-600' :
+                'from-purple-500 to-purple-600'
+              }`}
+            >
+              {node.type === 1 ? (
+                <Building2 className="w-4 h-4" />
+              ) : node.type === 2 ? (
+                <Briefcase className="w-4 h-4" />
+              ) : (
+                <Users className="w-4 h-4" />
+              )}
+            </div>
+          )}
 
           {/* 节点名称 */}
           <span className="text-sm font-medium truncate flex-1">{node.name}</span>
 
           {/* 人员数量 */}
-          {node.personCount > 0 && (
+          {node.personCount !== undefined && node.personCount > 0 && node.type !== 4 && (
             <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
               {node.personCount}
             </span>

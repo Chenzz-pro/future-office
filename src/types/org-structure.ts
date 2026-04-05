@@ -247,18 +247,18 @@ export interface StaffingLevelDTO {
 export interface OrgTreeNode {
   id: string;
   name: string;
-  type: OrgElementType;
-  typeLabel: string;
+  type: OrgElementType | 4;  // 1=机构, 2=部门, 3=岗位, 4=人员
+  typeLabel?: string;
   order: number;
   no?: string;
-  isAvailable: boolean;
-  isBusiness: boolean;
+  isAvailable?: boolean;
+  isBusiness?: boolean;
   email?: string;
-  personsNumber: number;
+  personsNumber?: number;
   memo?: string;
   hierarchyId?: string;
-  createTime: Date;
-  isExternal: boolean;
+  createTime?: Date;
+  isExternal?: boolean;
   thisLeaderId?: string;
   thisLeaderName?: string;
   superLeaderId?: string;
@@ -269,8 +269,8 @@ export interface OrgTreeNode {
   parentName?: string;
   creatorId?: string;
   children?: OrgTreeNode[];
-  personCount: number;  // 人员数量（含下级）
-  level: number;  // 层级深度
+  personCount?: number;  // 人员数量（含下级）
+  level?: number;  // 层级深度
   path?: string[];  // 完整路径
 }
 

@@ -80,9 +80,14 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/migrate/users-to-sys-org-person
  * 执行迁移
+ * 参数：
+ * - dropTable: 是否删除 users 表（默认 false）
  */
 export async function POST(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const dropTable = searchParams.get('dropTable') === 'true';
+
     // 检查 users 表是否存在
     const tablesResult = await dbManager.query(
       `SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
@@ -93,7 +98,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'users 表不存在，无需迁移',
-        data: { migratedCount: 0, failedCount: 0 },
+        data: { migratedCount: 0, failedCount: 0, dropped: false },
       });
     }
 
@@ -172,13 +177,31 @@ export async function POST(request: NextRequest) {
 
     console.log('[Migrate]', message);
 
+    // 如果指定了删除表，则删除 users 表
+    let dropped = false;
+    if (dropTable && migratedCount > 0 && failedCount === 0) {
+      try {
+        // 备份 users 表
+        await dbManager.query(`CREATE TABLE IF NOT EXISTS users_backup AS SELECT * FROM users`);
+        console.log('[Migrate] 已备份 users 表到 users_backup');
+
+        // 删除 users 表
+        await dbManager.query(`DROP TABLE IF EXISTS users`);
+        console.log('[Migrate] 已删除 users 表');
+        dropped = true;
+      } catch (error) {
+        console.error('[Migrate] 删除 users 表失败:', error);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message,
+      message: dropped ? `${message}，已删除 users 表` : message,
       data: {
         migratedCount,
         failedCount,
         totalCount: users.length,
+        dropped,
       },
     });
   } catch (error: unknown) {

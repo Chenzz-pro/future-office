@@ -299,7 +299,7 @@ export class OrgElementRepository {
         ) {
           const node = this.mapRowToTreeNode(row);
           node.children = buildTree(row.fd_id);
-          node.personCount = node.children.reduce((sum, child) => sum + child.personsNumber, 0) + row.fd_persons_number;
+          node.personCount = node.children.reduce((sum, child) => sum + (child.personsNumber || 0), 0) + row.fd_persons_number;
           nodes.push(node);
         }
       }

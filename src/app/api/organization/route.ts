@@ -204,17 +204,22 @@ async function deleteOrgElement(type: string, id: string) {
 
 // 获取树形数据
 async function getTreeData(type: number) {
+  // 查询机构、部门、岗位数据
   let query = `
-    SELECT fd_id, fd_org_type, fd_name, fd_parentid, fd_parentorgid
+    SELECT fd_id, fd_org_type, fd_name, fd_parentid, fd_parentorgid, fd_persons_number
     FROM sys_org_element
     WHERE fd_is_available = 1 AND fd_is_abandon = 0
   `;
 
   const params: unknown[] = [];
 
-  if (type) {
-    query += ' AND fd_org_type = ?';
-    params.push(type);
+  // type: 1=只显示机构，2=显示机构和部门，3=显示机构、部门、岗位
+  if (type === 1) {
+    query += ' AND fd_org_type = 1';
+  } else if (type === 2) {
+    query += ' AND fd_org_type IN (1, 2)';
+  } else if (type === 3) {
+    query += ' AND fd_org_type IN (1, 2, 3)';
   }
 
   query += ' ORDER BY fd_order ASC, fd_create_time ASC';
@@ -222,44 +227,110 @@ async function getTreeData(type: number) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await dbManager.query<any>(query, params);
 
+  // 查询人员数据
+  const personQuery = `
+    SELECT fd_id, fd_name, fd_no, fd_dept_id, fd_order
+    FROM sys_org_person
+    WHERE fd_is_login_enabled = 1
+    ORDER BY fd_order ASC, fd_create_time ASC
+  `;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const personResult = await dbManager.query<any>(personQuery, params);
+
   // 构建树形结构
-  const treeData = buildTree(result.rows, type);
+  const treeData = buildTree(result.rows, personResult.rows, type);
 
   return NextResponse.json({ success: true, data: treeData });
 }
 
 // 构建树形结构
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildTree(flatData: any[], rootType?: number): any[] {
+function buildTree(flatData: any[], personData: any[], rootType?: number): any[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const map = new Map<string, any>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const roots: any[] = [];
 
-  // 创建所有节点的映射
+  // 创建所有组织节点的映射
   flatData.forEach((item) => {
     map.set(item.fd_id, {
       id: item.fd_id,
       name: item.fd_name,
       type: item.fd_org_type,
+      orgType: item.fd_org_type,
       parentId: item.fd_parentid || item.fd_parentorgid,
       children: [],
-      personCount: 0,
+      personCount: item.fd_persons_number || 0,
     });
+  });
+
+  // 将人员添加到对应的部门下
+  personData.forEach((person) => {
+    const deptId = person.fd_dept_id;
+    if (deptId && map.has(deptId)) {
+      const dept = map.get(deptId);
+      dept.children.push({
+        id: person.fd_id,
+        name: person.fd_name,
+        type: 4, // 4=人员
+        no: person.fd_no,
+        order: person.fd_order,
+        parentId: deptId,
+        children: [],
+      });
+    }
   });
 
   // 构建树形结构
   flatData.forEach((item) => {
     const node = map.get(item.fd_id);
-    const parentId = item.fd_parentid || item.fd_parentorgid;
 
-    if (parentId && map.has(parentId)) {
-      const parent = map.get(parentId);
-      parent.children.push(node);
-    } else {
+    // 机构（type=1）没有父节点，作为根节点
+    if (item.fd_org_type === 1) {
       roots.push(node);
     }
+    // 部门（type=2）的父节点是机构或另一个部门
+    else if (item.fd_org_type === 2) {
+      const parentId = item.fd_parentorgid || item.fd_parentid;
+      if (parentId && map.has(parentId)) {
+        const parent = map.get(parentId);
+        parent.children.push(node);
+      } else {
+        // 如果没有找到父节点，作为根节点
+        roots.push(node);
+      }
+    }
+    // 岗位（type=3）的父节点是部门
+    else if (item.fd_org_type === 3) {
+      const parentId = item.fd_parentid;
+      if (parentId && map.has(parentId)) {
+        const parent = map.get(parentId);
+        parent.children.push(node);
+      } else {
+        // 如果没有找到父节点，作为根节点
+        roots.push(node);
+      }
+    }
   });
+
+  // 按照排序号排序
+  const sortNodes = (nodes: any[]) => {
+    nodes.sort((a, b) => {
+      // 人员节点（type=4）优先
+      if (a.type === 4 && b.type !== 4) return -1;
+      if (a.type !== 4 && b.type === 4) return 1;
+      // 按照名称排序
+      return a.name.localeCompare(b.name, 'zh-CN');
+    });
+    nodes.forEach(node => {
+      if (node.children && node.children.length > 0) {
+        sortNodes(node.children);
+      }
+    });
+  };
+
+  sortNodes(roots);
 
   return roots;
 }
