@@ -197,7 +197,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     let session = currentSession;
     if (!session) {
       console.log('[sendMessage] 创建新会话');
-      session = createSession(selectedModel, activeKey?.provider || 'unknown');
+      session = await createSession(selectedModel, activeKey?.provider || 'unknown');
     }
 
     const userMessage: Message = {
@@ -231,6 +231,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     }
 
     // 添加用户消息
+    if (!session) {
+      setError('无法创建会话');
+      setIsLoading(false);
+      return;
+    }
     addMessage(session.id, userMessage);
     setInputValue('');
     setIsLoading(true);
@@ -322,7 +327,9 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           content: assistantContent,
           timestamp: new Date(),
         };
-        addMessage(session.id, assistantMessage);
+        if (session) {
+          addMessage(session.id, assistantMessage);
+        }
       }
     } catch (err) {
       console.error('[sendMessage] Chat error:', err);
