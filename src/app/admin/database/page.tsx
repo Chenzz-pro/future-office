@@ -194,10 +194,13 @@ export default function DatabaseConfigPage() {
       } else {
         let errorMessage = '重新创建失败: ' + data.error;
         if (data.failedStatements && data.failedStatements.length > 0) {
-          errorMessage += '\n\n失败的SQL语句：\n' +
+          errorMessage += `\n\n失败 ${data.failedStatements.length} 条 SQL:\n` +
             data.failedStatements.map((fs: any, i: number) =>
-              `${i + 1}. ${fs.error}\n   ${fs.sql.substring(0, 80)}...`
+              `${i + 1}. ${fs.error}\n   ${fs.sql.substring(0, 100)}...`
             ).join('\n\n');
+        }
+        if (data.successCount !== undefined) {
+          errorMessage += `\n\n成功 ${data.successCount} 条 SQL`;
         }
         alert(errorMessage);
       }
