@@ -162,20 +162,15 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    if (!dbConnected) {
-      setError('数据库未连接，请稍后重试或联系管理员检查数据库配置');
-      return;
-    }
-
-    if (!activeKey) {
-      setError('API Key 未配置，请联系管理员配置 AI 模型 API Key');
-      return;
-    }
+    console.log('[sendMessage] 开始发送消息');
+    console.log('[sendMessage] dbConnected:', dbConnected);
+    console.log('[sendMessage] activeKey:', activeKey ? '已配置' : '未配置');
 
     // 如果没有当前会话，创建一个
     let session = currentSession;
     if (!session) {
-      session = createSession(selectedModel, activeKey.provider);
+      console.log('[sendMessage] 创建新会话');
+      session = createSession(selectedModel, activeKey?.provider || 'unknown');
     }
 
     const userMessage: Message = {
@@ -184,6 +179,29 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       content: inputValue.trim(),
       timestamp: new Date(),
     };
+
+    console.log('[sendMessage] 添加用户消息:', userMessage.content);
+
+    // 先添加用户消息到界面
+    addMessage(session.id, userMessage);
+    setInputValue('');
+    setIsLoading(true);
+    setError(null);
+
+    // 检查数据库连接和API配置
+    if (!dbConnected) {
+      console.log('[sendMessage] 数据库未连接');
+      setError('数据库未连接，消息已显示但无法保存到历史记录。请稍后重试或联系管理员检查数据库配置。');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!activeKey) {
+      console.log('[sendMessage] API Key 未配置');
+      setError('API Key 未配置，消息已显示但无法获取 AI 回复。请联系管理员配置 AI 模型 API Key。');
+      setIsLoading(false);
+      return;
+    }
 
     // 添加用户消息
     addMessage(session.id, userMessage);
@@ -198,6 +216,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       { role: 'user' as const, content: userMessage.content },
     ];
 
+    console.log('[sendMessage] 调用 Chat API');
+    console.log('[sendMessage] 消息数量:', chatMessages.length);
+    console.log('[sendMessage] 模型:', selectedModel);
+    console.log('[sendMessage] 提供商:', activeKey.provider);
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -211,24 +234,37 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         }),
       });
 
+      console.log('[sendMessage] Chat API 响应状态:', response.status);
+
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('[sendMessage] Chat API 错误:', errorData);
         throw new Error(errorData.error || '请求失败');
       }
 
       // 流式读取响应
       const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法读取响应');
+      if (!reader) {
+        console.error('[sendMessage] 无法读取响应');
+        throw new Error('无法读取响应');
+      }
 
       let assistantContent = '';
       const decoder = new TextDecoder();
+      let chunksReceived = 0;
+
+      console.log('[sendMessage] 开始读取流式响应');
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('[sendMessage] 流式响应结束，共收到', chunksReceived, '个数据块');
+          break;
+        }
 
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n');
+        chunksReceived++;
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -239,16 +275,20 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
               const data = JSON.parse(trimmed.slice(6));
               if (data.content) {
                 assistantContent += data.content;
+                console.log('[sendMessage] 收到内容片段:', assistantContent.length, '字符');
               }
-            } catch {
-              // 忽略解析错误
+            } catch (err) {
+              console.error('[sendMessage] 解析数据块失败:', err);
             }
           }
         }
       }
 
+      console.log('[sendMessage] 助手回复完成，总长度:', assistantContent.length);
+
       // 添加助手消息
       if (assistantContent) {
+        console.log('[sendMessage] 添加助手消息');
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -258,10 +298,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         addMessage(session.id, assistantMessage);
       }
     } catch (err) {
-      console.error('Chat error:', err);
+      console.error('[sendMessage] Chat error:', err);
       setError(err instanceof Error ? err.message : '请求失败，请重试');
     } finally {
       setIsLoading(false);
+      console.log('[sendMessage] 发送消息流程结束');
     }
   };
 
