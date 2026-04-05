@@ -170,11 +170,10 @@ export default function DatabaseConfigPage() {
 
   const handleAddConfig = async () => {
     try {
-      const res = await fetch('/api/database', {
+      const res = await fetch('/api/database?action=add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'add',
           config: addForm,
         }),
       });
