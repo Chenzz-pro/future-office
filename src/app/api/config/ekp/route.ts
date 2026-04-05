@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
 import { EKPConfigRepository } from '@/lib/database/repositories/ekpconfig-admin.repository';
 
+// System User ID - 用于管理员后台创建的系统级配置
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+
 /**
  * GET /api/config/ekp - 获取 EKP 配置（仅全局配置）
  *
@@ -22,7 +25,7 @@ export async function GET(request: NextRequest) {
     const ekpConfigRepo = new EKPConfigRepository();
 
     // 获取全局配置（system 级别）
-    const globalConfig = await ekpConfigRepo.findByUserId('system');
+    const globalConfig = await ekpConfigRepo.findByUserId(SYSTEM_USER_ID);
 
     if (globalConfig) {
       return NextResponse.json({

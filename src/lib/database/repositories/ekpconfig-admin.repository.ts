@@ -5,6 +5,9 @@
 
 import { dbManager } from '../manager';
 
+// System User ID - 用于管理员后台创建的系统级配置
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+
 export interface EKPConfig {
   id: string;
   userId?: string;
@@ -52,7 +55,7 @@ export class EKPConfigRepository {
 
     await dbManager.query(query, [
       id,
-      data.userId || 'system',
+      data.userId || SYSTEM_USER_ID,
       data.baseUrl,
       data.username,
       data.password,
@@ -103,12 +106,12 @@ export class EKPConfigRepository {
     const query = `
       SELECT id, user_id as userId, ekp_address as baseUrl, username, password, config, created_at as createdAt, updated_at as updatedAt
       FROM ekp_configs
-      WHERE user_id = 'system'
+      WHERE user_id = ?
       ORDER BY created_at DESC
       LIMIT 1
     `;
 
-    const { rows } = await dbManager.query<EKPConfigRow>(query);
+    const { rows } = await dbManager.query<EKPConfigRow>(query, [SYSTEM_USER_ID]);
     return rows.length > 0 ? this.parseConfig(rows[0]) : null;
   }
 
