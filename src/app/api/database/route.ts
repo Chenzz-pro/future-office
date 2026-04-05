@@ -55,35 +55,48 @@ export async function POST(request: NextRequest) {
         .filter((s: string) => s && !s.startsWith('--'));
 
       const failedStatements: { sql: string; error: string }[] = [];
+      const successCount: { sql: string }[] = [];
+
+      console.log(`[init] 开始执行 ${statements.length} 条 SQL 语句`);
 
       for (const statement of statements) {
         if (!statement) continue;
         try {
           await tempPool.query(statement);
+          successCount.push({ sql: statement.substring(0, 60) });
+          console.log(`[init] SQL 执行成功: ${statement.substring(0, 60)}...`);
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);
-          console.warn('执行SQL失败:', error);
-          console.warn('SQL:', statement.substring(0, 100));
+          console.warn('[init] 执行SQL失败:', error);
+          console.warn('[init] SQL:', statement.substring(0, 100));
           failedStatements.push({ sql: statement, error });
         }
       }
 
+      console.log(`[init] SQL 执行完成: 成功 ${successCount.length} 条, 失败 ${failedStatements.length} 条`);
+
       // 检查关键表是否创建成功
       try {
+        console.log('[init] 检查 database_configs 表是否存在...');
         const [rows] = await tempPool.query("SHOW TABLES LIKE 'database_configs'");
+        console.log('[init] SHOW TABLES 结果:', JSON.stringify(rows));
         if (!Array.isArray(rows) || rows.length === 0) {
           await tempPool.end();
+          console.error('[init] database_configs 表不存在');
           return NextResponse.json(
             {
               success: false,
               error: '关键表 database_configs 创建失败，请检查日志或权限',
-              failedStatements: failedStatements.slice(0, 3), // 只返回前3个错误
+              failedStatements: failedStatements.slice(0, 3),
+              successCount: successCount.length,
             },
             { status: 500 }
           );
         }
+        console.log('[init] database_configs 表已创建');
       } catch (err) {
         await tempPool.end();
+        console.error('[init] 验证表失败:', err);
         return NextResponse.json(
           {
             success: false,
@@ -184,19 +197,23 @@ export async function POST(request: NextRequest) {
         if (!statement) continue;
         try {
           await tempPool.query(statement);
+          console.log(`[recreate] SQL 执行成功: ${statement.substring(0, 60)}...`);
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);
-          console.warn('执行SQL失败:', error);
-          console.warn('SQL:', statement.substring(0, 100));
+          console.warn('[recreate] 执行SQL失败:', error);
+          console.warn('[recreate] SQL:', statement.substring(0, 100));
           failedStatements.push({ sql: statement, error });
         }
       }
 
       // 检查关键表是否创建成功
       try {
+        console.log('[recreate] 检查 database_configs 表是否存在...');
         const [rows] = await tempPool.query("SHOW TABLES LIKE 'database_configs'");
+        console.log('[recreate] SHOW TABLES 结果:', JSON.stringify(rows));
         if (!Array.isArray(rows) || rows.length === 0) {
           await tempPool.end();
+          console.error('[recreate] database_configs 表不存在');
           return NextResponse.json(
             {
               success: false,
@@ -206,8 +223,10 @@ export async function POST(request: NextRequest) {
             { status: 500 }
           );
         }
+        console.log('[recreate] database_configs 表已创建');
       } catch (err) {
         await tempPool.end();
+        console.error('[recreate] 验证表失败:', err);
         return NextResponse.json(
           {
             success: false,
