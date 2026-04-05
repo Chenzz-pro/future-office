@@ -147,6 +147,115 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (action === 'add') {
+      const body = await request.json();
+      const { config } = body;
+
+      if (!config || !config.name || !config.host || !config.databaseName || !config.username) {
+        return NextResponse.json(
+          { success: false, error: '缺少必要参数' },
+          { status: 400 }
+        );
+      }
+
+      // 1. 先测试连接，确保数据库可访问
+      const testConfig = {
+        id: 'test',
+        name: '测试连接',
+        type: 'mysql',
+        host: config.host,
+        port: config.port || 3306,
+        databaseName: config.databaseName,
+        username: config.username,
+        password: config.password || '',
+        isActive: true,
+        isDefault: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as import('@/lib/database').DatabaseConfig;
+
+      const testResult = await databaseConfigRepository.testConnection(testConfig);
+      if (!testResult.success) {
+        return NextResponse.json(
+          { success: false, error: '无法连接到数据库: ' + testResult.message },
+          { status: 400 }
+        );
+      }
+
+      // 2. 连接成功后，连接到数据库
+      await dbManager.connect({
+        id: '', // 临时ID，稍后会更新
+        name: config.name,
+        type: 'mysql',
+        host: config.host,
+        port: config.port || 3306,
+        databaseName: config.databaseName,
+        username: config.username,
+        password: config.password || '',
+        isActive: false,
+        isDefault: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // 3. 确保数据库表存在（如果没有，自动创建）
+      const fs = await import('fs');
+      const path = await import('path');
+      const sqlScript = fs.readFileSync(
+        path.join(process.cwd(), 'database-schema.sql'),
+        'utf-8'
+      );
+
+      const statements = sqlScript
+        .split(';')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s && !s.startsWith('--'));
+
+      for (const statement of statements) {
+        try {
+          await dbManager.query(statement);
+        } catch (err) {
+          // 忽略已存在的表错误
+          console.warn('执行SQL失败（可能是已存在）:', err);
+        }
+      }
+
+      // 4. 保存配置到数据库
+      const configId = await databaseConfigRepository.create({
+        name: config.name,
+        type: 'mysql',
+        host: config.host,
+        port: config.port || 3306,
+        databaseName: config.databaseName,
+        username: config.username,
+        password: config.password || '',
+        isActive: true,
+        isDefault: true,
+      });
+
+      // 5. 重新连接，使用正确的 ID
+      await dbManager.connect({
+        id: configId,
+        name: config.name,
+        type: 'mysql',
+        host: config.host,
+        port: config.port || 3306,
+        databaseName: config.databaseName,
+        username: config.username,
+        password: config.password || '',
+        isActive: true,
+        isDefault: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: '数据库配置添加成功并已连接',
+        configId,
+      });
+    }
+
     if (action === 'disconnect') {
       await dbManager.disconnect();
       return NextResponse.json({
