@@ -64,24 +64,8 @@ export async function POST(request: NextRequest) {
 
       await tempPool.end();
 
-      // 保存数据库配置
-      const configId = crypto.randomUUID();
-      await databaseConfigRepository.create({
-        id: configId,
-        name: '默认配置',
-        type: 'mysql',
-        host,
-        port: port || 3306,
-        databaseName,
-        username,
-        password,
-        isActive: true,
-        isDefault: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as unknown as import('@/lib/database').DatabaseConfig);
-
       // 连接到数据库
+      const configId = crypto.randomUUID();
       await dbManager.connect({
         id: configId,
         name: '默认配置',
@@ -96,6 +80,22 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+
+      // 保存数据库配置
+      await databaseConfigRepository.create({
+        id: configId,
+        name: '默认配置',
+        type: 'mysql',
+        host,
+        port: port || 3306,
+        databaseName,
+        username,
+        password,
+        isActive: true,
+        isDefault: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as import('@/lib/database').DatabaseConfig);
 
       return NextResponse.json({
         success: true,
