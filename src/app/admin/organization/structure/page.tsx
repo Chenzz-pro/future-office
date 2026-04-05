@@ -147,10 +147,14 @@ export default function OrganizationStructurePage() {
 
   // 打开新建对话框
   const handleCreate = () => {
-    if (!selectedNode) {
-      alert('请先选择一个层级');
+    // 根据当前视图类型判断是否需要选择父节点
+    const needsParent = ['department', 'position', 'person'].includes(currentView);
+
+    if (needsParent && !selectedNode) {
+      alert('请先在左侧选择一个父级组织');
       return;
     }
+
     setDialogMode('create');
     setDialogInitialData(null);
     setDialogOpen(true);
@@ -411,7 +415,11 @@ export default function OrganizationStructurePage() {
 
             {/* 操作按钮 */}
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={handleCreate} disabled={!selectedNode}>
+              <Button
+                size="sm"
+                onClick={handleCreate}
+                disabled={['department', 'position', 'person'].includes(currentView) && !selectedNode}
+              >
                 <Plus className="w-4 h-4 mr-1" />
                 新建
               </Button>
