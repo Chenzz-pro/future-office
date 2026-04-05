@@ -49,9 +49,21 @@
 │   ├── lib/                # 工具库
 │   │   ├── utils.ts        # 通用工具函数 (cn)
 │   │   ├── ekp-rest-client.ts # EKP REST 客户端
-│   │   └── custom-skill-executor.ts # 自定义技能执行器
+│   │   ├── custom-skill-executor.ts # 自定义技能执行器
+│   │   └── database/       # 数据库层
+│   │       ├── types.ts    # 数据库类型定义
+│   │       ├── manager.ts  # 数据库连接管理器
+│   │       ├── index.ts    # 统一导出
+│   │       └── repositories/ # Repository 层
+│   │           ├── user.repository.ts
+│   │           ├── apikey.repository.ts
+│   │           ├── chatsession.repository.ts
+│   │           ├── customskill.repository.ts
+│   │           ├── ekpconfig.repository.ts
+│   │           └── databaseconfig.repository.ts
 │   └── types/              # 类型定义
 │       └── custom-skill.ts # 自定义技能类型定义
+├── database-schema.sql     # 数据库表结构 SQL 脚本
 ├── next.config.ts          # Next.js 配置
 ├── package.json            # 项目依赖管理
 └── tsconfig.json           # TypeScript 配置
@@ -92,6 +104,24 @@ interface CustomSkill {
 }
 ```
 
+## 管理员后台
+
+### 核心功能
+- **系统概览** - 系统整体数据展示
+- **智能体管理** - 智能体列表和创建
+- **技能管理** - 技能列表和模板管理
+- **组织权限管理** - 组织架构、成员和权限管理
+- **集成中心** - API 和 Webhook 配置
+- **数据库配置** - 数据库连接管理和数据迁移（新增）
+
+### 路由结构
+- `/admin/overview` - 系统概览
+- `/admin/agents` - 智能体管理
+- `/admin/skills` - 技能管理
+- `/admin/organization` - 组织权限管理
+- `/admin/integration` - 集成中心
+- `/admin/database` - 数据库配置（新增）
+
 ## EKP 集成
 
 ### 功能
@@ -108,6 +138,78 @@ interface CustomSkill {
 - 接口路径: `/api/sys-notify/sysNotifyTodoRestService/getTodo`
 - Content-Type: `application/json`
 - 认证方式: Basic Auth
+
+## 数据库系统
+
+### 概述
+系统支持从 localStorage 迁移到 MySQL 数据库，实现数据持久化和多数据库管理。
+
+### 核心功能
+- **数据库配置管理** - 支持添加、测试、连接多个数据库配置
+- **数据迁移** - 将 localStorage 数据迁移到 MySQL
+- **连接池管理** - 使用连接池管理数据库连接
+- **Repository 层** - 统一的数据访问层，提供 CRUD 操作
+
+### 数据库表结构
+- `users` - 用户表
+- `api_keys` - API Keys 配置表
+- `chat_sessions` - 对话会话表
+- `chat_messages` - 对话消息表
+- `custom_skills` - 自定义技能表
+- `ekp_configs` - EKP 配置表
+- `database_configs` - 数据库配置表
+- `organizations` - 组织架构表
+
+### API 接口
+- `GET /api/database` - 获取数据库配置列表和状态
+- `POST /api/database?action=init` - 初始化数据库表结构
+- `POST /api/database?action=test` - 测试数据库连接
+- `POST /api/database?action=connect` - 连接到指定数据库
+- `POST /api/database?action=disconnect` - 断开数据库连接
+- `GET /api/database/migrate` - 获取数据迁移预览
+- `POST /api/database/migrate` - 执行数据迁移
+
+### 数据访问层
+所有数据操作通过 Repository 层进行，位于 `src/lib/database/repositories/` 目录：
+- `user.repository.ts` - 用户数据访问
+- `apikey.repository.ts` - API Keys 数据访问
+- `chatsession.repository.ts` - 对话会话数据访问
+- `customskill.repository.ts` - 自定义技能数据访问
+- `ekpconfig.repository.ts` - EKP 配置数据访问
+- `databaseconfig.repository.ts` - 数据库配置管理
+
+### 使用示例
+```typescript
+import { userRepository, dbManager } from '@/lib/database';
+
+// 连接数据库
+await dbManager.connect({
+  id: 'config-id',
+  name: 'MySQL',
+  type: 'mysql',
+  host: 'localhost',
+  port: 3306,
+  databaseName: 'future_office',
+  username: 'root',
+  password: 'password',
+  isActive: true,
+  isDefault: false,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+// 创建用户
+const userId = await userRepository.create({
+  username: 'testuser',
+  password: 'hashed_password',
+  email: 'test@example.com',
+  role: 'user',
+  status: 'active',
+});
+
+// 查询用户
+const user = await userRepository.findByUsername('testuser');
+```
 
 ## 包管理规范
 

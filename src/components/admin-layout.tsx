@@ -5,18 +5,19 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  LayoutDashboard, 
-  Bot, 
-  Sparkles, 
-  Users, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Bot,
+  Sparkles,
+  Users,
+  Settings,
   ChevronRight,
   LogOut,
   Menu,
   X,
   Search,
-  Bell
+  Bell,
+  Database
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -83,6 +84,12 @@ const menuItems: MenuItem[] = [
       { id: 'int-api', label: 'API 管理', path: '/admin/integration/api' },
       { id: 'int-webhook', label: 'Webhook 配置', path: '/admin/integration/webhook' },
     ],
+  },
+  {
+    id: 'database',
+    label: '数据库配置',
+    icon: <Database className="w-5 h-5" />,
+    path: '/admin/database',
   },
 ];
 
