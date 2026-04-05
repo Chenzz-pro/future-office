@@ -134,6 +134,130 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (action === 'recreate') {
+      const body = await request.json();
+      const { host, port, databaseName, username, password } = body;
+
+      if (!host || !databaseName || !username || !password) {
+        return NextResponse.json(
+          { success: false, error: '缺少必要参数' },
+          { status: 400 }
+        );
+      }
+
+      // 创建临时连接（不指定数据库）
+      const tempPool = mysql.createPool({
+        host,
+        port: port || 3306,
+        user: username,
+        password,
+        waitForConnections: true,
+        connectionLimit: 1,
+      });
+
+      // 删除数据库（如果存在）
+      await tempPool.query(`DROP DATABASE IF EXISTS \`${databaseName}\``);
+
+      // 读取 SQL 脚本
+      const sqlScript = fs.readFileSync(
+        path.join(process.cwd(), 'database-schema.sql'),
+        'utf-8'
+      );
+
+      // 创建数据库
+      await tempPool.query(
+        `CREATE DATABASE \`${databaseName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      );
+
+      // 切换到目标数据库
+      await tempPool.query(`USE \`${databaseName}\``);
+
+      // 执行表创建脚本（逐条执行）
+      const statements = sqlScript
+        .split(';')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s && !s.startsWith('--'));
+
+      const failedStatements: { sql: string; error: string }[] = [];
+
+      for (const statement of statements) {
+        if (!statement) continue;
+        try {
+          await tempPool.query(statement);
+        } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
+          console.warn('执行SQL失败:', error);
+          console.warn('SQL:', statement.substring(0, 100));
+          failedStatements.push({ sql: statement, error });
+        }
+      }
+
+      // 检查关键表是否创建成功
+      try {
+        const [rows] = await tempPool.query('SHOW TABLES LIKE "database_configs"');
+        if (!Array.isArray(rows) || rows.length === 0) {
+          await tempPool.end();
+          return NextResponse.json(
+            {
+              success: false,
+              error: '关键表 database_configs 创建失败，请检查日志或权限',
+              failedStatements: failedStatements.slice(0, 3),
+            },
+            { status: 500 }
+          );
+        }
+      } catch (err) {
+        await tempPool.end();
+        return NextResponse.json(
+          {
+            success: false,
+            error: '无法验证表是否创建成功: ' + (err instanceof Error ? err.message : String(err)),
+          },
+          { status: 500 }
+        );
+      }
+
+      await tempPool.end();
+
+      // 连接到数据库
+      const configId = crypto.randomUUID();
+      await dbManager.connect({
+        id: configId,
+        name: '默认配置',
+        type: 'mysql',
+        host,
+        port: port || 3306,
+        databaseName,
+        username,
+        password,
+        isActive: true,
+        isDefault: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // 保存数据库配置
+      await databaseConfigRepository.create({
+        id: configId,
+        name: '默认配置',
+        type: 'mysql',
+        host,
+        port: port || 3306,
+        databaseName,
+        username,
+        password,
+        isActive: true,
+        isDefault: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as import('@/lib/database').DatabaseConfig);
+
+      return NextResponse.json({
+        success: true,
+        message: '数据库重新创建成功',
+      });
+    }
+
     if (action === 'test') {
       const body = await request.json();
       const { host, port, databaseName, username, password } = body;
