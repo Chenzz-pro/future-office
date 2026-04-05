@@ -269,7 +269,6 @@ export interface OrgTreeNode {
   parentName?: string;
   creatorId?: string;
   children?: OrgTreeNode[];
-  personCount: number;  // 人员数量（含下级）
   level: number;  // 层级深度
   path?: string[];  // 完整路径
 }

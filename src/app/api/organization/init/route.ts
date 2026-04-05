@@ -133,17 +133,17 @@ export async function POST(request: NextRequest) {
       const results: string[] = [];
       for (const sql of tables) {
         try {
-          await dbManager.query(sql);
+          await dbManager.execute(sql);
           results.push('成功');
-        } catch (error: unknown) {
-          results.push(`失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        } catch (error: any) {
+          results.push(`失败: ${error.message}`);
         }
       }
 
       // 插入初始化数据
       try {
         // 插入根机构
-        await dbManager.query(`
+        await dbManager.execute(`
           INSERT IGNORE INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo)
           VALUES (?, 1, ?, 0, ?, 1, 1, ?)
         `, [crypto.randomUUID(), '未来办公集团', 'ORG001', '根机构']);
@@ -151,15 +151,15 @@ export async function POST(request: NextRequest) {
         // 插入职务级别
         const levels = ['普通员工', '组长', '主管', '经理', '总监', '副总经理', '总经理'];
         for (let i = 0; i < levels.length; i++) {
-          await dbManager.query(`
+          await dbManager.execute(`
             INSERT IGNORE INTO sys_org_staffing_level (fd_id, fd_name, fd_level, fd_is_default, fd_is_available)
             VALUES (?, ?, ?, ?, 1)
           `, [crypto.randomUUID(), levels[i], i + 1, i === 0 ? 1 : 0]);
         }
 
         results.push('初始化数据成功');
-      } catch (error: unknown) {
-        results.push(`初始化数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      } catch (error: any) {
+        results.push(`初始化数据失败: ${error.message}`);
       }
 
       return NextResponse.json({
@@ -170,10 +170,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('数据库初始化错误:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: error.message || '服务器错误' },
       { status: 500 }
     );
   }

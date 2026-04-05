@@ -3,7 +3,7 @@
  * 统一管理机构、部门、岗位的数据访问
  */
 
-import { dbManager } from '../manager';
+import { dbManager } from './manager';
 import {
   OrgElement,
   OrgElementDTO,
@@ -44,10 +44,10 @@ export class OrgElementRepository {
         fd_creator_id,
         fd_create_time,
         fd_alter_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    await dbManager.query(sql, [
+    await dbManager.execute(sql, [
       id,
       dto.fd_org_type,
       dto.fd_name,
@@ -88,7 +88,7 @@ export class OrgElementRepository {
    */
   async update(id: string, dto: Partial<OrgElementDTO>): Promise<void> {
     const fields: string[] = [];
-    const values: unknown[] = [];
+    const values: any[] = [];
 
     if (dto.fd_name !== undefined) {
       fields.push('fd_name = ?');
@@ -153,7 +153,7 @@ export class OrgElementRepository {
     const sql = `UPDATE ${this.tableName} SET ${fields.join(', ')} WHERE fd_id = ?`;
     values.push(id);
 
-    await dbManager.query(sql, values);
+    await dbManager.execute(sql, values);
 
     // 更新层级ID
     await this.updateHierarchyId(id);
@@ -164,7 +164,7 @@ export class OrgElementRepository {
    */
   async delete(id: string): Promise<void> {
     const sql = `DELETE FROM ${this.tableName} WHERE fd_id = ?`;
-    await dbManager.query(sql, [id]);
+    await dbManager.execute(sql, [id]);
   }
 
   /**
@@ -188,8 +188,7 @@ export class OrgElementRepository {
       WHERE e.fd_id = ?
     `;
 
-    const result = await dbManager.query(sql, [id]);
-    const rows = result.rows;
+    const rows = await dbManager.query(sql, [id]);
     return rows.length > 0 ? this.mapRowToEntity(rows[0]) : null;
   }
 
@@ -198,7 +197,7 @@ export class OrgElementRepository {
    */
   async findList(query: OrgElementQuery = {}): Promise<OrgElement[]> {
     const conditions: string[] = ['1=1'];
-    const values: unknown[] = [];
+    const values: any[] = [];
 
     if (query.fd_org_type !== undefined) {
       conditions.push('e.fd_org_type = ?');
@@ -249,10 +248,8 @@ export class OrgElementRepository {
       ORDER BY e.fd_order ASC, e.fd_create_time ASC
     `;
 
-    const result = await dbManager.query(sql, values);
-    const rows = result.rows;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return rows.map((row: any) => this.mapRowToEntity(row));
+    const rows = await dbManager.query(sql, values);
+    return rows.map(row => this.mapRowToEntity(row));
   }
 
   /**
@@ -260,7 +257,7 @@ export class OrgElementRepository {
    */
   async getTree(orgType?: OrgElementType, rootId?: string): Promise<OrgTreeNode[]> {
     const conditions: string[] = ['1=1'];
-    const values: unknown[] = [];
+    const values: any[] = [];
 
     if (orgType !== undefined) {
       conditions.push('fd_org_type = ?');
@@ -283,15 +280,13 @@ export class OrgElementRepository {
       ORDER BY fd_order ASC, fd_create_time ASC
     `;
 
-    const result = await dbManager.query(sql, values);
-    const rows = result.rows;
+    const rows = await dbManager.query(sql, values);
 
     // 构建树形结构
     const buildTree = (parentId: string | null = null): OrgTreeNode[] => {
       const nodes: OrgTreeNode[] = [];
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const row of rows as any[]) {
+      for (const row of rows) {
         if (
           (parentId === null && row.fd_parentid === null && row.fd_parentorgid === null) ||
           row.fd_parentid === parentId ||
@@ -330,29 +325,28 @@ export class OrgElementRepository {
     const hierarchyId = '/' + hierarchyIds.join('/');
 
     const sql = `UPDATE ${this.tableName} SET fd_hierarchy_id = ? WHERE fd_id = ?`;
-    await dbManager.query(sql, [hierarchyId, id]);
+    await dbManager.execute(sql, [hierarchyId, id]);
   }
 
   /**
-   * 增加人员数量 - 改为 public 供外部调用
+   * 增加人员数量
    */
-  async incrementPersonCount(id: string): Promise<void> {
+  private async incrementPersonCount(id: string): Promise<void> {
     const sql = `UPDATE ${this.tableName} SET fd_persons_number = fd_persons_number + 1 WHERE fd_id = ?`;
-    await dbManager.query(sql, [id]);
+    await dbManager.execute(sql, [id]);
   }
 
   /**
-   * 减少人员数量 - 改为 public 供外部调用
+   * 减少人员数量
    */
-  async decrementPersonCount(id: string): Promise<void> {
+  private async decrementPersonCount(id: string): Promise<void> {
     const sql = `UPDATE ${this.tableName} SET fd_persons_number = GREATEST(0, fd_persons_number - 1) WHERE fd_id = ?`;
-    await dbManager.query(sql, [id]);
+    await dbManager.execute(sql, [id]);
   }
 
   /**
    * 将数据库行映射为实体
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapRowToEntity(row: any): OrgElement {
     return {
       fd_id: row.fd_id,
@@ -394,7 +388,6 @@ export class OrgElementRepository {
   /**
    * 将数据库行映射为树节点
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapRowToTreeNode(row: any): OrgTreeNode {
     return {
       id: row.fd_id,
@@ -421,7 +414,6 @@ export class OrgElementRepository {
       parentName: row.fd_parent_name,
       creatorId: row.fd_creator_id,
       children: [],
-      personCount: 0,
       level: (row.fd_hierarchy_id?.split('/').filter(Boolean).length || 1) - 1
     };
   }

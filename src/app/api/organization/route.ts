@@ -17,8 +17,7 @@ export async function GET(request: NextRequest) {
     switch (action) {
       case 'tree':
         // 获取组织架构树
-        const typeStr = searchParams.get('type');
-        const treeType = typeStr ? (parseInt(typeStr) as OrgElementType) : undefined;
+        const treeType = type as OrgElementType | undefined;
         const rootId = searchParams.get('rootId') || undefined;
         const tree = await orgElementRepository.getTree(treeType, rootId);
         return NextResponse.json({ success: true, data: tree });
@@ -81,10 +80,10 @@ export async function GET(request: NextRequest) {
       default:
         return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('组织架构API错误:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: error.message || '服务器错误' },
       { status: 500 }
     );
   }
@@ -144,10 +143,10 @@ export async function POST(request: NextRequest) {
       default:
         return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('组织架构API错误:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: error.message || '服务器错误' },
       { status: 500 }
     );
   }

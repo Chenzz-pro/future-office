@@ -2,7 +2,7 @@
  * 人员 Repository
  */
 
-import { dbManager } from '../manager';
+import { dbManager } from './manager';
 import {
   OrgPerson,
   OrgPersonDTO,
@@ -70,7 +70,7 @@ export class OrgPersonRepository {
     const password = dto.fd_password || '123456';
     const hashedPassword = this.hashPassword(password);
 
-    await dbManager.query(sql, [
+    await dbManager.execute(sql, [
       id,
       dto.fd_name,
       dto.fd_nickname || null,
@@ -114,7 +114,7 @@ export class OrgPersonRepository {
 
     // 更新部门人员数量
     if (dto.fd_dept_id) {
-      await orgElementRepository.incrementPersonCount(dto.fd_dept_id);
+      await orgElementRepository.decrementPersonCount(dto.fd_dept_id);
     }
 
     return id;
@@ -125,7 +125,7 @@ export class OrgPersonRepository {
    */
   async update(id: string, dto: Partial<OrgPersonDTO>): Promise<void> {
     const fields: string[] = [];
-    const values: unknown[] = [];
+    const values: any[] = [];
 
     // 检查登录名是否已存在
     if (dto.fd_login_name !== undefined) {
@@ -248,12 +248,12 @@ export class OrgPersonRepository {
     const sql = `UPDATE ${this.tableName} SET ${fields.join(', ')} WHERE fd_id = ?`;
     values.push(id);
 
-    await dbManager.query(sql, values);
+    await dbManager.execute(sql, values);
 
     // 处理岗位关联变更
     if (dto.fd_post_ids !== undefined) {
       // 删除旧关联
-      await dbManager.query(
+      await dbManager.execute(
         `DELETE FROM ${this.postPersonTableName} WHERE fd_person_id = ?`,
         [id]
       );
@@ -275,7 +275,7 @@ export class OrgPersonRepository {
     if (!person) return;
 
     const sql = `DELETE FROM ${this.tableName} WHERE fd_id = ?`;
-    await dbManager.query(sql, [id]);
+    await dbManager.execute(sql, [id]);
 
     // 更新部门人员数量
     if (person.fd_dept_id) {
@@ -302,8 +302,7 @@ export class OrgPersonRepository {
       WHERE p.fd_id = ?
     `;
 
-    const result = await dbManager.query(sql, [id]);
-    const rows = result.rows;
+    const rows = await dbManager.query(sql, [id]);
     if (rows.length === 0) return null;
 
     const person = this.mapRowToEntity(rows[0]);
@@ -315,10 +314,9 @@ export class OrgPersonRepository {
       JOIN sys_org_element post ON pp.fd_post_id = post.fd_id
       WHERE pp.fd_person_id = ?
     `;
-    const postResult = await dbManager.query(postSql, [id]);
-    const postRows = postResult.rows as Record<string, unknown>[];
-    person.post_ids = postRows.map((row: Record<string, unknown>) => String(row.fd_id));
-    person.post_names = postRows.map((row: Record<string, unknown>) => String(row.fd_name));
+    const postRows = await dbManager.query(postSql, [id]);
+    person.post_ids = postRows.map(row => row.fd_id);
+    person.post_names = postRows.map(row => row.fd_name);
 
     return person;
   }
@@ -328,8 +326,7 @@ export class OrgPersonRepository {
    */
   async findByLoginName(loginName: string): Promise<OrgPerson | null> {
     const sql = `SELECT * FROM ${this.tableName} WHERE fd_login_name = ?`;
-    const result = await dbManager.query(sql, [loginName]);
-    const rows = result.rows;
+    const rows = await dbManager.query(sql, [loginName]);
     return rows.length > 0 ? this.mapRowToEntity(rows[0]) : null;
   }
 
@@ -338,7 +335,7 @@ export class OrgPersonRepository {
    */
   async findList(query: PersonQuery = {}): Promise<PageResult<OrgPerson>> {
     const conditions: string[] = ['1=1'];
-    const values: unknown[] = [];
+    const values: any[] = [];
 
     if (query.fd_dept_id !== undefined) {
       conditions.push('p.fd_dept_id = ?');
@@ -378,7 +375,7 @@ export class OrgPersonRepository {
     // 查询总数
     const countSql = `SELECT COUNT(*) as total FROM ${this.tableName} p WHERE ${conditions.join(' AND ')}`;
     const countResult = await dbManager.query(countSql, values);
-    const total = (countResult.rows[0] as Record<string, unknown>).total as number;
+    const total = countResult[0].total;
 
     // 查询数据
     const dataSql = `
@@ -398,9 +395,8 @@ export class OrgPersonRepository {
       LIMIT ? OFFSET ?
     `;
 
-    const dataResult = await dbManager.query(dataSql, [...values, pageSize, offset]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = dataResult.rows.map((row: any) => this.mapRowToEntity(row));
+    const rows = await dbManager.query(dataSql, [...values, pageSize, offset]);
+    const data = rows.map(row => this.mapRowToEntity(row));
 
     return {
       data,
@@ -420,7 +416,7 @@ export class OrgPersonRepository {
       ON DUPLICATE KEY UPDATE fd_create_time = NOW()
     `;
 
-    await dbManager.query(sql, [crypto.randomUUID(), postId, personId]);
+    await dbManager.execute(sql, [crypto.randomUUID(), postId, personId]);
   }
 
   /**
@@ -428,7 +424,7 @@ export class OrgPersonRepository {
    */
   private async removePostPersonRelation(postId: string, personId: string): Promise<void> {
     const sql = `DELETE FROM ${this.postPersonTableName} WHERE fd_post_id = ? AND fd_person_id = ?`;
-    await dbManager.query(sql, [postId, personId]);
+    await dbManager.execute(sql, [postId, personId]);
   }
 
   /**
@@ -442,7 +438,6 @@ export class OrgPersonRepository {
   /**
    * 将数据库行映射为实体
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapRowToEntity(row: any): OrgPerson {
     return {
       fd_id: row.fd_id,
@@ -459,27 +454,27 @@ export class OrgPersonRepository {
       fd_default_language: row.fd_default_language,
       fd_keyword: row.fd_keyword,
       fd_order: row.fd_order,
-      fd_position: row.fd_position as string | undefined,
-      fd_post_id: row.fd_post_id as string | undefined,
-      fd_post_name: row.fd_post_name as string | undefined,
-      fd_rtx_account: row.fd_rtx_account as string | undefined,
-      fd_dynamic_password: row.fd_dynamic_password as string | undefined,
-      fd_gender: row.fd_gender as Gender,
-      fd_wechat: row.fd_wechat as string | undefined,
-      fd_short_no: row.fd_short_no as string | undefined,
+      fd_position: row.fd_position,
+      fd_post_id: row.fd_post_id,
+      fd_post_name: row.fd_post_name,
+      fd_rtx_account: row.fd_rtx_account,
+      fd_dynamic_password: row.fd_dynamic_password,
+      fd_gender: row.fd_gender,
+      fd_wechat: row.fd_wechat,
+      fd_short_no: row.fd_short_no,
       fd_double_validation: !!row.fd_double_validation,
       fd_is_business_related: !!row.fd_is_business_related,
       fd_is_login_enabled: !!row.fd_is_login_enabled,
-      fd_memo: row.fd_memo as string | undefined,
-      fd_create_time: new Date(row.fd_create_time as string | number | Date),
-      fd_alter_time: new Date(row.fd_alter_time as string | number | Date),
-      fd_creator_id: row.fd_creator_id as string | undefined,
-      fd_creator_name: row.fd_creator_name as string | undefined,
-      fd_lock_time: row.fd_lock_time ? new Date(row.fd_lock_time as string | number) : undefined,
-      fd_staffing_level_id: row.fd_staffing_level_id as string | undefined,
-      fd_staffing_level_name: row.fd_staffing_level_name as string | undefined,
-      fd_user_type: row.fd_user_type as UserType,
-      fd_person_to_more_dept: row.fd_person_to_more_dept as number,
+      fd_memo: row.fd_memo,
+      fd_create_time: new Date(row.fd_create_time),
+      fd_alter_time: new Date(row.fd_alter_time),
+      fd_creator_id: row.fd_creator_id,
+      fd_creator_name: row.fd_creator_name,
+      fd_lock_time: row.fd_lock_time ? new Date(row.fd_lock_time) : null,
+      fd_staffing_level_id: row.fd_staffing_level_id,
+      fd_staffing_level_name: row.fd_staffing_level_name,
+      fd_user_type: row.fd_user_type,
+      fd_person_to_more_dept: row.fd_person_to_more_dept,
       post_ids: [],
       post_names: []
     };
