@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Paperclip, 
-  Brain, 
-  Mic, 
+import {
+  Paperclip,
+  Brain,
+  Mic,
   Send,
   Image as ImageIcon,
   Code,
@@ -12,7 +12,6 @@ import {
   Search,
   HelpCircle,
   PenTool,
-  MoreHorizontal,
   User,
   Bot,
   Loader2,
@@ -27,6 +26,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChatHistory, Message, ChatSession } from '@/hooks/use-chat-history';
+import { useLLMConfig } from '@/hooks/use-llm-config';
 import { CustomSkill } from '@/types/custom-skill';
 
 interface ApiKey {
@@ -76,41 +76,30 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [selectedModel, setSelectedModel] = useState('gpt-4o');
   const [customSkills, setCustomSkills] = useState<CustomSkill[]>([]);
   const [executingSkill, setExecutingSkill] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const {
-    sessions,
-    currentSession,
-    setCurrentSession,
-    createSession,
-    addMessage,
-    updateSession,
-  } = useChatHistory();
+  const { sessions, currentSession, setCurrentSession, createSession, addMessage, updateSession } = useChatHistory();
 
-  // 加载 API Keys
+  // 获取当前用户ID
+  const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('currentUser') || '{}') : null;
+  const userId = currentUser?.id;
+
+  // 使用配置钩子（优先级：用户配置 > 全局配置）
+  const { config: activeKey, source: configSource, loading: configLoading, refetch: refetchConfig } = useLLMConfig(userId);
+
+  // 设置默认模型
   useEffect(() => {
-    const savedKeys = localStorage.getItem('ai-api-keys');
-    if (savedKeys) {
-      try {
-        const keys = JSON.parse(savedKeys);
-        setApiKeys(keys);
-        const activeKey = keys.find((k: ApiKey) => k.isActive);
-        if (activeKey) {
-          if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
-          else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
-          else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
-          else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
-        }
-      } catch {
-        setApiKeys([]);
-      }
+    if (activeKey) {
+      if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
+      else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
+      else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
+      else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
     }
-  }, []);
+  }, [activeKey]);
 
   // 加载自定义技能
   useEffect(() => {
@@ -146,16 +135,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     }
   }, []);
 
-  const getActiveApiKey = (): ApiKey | null => {
-    return apiKeys.find(k => k.isActive) || null;
-  };
-
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    const activeKey = getActiveApiKey();
     if (!activeKey) {
-      setError('请先在设置中配置 API 密钥');
+      setError('请先配置 API 密钥');
       setShowSettings(true);
       return;
     }
@@ -264,7 +248,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const executeCustomSkill = async (skill: CustomSkill) => {
     if (!currentSession) {
       // 如果没有当前会话，创建一个
-      const activeKey = getActiveApiKey();
       if (!activeKey) {
         setError('请先在设置中配置 API 密钥');
         setShowSettings(true);
@@ -360,11 +343,53 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   };
 
   const hasMessages = (currentSession?.messages.length || 0) > 0;
-  const activeKey = getActiveApiKey();
   const messages = currentSession?.messages || [];
+
+  // 配置加载中或未配置时的提示
+  if (configLoading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!activeKey) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center bg-background">
+        <AlertCircle className="w-16 h-16 text-muted-foreground mb-4" />
+        <h2 className="text-xl font-semibold mb-2">未配置 AI 服务</h2>
+        <p className="text-muted-foreground mb-6 text-center max-w-md">
+          {configSource === 'global' 
+            ? '管理员尚未配置全局 AI 服务'
+            : '请先在设置中配置 API 密钥，或联系管理员配置全局服务'}
+        </p>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+        >
+          打开设置
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-background">
+      {/* 配置来源提示 */}
+      <div className="border-b border-border bg-muted/30 px-4 py-1 text-xs text-muted-foreground flex items-center justify-between">
+        <span>
+          配置来源: {configSource === 'global' ? '🌐 全局配置' : '👤 个人配置'}
+          {configSource === 'global' && activeKey.name && ` (${activeKey.name})`}
+        </span>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="hover:text-foreground transition-colors"
+        >
+          <Settings className="w-3 h-3" />
+        </button>
+      </div>
+
       {/* 顶部工具栏 */}
       <div className="border-b border-border bg-card/50 px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
