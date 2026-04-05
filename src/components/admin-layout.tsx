@@ -78,10 +78,13 @@ const menuItems: MenuItem[] = [
     id: 'integration',
     label: '集成中心',
     icon: <Settings className="w-5 h-5" />,
-    path: '/admin/integration/llm',
+    path: '/admin/integration',
     subItems: [
+      { id: 'int-overview', label: '集成概览', path: '/admin/integration/overview' },
       { id: 'int-llm', label: '大模型配置', path: '/admin/integration/llm' },
       { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration/ekp' },
+      { id: 'int-api', label: 'API 管理', path: '/admin/integration/api' },
+      { id: 'int-webhook', label: 'Webhook 配置', path: '/admin/integration/webhook' },
     ],
   },
   {
@@ -277,8 +280,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </header>
 
-        {/* 内容区域 */}
-        <main className="flex-1 overflow-auto p-6 bg-gray-50">
+        {/* 内容区 */}
+        <main className="flex-1 overflow-auto p-6">
           {children}
         </main>
       </div>

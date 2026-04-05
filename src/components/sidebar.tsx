@@ -196,6 +196,15 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
               <Settings className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
+
+          {/* 退出登录按钮 */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 hover:border hover:border-red-200 transition-all duration-200"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>退出登录</span>
+          </button>
         </div>
       </div>
 
