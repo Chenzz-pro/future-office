@@ -2,28 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
 import { ApiKeyRepository } from '@/lib/database/repositories/apikey-admin.repository';
 
-// 确保 system 用户存在
-async function ensureSystemUser(): Promise<void> {
-  const systemUserId = '00000000-0000-0000-0000-000000000000';
-
-  // 检查 system 用户是否存在
-  const { rows } = await dbManager.query(
-    'SELECT id FROM users WHERE id = ?',
-    [systemUserId]
-  );
-
-  if (!rows || rows.length === 0) {
-    // system 用户不存在，创建它
-    console.log('[API Keys] System user not found, creating...');
-    await dbManager.query(
-      `INSERT INTO users (id, username, password, email, role, status)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [systemUserId, 'system', 'system', 'system@system.local', 'admin', 'active']
-    );
-    console.log('[API Keys] System user created successfully');
-  }
-}
-
 // GET /api/admin/api-keys - 获取所有 API Keys
 export async function GET() {
   try {
@@ -70,9 +48,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 确保 system 用户存在
-    await ensureSystemUser();
-
     const apiKeyRepo = new ApiKeyRepository();
     const id = await apiKeyRepo.create({
       name: body.name,
@@ -80,7 +55,7 @@ export async function POST(request: NextRequest) {
       provider: body.provider,
       baseUrl: body.baseUrl,
       isActive: body.isActive !== false,
-      userId: '00000000-0000-0000-0000-000000000000', // system user ID
+      userId: 'system',
     });
 
     const created = await apiKeyRepo.findById(id);
