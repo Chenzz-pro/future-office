@@ -7,6 +7,7 @@ export class DatabaseManager {
   private static instance: DatabaseManager;
   private pool: mysql.Pool | null = null;
   private config: DatabaseConfig | null = null;
+  private keepAliveTimer: NodeJS.Timeout | null = null;
 
   private constructor() {}
 
@@ -44,6 +45,9 @@ export class DatabaseManager {
       // 测试连接
       await this.pool.getConnection();
       console.log('✅ 数据库连接成功:', config.name);
+
+      // 启动心跳保活机制（每5分钟检查一次）
+      this.startKeepAlive();
     } catch (error) {
       console.error('❌ 数据库连接失败:', error);
       throw new Error(`数据库连接失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -60,6 +64,44 @@ export class DatabaseManager {
       this.config = null;
       console.log('✅ 数据库连接已断开');
     }
+
+    // 停止心跳保活
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
+  }
+
+  /**
+   * 心跳保活机制
+   */
+  private startKeepAlive(): void {
+    // 清除旧的定时器
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+    }
+
+    // 每5分钟检查一次连接
+    this.keepAliveTimer = setInterval(async () => {
+      try {
+        if (this.pool) {
+          // 执行一个简单的查询来保持连接活跃
+          await this.query('SELECT 1');
+          console.log('[KeepAlive] 数据库连接保活成功');
+        }
+      } catch (error) {
+        console.error('[KeepAlive] 数据库连接保活失败，尝试重新连接:', error);
+
+        // 如果保活失败，尝试重新连接
+        if (this.config) {
+          try {
+            await this.connect(this.config);
+          } catch (reconnectError) {
+            console.error('[KeepAlive] 重新连接失败:', reconnectError);
+          }
+        }
+      }
+    }, 5 * 60 * 1000); // 5分钟
   }
 
   /**
