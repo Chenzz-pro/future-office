@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
+import { hashPassword } from '@/lib/password/password-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,7 +87,7 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
   if (type === 'person') {
     // 创建人员（sys_org_person 就是系统用户表）
     const password = (data.fd_password as string) || '123456';
-    const hashedPassword = Buffer.from(password).toString('base64');
+    const hashedPassword = await hashPassword(password);
 
     await dbManager.query(
       `INSERT INTO sys_org_person (

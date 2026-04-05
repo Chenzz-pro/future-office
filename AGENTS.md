@@ -75,13 +75,20 @@
 - **sys_org_person 表就是系统用户表**
 - 在组织架构添加人员时，直接创建 sys_org_person 记录
 - sys_org_person.fd_id 即为系统的 userId
+- sys_org_person.fd_role 字段标识用户角色（admin/user）
 - 无需单独的 users 表
+
+### 密码管理
+- **密码加密**：使用 bcrypt 加密（盐值轮数 10）
+- **向后兼容**：支持 base64 编码的旧密码验证，登录时会自动提示更新
+- **密码强度**：支持密码强度检查和随机密码生成
 
 ### 用户登录
 - 支持用户名/密码登录：`POST /api/auth/login`
   - 在 sys_org_person 表中通过 fd_login_name 查找
-  - 验证 fd_password 字段
+  - 验证 fd_password 字段（支持 bcrypt 和 base64）
   - 返回 userId（即 fd_id）
+  - 如果密码是 base64 编码，返回 needPasswordUpdate: true
 - 支持钉钉信息登录：通过 `rtx_account` 或 `email` 匹配
 - 登录成功后返回 `userId`（sys_org_person.fd_id）
 - 前端将 `userId` 保存到 localStorage（key: `current-user-id`）
@@ -89,11 +96,20 @@
 ### API 接口
 - `POST /api/auth/login` - 用户登录
 - `GET /api/auth/current` - 获取当前用户信息
+- `POST /api/auth/password/reset` - 重置密码（管理员操作）
+- `PUT /api/auth/password/change` - 修改密码（用户自己操作）
+- `GET /api/auth/password/strength` - 检查密码强度
+- `POST /api/auth/password/generate` - 生成随机密码
 
 ### 用户会话
 - 所有会话 API 请求需要通过 `X-User-ID` 请求头传递用户 ID
 - 前端从 localStorage 读取 `current-user-id`（即 sys_org_person.fd_id）
 - useChatHistory Hook 自动处理用户 ID
+
+### 数据迁移
+- 从 users 表迁移到 sys_org_person：`POST /api/migrate/users-to-sys-org-person`
+- 迁移预览：`GET /api/migrate/users-to-sys-org-person`
+- 迁移时会自动将 base64 密码重新加密为 bcrypt
 
 ## 自定义技能系统
 
@@ -164,6 +180,81 @@ interface CustomSkill {
 - 接口路径: `/api/sys-notify/sysNotifyTodoRestService/getTodo`
 - Content-Type: `application/json`
 - 认证方式: Basic Auth
+
+## 数据库系统
+
+### 概述
+系统支持从 localStorage 迁移到 MySQL 数据库，实现数据持久化和多数据库管理。
+
+### sys_org_person 表（系统用户表）
+sys_org_person 表既是组织架构的人员表，也是系统的用户表。
+
+**关键字段：**
+- `fd_id` - 用户 ID（唯一标识）
+- `fd_login_name` - 登录名
+- `fd_password` - 密码（bcrypt 加密）
+- `fd_role` - 用户角色（admin/user）
+- `fd_is_login_enabled` - 是否允许登录（1=是，0=否）
+
+**角色权限：**
+- `admin` - 管理员，可访问所有功能
+- `user` - 普通用户，只能访问自己的数据和公开数据
+
+### 数据库表结构
+- `users` - 用户表（已废弃，使用 sys_org_person）
+- `api_keys` - API Keys 配置表（系统级配置关联到 admin 用户）
+- `chat_sessions` - 对话会话表
+- `chat_messages` - 对话消息表
+- `custom_skills` - 自定义技能表
+- `ekp_configs` - EKP 配置表（系统级配置关联到 admin 用户）
+- `database_configs` - 数据库配置表
+- `organizations` - 组织架构表
+
+### 数据库迁移
+- **添加 role 字段**：`migrations/add_role_to_sys_org_person.sql`
+- **users 表迁移**：`migrations/migrate_users_to_sys_org_person.sql`
+
+## 密码工具库
+
+### 功能
+密码工具库提供密码加密、验证和强度检查功能，位于 `src/lib/password/password-utils.ts`。
+
+### 主要函数
+
+#### hashPassword
+加密密码：
+```typescript
+const hashedPassword = await hashPassword('plainPassword', 10);
+```
+
+#### verifyPassword
+验证密码（支持 bcrypt 和 base64 向后兼容）：
+```typescript
+const isValid = await verifyPassword('plainPassword', 'hashedPassword');
+```
+
+#### checkPasswordStrength
+检查密码强度：
+```typescript
+const result = checkPasswordStrength('MyPassword123');
+// { valid: true, strength: 'strong', score: 5, errors: [] }
+```
+
+#### generateRandomPassword
+生成随机密码：
+```typescript
+const password = generateRandomPassword(12, {
+  includeNumbers: true,
+  includeSpecialChars: true,
+  includeUppercase: true,
+});
+```
+
+#### needPasswordUpdate
+检查密码是否需要更新（从 base64 迁移到 bcrypt）：
+```typescript
+const needUpdate = needPasswordUpdate(hashedPassword);
+```
 
 ## 数据库系统
 

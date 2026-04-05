@@ -5,6 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
+import {
+  verifyPassword,
+  needPasswordUpdate,
+} from '@/lib/password/password-utils';
 
 /**
  * POST /api/auth/login
@@ -34,9 +38,9 @@ export async function POST(request: NextRequest) {
 
       const person = rows[0];
 
-      // 验证密码
-      const hashedPassword = Buffer.from(password).toString('base64');
-      if (person.fd_password !== hashedPassword) {
+      // 验证密码（支持 bcrypt 和 base64 向后兼容）
+      const isValid = await verifyPassword(password, person.fd_password as string);
+      if (!isValid) {
         return NextResponse.json(
           { success: false, error: '密码错误' },
           { status: 401 }
@@ -45,10 +49,14 @@ export async function POST(request: NextRequest) {
 
       const userId = person.fd_id as string;
 
+      // 检查是否需要更新密码（从 base64 迁移到 bcrypt）
+      const needUpdate = needPasswordUpdate(person.fd_password as string);
+
       console.log('[API:Auth] 登录成功', {
         userId,
         username: person.fd_login_name,
         personName: person.fd_name,
+        needPasswordUpdate: needUpdate,
       });
 
       return NextResponse.json({
@@ -61,6 +69,8 @@ export async function POST(request: NextRequest) {
           mobile: person.fd_mobile as string | null,
           deptId: person.fd_dept_id as string | null,
           rtxAccount: person.fd_rtx_account as string | null,
+          role: (person.fd_role || 'user') as string,
+          needPasswordUpdate, // 提示前端是否需要更新密码
         },
       });
     }

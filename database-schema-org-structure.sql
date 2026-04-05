@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS sys_org_person (
     fd_mobile VARCHAR(50) COMMENT '手机号码',
     fd_office_phone VARCHAR(50) COMMENT '办公电话',
     fd_login_name VARCHAR(100) NOT NULL UNIQUE COMMENT '登录名',
-    fd_password VARCHAR(255) COMMENT '密码',
+    fd_password VARCHAR(255) COMMENT '密码（bcrypt 加密）',
     fd_default_language VARCHAR(50) DEFAULT 'zh-CN' COMMENT '默认语言',
     fd_keyword VARCHAR(200) COMMENT '关键字',
     fd_order INT DEFAULT 0 COMMENT '排序号',
@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS sys_org_person (
     fd_double_validation TINYINT(1) DEFAULT 0 COMMENT '双因子验证：1=启用，0=禁用',
     fd_is_business_related TINYINT(1) DEFAULT 1 COMMENT '是否业务相关：1=是，0=否',
     fd_is_login_enabled TINYINT(1) DEFAULT 1 COMMENT '是否登录系统：1=是，0=否',
+    fd_role ENUM('admin', 'user') DEFAULT 'user' COMMENT '用户角色：admin=管理员，user=普通用户',
     fd_memo TEXT COMMENT '备注',
     fd_create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     fd_alter_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
@@ -77,10 +78,11 @@ CREATE TABLE IF NOT EXISTS sys_org_person (
     INDEX idx_dept_id (fd_dept_id),
     INDEX idx_post_id (fd_post_id),
     INDEX idx_login_name (fd_login_name),
+    INDEX idx_role (fd_role),
     INDEX fd_name (fd_name),
     FOREIGN KEY (fd_dept_id) REFERENCES sys_org_element(fd_id) ON DELETE SET NULL,
     FOREIGN KEY (fd_post_id) REFERENCES sys_org_element(fd_id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人员表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人员表（系统用户表）';
 
 -- 3. 岗位人员关联表 (sys_org_post_person)
 CREATE TABLE IF NOT EXISTS sys_org_post_person (
