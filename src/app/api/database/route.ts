@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
       // 检查关键表是否创建成功
       try {
-        const [rows] = await tempPool.query('SHOW TABLES LIKE "database_configs"');
+        const [rows] = await tempPool.query("SHOW TABLES LIKE 'database_configs'");
         if (!Array.isArray(rows) || rows.length === 0) {
           await tempPool.end();
           return NextResponse.json(
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
 
       // 检查关键表是否创建成功
       try {
-        const [rows] = await tempPool.query('SHOW TABLES LIKE "database_configs"');
+        const [rows] = await tempPool.query("SHOW TABLES LIKE 'database_configs'");
         if (!Array.isArray(rows) || rows.length === 0) {
           await tempPool.end();
           return NextResponse.json(
