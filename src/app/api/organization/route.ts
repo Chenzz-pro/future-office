@@ -81,10 +81,10 @@ export async function GET(request: NextRequest) {
       default:
         return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('组织架构API错误:', error);
     return NextResponse.json(
-      { success: false, error: error.message || '服务器错误' },
+      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
       { status: 500 }
     );
   }
@@ -144,10 +144,10 @@ export async function POST(request: NextRequest) {
       default:
         return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('组织架构API错误:', error);
     return NextResponse.json(
-      { success: false, error: error.message || '服务器错误' },
+      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
       { status: 500 }
     );
   }

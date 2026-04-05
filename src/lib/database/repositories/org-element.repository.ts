@@ -88,7 +88,7 @@ export class OrgElementRepository {
    */
   async update(id: string, dto: Partial<OrgElementDTO>): Promise<void> {
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
 
     if (dto.fd_name !== undefined) {
       fields.push('fd_name = ?');
@@ -198,7 +198,7 @@ export class OrgElementRepository {
    */
   async findList(query: OrgElementQuery = {}): Promise<OrgElement[]> {
     const conditions: string[] = ['1=1'];
-    const values: any[] = [];
+    const values: unknown[] = [];
 
     if (query.fd_org_type !== undefined) {
       conditions.push('e.fd_org_type = ?');
@@ -251,6 +251,7 @@ export class OrgElementRepository {
 
     const result = await dbManager.query(sql, values);
     const rows = result.rows;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return rows.map((row: any) => this.mapRowToEntity(row));
   }
 
@@ -259,7 +260,7 @@ export class OrgElementRepository {
    */
   async getTree(orgType?: OrgElementType, rootId?: string): Promise<OrgTreeNode[]> {
     const conditions: string[] = ['1=1'];
-    const values: any[] = [];
+    const values: unknown[] = [];
 
     if (orgType !== undefined) {
       conditions.push('fd_org_type = ?');
@@ -283,13 +284,14 @@ export class OrgElementRepository {
     `;
 
     const result = await dbManager.query(sql, values);
-    const rows = result.rows as any[];
+    const rows = result.rows;
 
     // 构建树形结构
     const buildTree = (parentId: string | null = null): OrgTreeNode[] => {
       const nodes: OrgTreeNode[] = [];
 
-      for (const row of rows) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const row of rows as any[]) {
         if (
           (parentId === null && row.fd_parentid === null && row.fd_parentorgid === null) ||
           row.fd_parentid === parentId ||
@@ -350,6 +352,7 @@ export class OrgElementRepository {
   /**
    * 将数据库行映射为实体
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapRowToEntity(row: any): OrgElement {
     return {
       fd_id: row.fd_id,
@@ -391,6 +394,7 @@ export class OrgElementRepository {
   /**
    * 将数据库行映射为树节点
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapRowToTreeNode(row: any): OrgTreeNode {
     return {
       id: row.fd_id,

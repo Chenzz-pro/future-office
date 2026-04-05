@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       const lines = sqlScript.split('\n');
       let currentStatement = '';
 
-      for (let line of lines) {
+      for (const line of lines) {
         // 跳过空行和注释行
         const trimmedLine = line.trim();
         if (trimmedLine.startsWith('--') || trimmedLine === '') {
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
       const lines = sqlScript.split('\n');
       let currentStatement = '';
 
-      for (let line of lines) {
+      for (const line of lines) {
         // 跳过空行和注释行
         const trimmedLine = line.trim();
         if (trimmedLine.startsWith('--') || trimmedLine === '') {
@@ -451,7 +451,7 @@ export async function POST(request: NextRequest) {
       const lines = sqlScript.split('\n');
       let currentStatement = '';
 
-      for (let line of lines) {
+      for (const line of lines) {
         // 跳过空行和注释行
         const trimmedLine = line.trim();
         if (trimmedLine.startsWith('--') || trimmedLine === '') {

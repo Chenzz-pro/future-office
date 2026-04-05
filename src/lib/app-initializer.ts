@@ -10,6 +10,7 @@ import { dbManager, databaseConfigRepository } from '@/lib/database';
 import mysql from 'mysql2/promise';
 import * as fs from 'fs';
 import * as path from 'path';
+import { DatabaseConfig } from '@/lib/database';
 
 // 配置文件路径（用于存储数据库连接信息）
 const CONFIG_FILE_PATH = path.join(process.cwd(), '.db-config.json');
@@ -84,7 +85,7 @@ export async function initializeApp() {
 
         // 尝试同步配置到 database_configs 表
         try {
-          await databaseConfigRepository.create(config as any);
+          await databaseConfigRepository.create(config);
           console.log('[Initialize] ✅ 数据库配置已同步到表');
         } catch (err) {
           console.log('[Initialize] ℹ️ 数据库配置已存在，跳过同步');
@@ -124,7 +125,7 @@ export async function initializeApp() {
 
         // 尝试同步配置到 database_configs 表
         try {
-          await databaseConfigRepository.create(fileConfig as any);
+          await databaseConfigRepository.create(fileConfig);
         } catch (err) {
           // 配置可能已存在，忽略错误
         }
@@ -149,7 +150,7 @@ export async function initializeApp() {
 /**
  * 保存配置到文件
  */
-function saveConfigToFile(config: any) {
+function saveConfigToFile(config: DatabaseConfig) {
   try {
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2));
   } catch (err) {
@@ -160,11 +161,11 @@ function saveConfigToFile(config: any) {
 /**
  * 从配置文件加载配置
  */
-function loadConfigFromFile(): any | null {
+function loadConfigFromFile(): DatabaseConfig | null {
   try {
     if (fs.existsSync(CONFIG_FILE_PATH)) {
       const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
-      return JSON.parse(data);
+      return JSON.parse(data) as DatabaseConfig;
     }
   } catch (err) {
     console.error('[Initialize] ❌ 读取配置文件失败:', err);
