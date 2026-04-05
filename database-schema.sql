@@ -154,11 +154,6 @@ CREATE TABLE IF NOT EXISTS organizations (
 -- 9. 预置数据
 -- ============================================================
 
--- 插入系统用户（用于管理员后台 API Key 等系统级配置）
-INSERT INTO users (id, username, password, email, role) VALUES
-('00000000-0000-0000-0000-000000000000', 'system', 'system', 'system@system.local', 'admin')
-ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP;
-
 -- 插入默认管理员账号
 INSERT INTO users (id, username, password, email, role) VALUES
 ('1', 'admin', 'admin123', 'admin@example.com', 'admin'),
