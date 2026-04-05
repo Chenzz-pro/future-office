@@ -424,17 +424,36 @@ export async function POST(request: NextRequest) {
         'utf-8'
       );
 
-      const statements = sqlScript
-        .split(';')
-        .map((s: string) => s.trim())
-        .filter((s: string) => s && !s.startsWith('--'));
+      // 使用和 init/recreate 一样的解析逻辑
+      const statements: string[] = [];
+      const lines = sqlScript.split('\n');
+      let currentStatement = '';
+
+      for (let line of lines) {
+        // 跳过空行和注释行
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('--') || trimmedLine === '') {
+          continue;
+        }
+
+        currentStatement += line + '\n';
+
+        // 如果行以分号结尾，说明语句结束
+        if (trimmedLine.endsWith(';')) {
+          statements.push(currentStatement.trim());
+          currentStatement = '';
+        }
+      }
+
+      console.log(`[add] 解析出 ${statements.length} 条 SQL 语句用于表初始化`);
 
       for (const statement of statements) {
         try {
           await dbManager.query(statement);
+          console.log(`[add] SQL 执行成功: ${statement.substring(0, 60)}...`);
         } catch (err) {
           // 忽略已存在的表错误
-          console.warn('执行SQL失败（可能是已存在）:', err);
+          console.warn('[add] 执行SQL失败（可能是已存在）:', err);
         }
       }
 
@@ -451,21 +470,11 @@ export async function POST(request: NextRequest) {
         isDefault: true,
       });
 
-      // 5. 重新连接，使用正确的 ID
-      await dbManager.connect({
-        id: configId,
-        name: config.name,
-        type: 'mysql',
-        host: config.host,
-        port: config.port || 3306,
-        databaseName: config.databaseName,
-        username: config.username,
-        password: config.password || '',
-        isActive: true,
-        isDefault: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      // 5. 更新 dbManager 的配置 ID
+      const currentConfig = dbManager.getConfig();
+      if (currentConfig) {
+        currentConfig.id = configId;
+      }
 
       return NextResponse.json({
         success: true,
