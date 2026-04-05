@@ -172,6 +172,12 @@ export default function OrganizationStructurePage() {
 
   // 保存数据
   const handleSave = async (data: Record<string, unknown>) => {
+    console.log('[handleSave] 开始保存', {
+      action: dialogMode === 'create' ? 'create' : 'update',
+      type: currentView,
+      data,
+    });
+
     try {
       const response = await fetch('/api/organization', {
         method: 'POST',
@@ -183,7 +189,11 @@ export default function OrganizationStructurePage() {
         }),
       });
 
+      console.log('[handleSave] 响应状态:', response.status);
+
       const result = await response.json();
+      console.log('[handleSave] 响应数据:', result);
+
       if (!result.success) {
         throw new Error(result.error || '保存失败');
       }
@@ -192,7 +202,7 @@ export default function OrganizationStructurePage() {
       await loadTreeData();
       await loadListData();
     } catch (error) {
-      console.error('保存失败:', error);
+      console.error('[handleSave] 保存失败:', error);
       throw error;
     }
   };

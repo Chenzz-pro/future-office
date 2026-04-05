@@ -60,6 +60,13 @@ export function OrgElementDialog({
     e.preventDefault();
     setLoading(true);
     try {
+      console.log('[OrgElementDialog] 开始保存数据', {
+        mode,
+        viewType,
+        formData,
+        parentId,
+      });
+
       await onSave({
         ...formData,
         ...(parentId && { fd_parentid: parentId }),
@@ -67,10 +74,13 @@ export function OrgElementDialog({
           fd_org_type: viewType === 'organization' ? 1 : viewType === 'department' ? 2 : 3,
         }),
       });
+
+      console.log('[OrgElementDialog] 保存成功');
       onClose();
     } catch (error) {
-      console.error('保存失败:', error);
-      alert('保存失败，请重试');
+      console.error('[OrgElementDialog] 保存失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      alert(`保存失败：${errorMessage}\n\n请检查数据库连接是否正常`);
     } finally {
       setLoading(false);
     }

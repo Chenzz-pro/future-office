@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
   try {
     const { action, type, data, id } = await request.json();
 
+    console.log('[API:Organization] 收到请求', { action, type, data, id });
+
     if (!action) {
       return NextResponse.json({ success: false, error: '缺少操作类型' }, { status: 400 });
     }
@@ -24,9 +26,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '无效的操作类型' }, { status: 400 });
     }
   } catch (error: unknown) {
-    console.error('组织架构操作错误:', error);
+    console.error('[API:Organization] 操作错误:', error);
+    const errorMessage = error instanceof Error ? error.message : '服务器错误';
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -61,6 +64,8 @@ export async function GET(request: NextRequest) {
 
 // 创建组织元素
 async function createOrgElement(type: string, data: Record<string, unknown>) {
+  console.log('[createOrgElement] 开始创建', { type, data });
+
   const id = crypto.randomUUID();
 
   let tableName = 'sys_org_element';
@@ -75,6 +80,8 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
   } else if (type === 'person') {
     tableName = 'sys_org_person';
   }
+
+  console.log('[createOrgElement] 表名和类型', { tableName, orgType });
 
   if (type === 'person') {
     // 创建人员
@@ -93,6 +100,7 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
         data.fd_order || 0,
       ]
     );
+    console.log('[createOrgElement] 人员创建成功', { id });
   } else {
     // 创建组织元素
     await dbManager.query(
@@ -110,6 +118,7 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
         data.fd_parentid || null,
       ]
     );
+    console.log('[createOrgElement] 组织元素创建成功', { id, orgType });
   }
 
   return NextResponse.json({ success: true, data: { id } });
