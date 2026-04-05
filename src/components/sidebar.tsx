@@ -45,7 +45,7 @@ const menuItems = [
 export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, onSelectSession }: SidebarProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<{ username: string; role: string } | null>(null);
   const router = useRouter();
   const { sessions, getRecentSessions } = useChatHistory();
 
