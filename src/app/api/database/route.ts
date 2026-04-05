@@ -4,6 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import mysql from 'mysql2/promise';
 
+// 缓存最后激活的配置，用于页面刷新后自动重新连接
+let lastActiveConfig: import('@/lib/database').DatabaseConfig | null = null;
+
 /**
  * POST /api/database?action=init
  * 初始化数据库表结构
@@ -315,6 +318,22 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       } as unknown as import('@/lib/database').DatabaseConfig);
 
+      // 缓存配置，用于页面刷新后自动重新连接
+      lastActiveConfig = {
+        id: configId,
+        name: '默认配置',
+        type: 'mysql',
+        host,
+        port: port || 3306,
+        databaseName,
+        username,
+        password,
+        isActive: true,
+        isDefault: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
       return NextResponse.json({
         success: true,
         message: '数据库重新创建成功',
@@ -358,6 +377,9 @@ export async function POST(request: NextRequest) {
 
       await dbManager.connect(config);
       await databaseConfigRepository.setActive(configId);
+
+      // 缓存配置，用于页面刷新后自动重新连接
+      lastActiveConfig = config;
 
       return NextResponse.json({
         success: true,
@@ -476,6 +498,22 @@ export async function POST(request: NextRequest) {
         currentConfig.id = configId;
       }
 
+      // 缓存配置，用于页面刷新后自动重新连接
+      lastActiveConfig = {
+        id: configId,
+        name: config.name,
+        type: 'mysql',
+        host: config.host,
+        port: config.port || 3306,
+        databaseName: config.databaseName,
+        username: config.username,
+        password: config.password || '',
+        isActive: true,
+        isDefault: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
       return NextResponse.json({
         success: true,
         message: '数据库配置添加成功并已连接',
@@ -513,6 +551,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET() {
   try {
+    // 尝试从数据库读取配置
     const configs = await databaseConfigRepository.findAll();
     const isConnected = dbManager.isConnected();
     const currentConfig = dbManager.getConfig();
@@ -527,6 +566,58 @@ export async function GET() {
     });
   } catch (error) {
     console.error('获取数据库配置失败:', error);
+
+    // 如果错误是因为数据库未连接，尝试使用缓存的配置自动重新连接
+    if (error instanceof Error && error.message === '数据库未连接' && lastActiveConfig) {
+      console.log('[GET] 数据库未连接，尝试使用缓存的配置自动重新连接...');
+
+      try {
+        // 使用临时连接池测试连接
+        const testPool = mysql.createPool({
+          host: lastActiveConfig.host,
+          port: lastActiveConfig.port,
+          user: lastActiveConfig.username,
+          password: lastActiveConfig.password,
+          database: lastActiveConfig.databaseName,
+          waitForConnections: true,
+          connectionLimit: 1,
+        });
+
+        await testPool.getConnection();
+        await testPool.end();
+
+        // 连接成功，使用 dbManager 连接
+        await dbManager.connect(lastActiveConfig);
+
+        // 重新读取配置列表
+        const configs = await databaseConfigRepository.findAll();
+        const isConnected = dbManager.isConnected();
+        const currentConfig = dbManager.getConfig();
+
+        console.log('[GET] 自动重新连接成功');
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            configs,
+            isConnected,
+            currentConfig,
+          },
+        });
+      } catch (connectError) {
+        console.error('[GET] 自动重新连接失败:', connectError);
+        // 连接失败，返回未连接状态
+        return NextResponse.json({
+          success: true,
+          data: {
+            configs: [],
+            isConnected: false,
+            currentConfig: null,
+          },
+        });
+      }
+    }
+
     return NextResponse.json(
       {
         success: false,
