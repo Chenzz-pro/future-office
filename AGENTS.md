@@ -151,14 +151,33 @@ interface CustomSkill {
 - **Repository 层** - 统一的数据访问层，提供 CRUD 操作
 
 ### 数据库表结构
-- `users` - 用户表
-- `api_keys` - API Keys 配置表
+- `users` - 用户表（包含预置用户：admin、user、system）
+- `api_keys` - API Keys 配置表（系统级配置关联到 system 用户）
 - `chat_sessions` - 对话会话表
 - `chat_messages` - 对话消息表
 - `custom_skills` - 自定义技能表
-- `ekp_configs` - EKP 配置表
+- `ekp_configs` - EKP 配置表（系统级配置关联到 system 用户）
 - `database_configs` - 数据库配置表
 - `organizations` - 组织架构表
+
+### System 用户
+
+**用途**：管理员后台创建的系统级配置（API Keys、EKP 配置等）关联到 system 用户。
+
+**用户信息**：
+- ID: `00000000-0000-0000-0000-000000000000`
+- 用户名: `system`
+- 角色: `admin`
+
+**外键约束**：
+- `api_keys.user_id` → `users.id`
+- `ekp_configs.user_id` → `users.id`
+- 所有系统级配置必须关联到有效用户
+
+**注意事项**：
+- 禁止手动删除 system 用户
+- 禁止修改 system 用户 ID
+- 新增系统级配置时自动使用 system 用户
 
 ### API 接口
 - `GET /api/database` - 获取数据库配置列表和状态

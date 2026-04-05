@@ -46,6 +46,9 @@ export class DatabaseManager {
       await this.pool.getConnection();
       console.log('✅ 数据库连接成功:', config.name);
 
+      // 自动迁移：修复旧的 system user ID
+      await this.migrateSystemUserId();
+
       // 启动心跳保活机制（每5分钟检查一次）
       this.startKeepAlive();
     } catch (error) {
@@ -167,6 +170,70 @@ export class DatabaseManager {
    */
   public isConnected(): boolean {
     return this.pool !== null;
+  }
+
+  /**
+   * 自动迁移：修复旧的 system user ID
+   * 将所有 user_id = 'system' 的记录更新为正确的 UUID
+   */
+  private async migrateSystemUserId(): Promise<void> {
+    try {
+      const OLD_USER_ID = 'system';
+      const NEW_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+      // 检查是否需要迁移
+      const checkResult = await this.query(
+        `SELECT COUNT(*) as count FROM api_keys WHERE user_id = ?`,
+        [OLD_USER_ID]
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const count = (checkResult.rows[0] as any).count;
+
+      if (count > 0) {
+        console.log(`[Migration] 发现 ${count} 条旧数据需要迁移...`);
+
+        // 更新 api_keys 表
+        await this.query(
+          `UPDATE api_keys SET user_id = ? WHERE user_id = ?`,
+          [NEW_USER_ID, OLD_USER_ID]
+        );
+        console.log('[Migration] api_keys 表迁移完成');
+
+        // 更新 ekp_configs 表
+        await this.query(
+          `UPDATE ekp_configs SET user_id = ? WHERE user_id = ?`,
+          [NEW_USER_ID, OLD_USER_ID]
+        );
+        console.log('[Migration] ekp_configs 表迁移完成');
+
+        // 更新其他表（如果有）
+        try {
+          await this.query(
+            `UPDATE chat_sessions SET user_id = ? WHERE user_id = ?`,
+            [NEW_USER_ID, OLD_USER_ID]
+          );
+          console.log('[Migration] chat_sessions 表迁移完成');
+        } catch (error) {
+          // 表可能不存在，忽略错误
+        }
+
+        try {
+          await this.query(
+            `UPDATE custom_skills SET user_id = ? WHERE user_id = ?`,
+            [NEW_USER_ID, OLD_USER_ID]
+          );
+          console.log('[Migration] custom_skills 表迁移完成');
+        } catch (error) {
+          // 表可能不存在，忽略错误
+        }
+
+        console.log('[Migration] ✅ 所有数据迁移完成');
+      }
+    } catch (error) {
+      // 迁移失败不影响正常使用，只记录日志
+      console.error('[Migration] 数据迁移失败:', error);
+    }
   }
 }
 

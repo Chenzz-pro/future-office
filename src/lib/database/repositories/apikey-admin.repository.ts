@@ -22,6 +22,9 @@ export class ApiKeyRepository {
     const id = crypto.randomUUID();
     const now = new Date();
 
+    // system user ID
+    const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+
     const query = `
       INSERT INTO api_keys (id, user_id, name, provider, api_key, base_url, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -29,7 +32,7 @@ export class ApiKeyRepository {
 
     await dbManager.query(query, [
       id,
-      data.userId || 'system',
+      data.userId || SYSTEM_USER_ID,
       data.name,
       data.provider,
       data.apiKey,

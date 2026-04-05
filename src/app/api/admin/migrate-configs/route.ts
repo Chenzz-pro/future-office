@@ -3,6 +3,9 @@ import { dbManager } from '@/lib/database/manager';
 import { ApiKeyRepository } from '@/lib/database/repositories/apikey-admin.repository';
 import { EKPConfigRepository } from '@/lib/database/repositories/ekpconfig-admin.repository';
 
+// System User ID - 用于管理员后台创建的系统级配置
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+
 interface MigrateResult {
   apiKeys: { success: number; failed: number };
   ekpConfig: { success: boolean; message: string };
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
             provider: key.provider,
             baseUrl: key.baseUrl,
             isActive: key.isActive !== false,
-            userId: 'system',
+            userId: SYSTEM_USER_ID,
           });
           results.apiKeys.success++;
         } catch (error) {
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest) {
           leaveTemplateId: ekpConfig.leaveTemplateId || '',
           expenseTemplateId: ekpConfig.expenseTemplateId || '',
           enabled: ekpConfig.enabled || false,
-          userId: 'system',
+          userId: SYSTEM_USER_ID,
         });
         results.ekpConfig.success = true;
         results.ekpConfig.message = 'EKP 配置迁移成功';
