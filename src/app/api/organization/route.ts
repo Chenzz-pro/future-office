@@ -85,10 +85,13 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
 
   if (type === 'person') {
     // 创建人员
+    const password = (data.fd_password as string) || '123456';
+    const hashedPassword = Buffer.from(password).toString('base64');
+
     await dbManager.query(
       `INSERT INTO sys_org_person (
-        fd_id, fd_name, fd_no, fd_email, fd_mobile, fd_login_name, fd_memo, fd_order
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        fd_id, fd_name, fd_no, fd_email, fd_mobile, fd_login_name, fd_memo, fd_order, fd_password
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.fd_name,
@@ -98,9 +101,30 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
         data.fd_login_name,
         data.fd_memo || '',
         data.fd_order || 0,
+        hashedPassword,
       ]
     );
-    console.log('[createOrgElement] 人员创建成功', { id });
+
+    // 同时创建 users 表记录
+    const userId = crypto.randomUUID();
+    await dbManager.query(
+      `INSERT INTO users (
+        id, username, password, person_id, email, role, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        data.fd_login_name,
+        hashedPassword,
+        id,
+        data.fd_email || '',
+        'user',
+        'active',
+        new Date(),
+        new Date(),
+      ]
+    );
+
+    console.log('[createOrgElement] 人员创建成功，用户记录已同步', { id, userId });
   } else {
     // 创建组织元素
     await dbManager.query(
@@ -186,6 +210,10 @@ async function deleteOrgElement(type: string, id: string) {
 
   if (type === 'person') {
     tableName = 'sys_org_person';
+
+    // 先删除对应的 users 表记录
+    await dbManager.query(`DELETE FROM users WHERE person_id = ?`, [id]);
+    console.log('[deleteOrgElement] 用户记录已删除', { id });
   }
 
   await dbManager.query(`DELETE FROM ${tableName} WHERE fd_id = ?`, [id]);

@@ -21,7 +21,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
-  const [userType, setUserType] = useState<'user' | 'admin'>('user');
   const router = useRouter();
 
   useEffect(() => {
@@ -44,47 +43,50 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // 模拟登录验证（实际应该调用后端 API）
-      const users = localStorage.getItem('users');
-      let validUsers = [];
+      // 调用登录 API
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+        }),
+      });
 
-      if (users) {
-        validUsers = JSON.parse(users);
-      } else {
-        // 初始化默认用户
-        validUsers = [
-          { id: '1', username: 'admin', password: 'admin123', role: 'admin', email: 'admin@example.com', createdAt: new Date().toISOString() },
-          { id: '2', username: 'user', password: 'user123', role: 'user', email: 'user@example.com', createdAt: new Date().toISOString() },
-        ];
-        localStorage.setItem('users', JSON.stringify(validUsers));
-      }
+      const result = await response.json();
 
-      const user = validUsers.find((u: { username: string; password: string; role: string; id: string; email: string }) => u.username === formData.username && u.password === formData.password);
-
-      if (!user) {
-        setError('用户名或密码错误');
+      if (!result.success) {
+        setError(result.error || '登录失败');
         setLoading(false);
         return;
       }
 
       // 登录成功，保存用户信息
       const currentUser = {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        email: user.email,
+        userId: result.data.userId,
+        username: result.data.username,
+        personId: result.data.personId,
+        personName: result.data.personName,
+        email: result.data.email,
+        role: result.data.role,
+        status: result.data.status,
         loginTime: new Date().toISOString(),
       };
 
+      // 保存到 localStorage
+      localStorage.setItem('current-user-id', result.data.userId);
       localStorage.setItem('currentUser', JSON.stringify(currentUser));
 
+      console.log('[Login] 登录成功', currentUser);
+
       // 跳转到对应页面
-      if (user.role === 'admin') {
+      if (result.data.role === 'admin') {
         router.push('/admin/overview');
       } else {
         router.push('/');
       }
     } catch (err) {
+      console.error('[Login] 登录错误:', err);
       setError('登录失败，请稍后重试');
     } finally {
       setLoading(false);
@@ -95,90 +97,70 @@ export default function LoginPage() {
     return null;
   }
 
-  const isAdmin = userType === 'admin';
-  const title = isAdmin ? '管理员登录' : '未来办公系统';
-  const description = isAdmin ? '登录到系统管理后台' : '登录到未来办公 AI 协作平台';
-  const testAccounts = '普通用户：user / user123\n管理员：admin / admin123';
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
       <Card className="w-full max-w-md shadow-xl">
-        <CardHeader className="space-y-3">
-          <div className="flex justify-center mb-2">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
-              isAdmin
-                ? 'bg-gradient-to-br from-blue-600 to-indigo-700'
-                : 'bg-gradient-to-br from-blue-500 to-purple-600'
-            }`}>
-              {isAdmin ? (
-                <Shield className="w-8 h-8 text-white" />
-              ) : (
-                <Shield className="w-8 h-8 text-white" />
-              )}
+        <CardHeader className="space-y-1 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <Shield className="w-8 h-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-center font-bold">
-            {title}
-          </CardTitle>
-          <CardDescription className="text-center text-base">
-            {description}
-          </CardDescription>
+          <CardTitle className="text-2xl font-bold">未来办公系统</CardTitle>
+          <CardDescription>登录到未来办公 AI 协作平台</CardDescription>
         </CardHeader>
 
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{error}</span>
+              <div className="flex items-center gap-2 p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4" />
+                {error}
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-sm font-medium">用户名</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder={isAdmin ? "请输入管理员用户名" : "请输入用户名"}
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="pl-10 h-11"
-                  required
-                />
-              </div>
+              <Label htmlFor="username" className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                用户名
+              </Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="请输入用户名"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                required
+                disabled={loading}
+                className="h-11"
+              />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">密码</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="请输入密码"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-10 h-11"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
-              <p className="font-medium mb-1">测试账号：</p>
-              <p className="whitespace-pre-line">{testAccounts}</p>
+              <Label htmlFor="password" className="flex items-center gap-2">
+                <Lock className="h-4 w-4" />
+                密码
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="请输入密码"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+                disabled={loading}
+                className="h-11"
+              />
             </div>
           </CardContent>
 
           <CardFooter>
             <Button
               type="submit"
-              className="w-full h-11 text-base"
+              className="w-full h-11 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium shadow-lg"
               disabled={loading}
             >
-              {loading ? '登录中...' : '登录'}
+              {loading ? '登录中...' : '登 录'}
             </Button>
           </CardFooter>
         </form>
