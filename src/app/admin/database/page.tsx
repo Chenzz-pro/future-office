@@ -175,6 +175,37 @@ export default function DatabaseConfigPage() {
     }
   };
 
+  const handleRecreateDatabase = async () => {
+    if (!confirm('警告：这将删除并重新创建数据库，所有数据将丢失！确定要继续吗？')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/database?action=recreate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(initForm),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert('数据库重新创建成功！');
+        setShowInitDialog(false);
+        handleLoadStatus();
+      } else {
+        let errorMessage = '重新创建失败: ' + data.error;
+        if (data.failedStatements && data.failedStatements.length > 0) {
+          errorMessage += '\n\n失败的SQL语句：\n' +
+            data.failedStatements.map((fs: any, i: number) =>
+              `${i + 1}. ${fs.error}\n   ${fs.sql.substring(0, 80)}...`
+            ).join('\n\n');
+        }
+        alert(errorMessage);
+      }
+    } catch (error) {
+      alert('重新创建失败: ' + error);
+    }
+  };
+
   const handleAddConfig = async () => {
     try {
       const res = await fetch('/api/database?action=add', {
@@ -554,6 +585,9 @@ export default function DatabaseConfigPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowInitDialog(false)}>
               取消
+            </Button>
+            <Button variant="destructive" onClick={handleRecreateDatabase}>
+              重新创建
             </Button>
             <Button onClick={handleInitDatabase}>初始化</Button>
           </DialogFooter>
