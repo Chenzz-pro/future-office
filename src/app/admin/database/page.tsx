@@ -623,13 +623,17 @@ export default function DatabaseConfigPage() {
               {testing ? '测试中...' : '测试连接'}
             </Button>
             {testResult && (
-              <Alert className={testResult.success ? 'border-green-500' : 'border-red-500'}>
-                {testResult.success ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <X className="h-4 w-4 text-red-500" />
-                )}
-                <AlertDescription>{testResult.message}</AlertDescription>
+              <Alert className={testResult.success ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}>
+                <div className="flex items-center gap-2">
+                  {testResult.success ? (
+                    <Check className="h-4 w-4 text-green-600 shrink-0" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-600 shrink-0" />
+                  )}
+                  <AlertDescription className={testResult.success ? 'text-green-700' : 'text-red-700'}>
+                    {testResult.message}
+                  </AlertDescription>
+                </div>
               </Alert>
             )}
           </div>
@@ -685,14 +689,18 @@ export default function DatabaseConfigPage() {
           ) : (
             <div className="space-y-4 py-4">
               {migrationResult.success ? (
-                <Alert className="border-green-500">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <AlertDescription>{migrationResult.message}</AlertDescription>
+                <Alert className="border-green-500 bg-green-50">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-600 shrink-0" />
+                    <AlertDescription className="text-green-700">{migrationResult.message}</AlertDescription>
+                  </div>
                 </Alert>
               ) : (
-                <Alert className="border-red-500">
-                  <X className="h-4 w-4 text-red-500" />
-                  <AlertDescription>{migrationResult.error}</AlertDescription>
+                <Alert className="border-red-500 bg-red-50">
+                  <div className="flex items-center gap-2">
+                    <X className="h-4 w-4 text-red-600 shrink-0" />
+                    <AlertDescription className="text-red-700">{migrationResult.error}</AlertDescription>
+                  </div>
                 </Alert>
               )}
               {migrationResult.details && (
