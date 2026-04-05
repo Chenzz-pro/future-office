@@ -49,15 +49,30 @@ export async function POST(request: NextRequest) {
       await tempPool.query(`USE \`${databaseName}\``);
 
       // 执行表创建脚本（逐条执行）
-      const statements = sqlScript
-        .split(';')
-        .map((s: string) => s.trim())
-        .filter((s: string) => s && !s.startsWith('--'));
+      const statements: string[] = [];
+      const lines = sqlScript.split('\n');
+      let currentStatement = '';
+
+      for (let line of lines) {
+        // 跳过空行和注释行
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('--') || trimmedLine === '') {
+          continue;
+        }
+
+        currentStatement += line + '\n';
+
+        // 如果行以分号结尾，说明语句结束
+        if (trimmedLine.endsWith(';')) {
+          statements.push(currentStatement.trim());
+          currentStatement = '';
+        }
+      }
 
       const failedStatements: { sql: string; error: string }[] = [];
       const successCount: { sql: string }[] = [];
 
-      console.log(`[init] 开始执行 ${statements.length} 条 SQL 语句`);
+      console.log(`[init] 解析出 ${statements.length} 条 SQL 语句`);
 
       for (const statement of statements) {
         if (!statement) continue;
@@ -80,7 +95,13 @@ export async function POST(request: NextRequest) {
         console.log('[init] 检查 database_configs 表是否存在...');
         const [rows] = await tempPool.query("SHOW TABLES LIKE 'database_configs'");
         console.log('[init] SHOW TABLES 结果:', JSON.stringify(rows));
-        if (!Array.isArray(rows) || rows.length === 0) {
+        // 检查返回的行中是否包含 database_configs
+        // MySQL 5.7 返回格式: { "Tables_in_db (table_name)": "table_name" }
+        // 所以检查第一个对象的第一个值
+        const tableExists = Array.isArray(rows) && rows.length > 0 &&
+          Object.values(rows[0])[0] === 'database_configs';
+
+        if (!tableExists) {
           await tempPool.end();
           console.error('[init] database_configs 表不存在');
           return NextResponse.json(
@@ -186,12 +207,29 @@ export async function POST(request: NextRequest) {
       await tempPool.query(`USE \`${databaseName}\``);
 
       // 执行表创建脚本（逐条执行）
-      const statements = sqlScript
-        .split(';')
-        .map((s: string) => s.trim())
-        .filter((s: string) => s && !s.startsWith('--'));
+      const statements: string[] = [];
+      const lines = sqlScript.split('\n');
+      let currentStatement = '';
+
+      for (let line of lines) {
+        // 跳过空行和注释行
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('--') || trimmedLine === '') {
+          continue;
+        }
+
+        currentStatement += line + '\n';
+
+        // 如果行以分号结尾，说明语句结束
+        if (trimmedLine.endsWith(';')) {
+          statements.push(currentStatement.trim());
+          currentStatement = '';
+        }
+      }
 
       const failedStatements: { sql: string; error: string }[] = [];
+
+      console.log(`[recreate] 解析出 ${statements.length} 条 SQL 语句`);
 
       for (const statement of statements) {
         if (!statement) continue;
@@ -211,7 +249,13 @@ export async function POST(request: NextRequest) {
         console.log('[recreate] 检查 database_configs 表是否存在...');
         const [rows] = await tempPool.query("SHOW TABLES LIKE 'database_configs'");
         console.log('[recreate] SHOW TABLES 结果:', JSON.stringify(rows));
-        if (!Array.isArray(rows) || rows.length === 0) {
+        // 检查返回的行中是否包含 database_configs
+        // MySQL 5.7 返回格式: { "Tables_in_db (table_name)": "table_name" }
+        // 所以检查第一个对象的第一个值
+        const tableExists = Array.isArray(rows) && rows.length > 0 &&
+          Object.values(rows[0])[0] === 'database_configs';
+
+        if (!tableExists) {
           await tempPool.end();
           console.error('[recreate] database_configs 表不存在');
           return NextResponse.json(
