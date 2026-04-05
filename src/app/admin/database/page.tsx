@@ -161,7 +161,14 @@ export default function DatabaseConfigPage() {
         setShowInitDialog(false);
         handleLoadStatus();
       } else {
-        alert('初始化失败: ' + data.error);
+        let errorMessage = '初始化失败: ' + data.error;
+        if (data.failedStatements && data.failedStatements.length > 0) {
+          errorMessage += '\n\n失败的SQL语句：\n' +
+            data.failedStatements.map((fs: any, i: number) =>
+              `${i + 1}. ${fs.error}\n   ${fs.sql.substring(0, 80)}...`
+            ).join('\n\n');
+        }
+        alert(errorMessage);
       }
     } catch (error) {
       alert('初始化失败: ' + error);
