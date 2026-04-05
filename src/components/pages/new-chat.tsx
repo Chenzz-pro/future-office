@@ -189,15 +189,9 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    if (!dbConnected) {
-      setError('数据库未连接，请稍后重试或联系管理员检查数据库配置');
-      return;
-    }
-
-    if (!activeKey) {
-      setError('API Key 未配置，请联系管理员配置 AI 模型 API Key');
-      return;
-    }
+    console.log('[sendMessage] 开始发送消息');
+    console.log('[sendMessage] dbConnected:', dbConnected);
+    console.log('[sendMessage] activeKey:', activeKey ? '已配置' : '未配置');
 
     // 如果没有当前会话，创建一个
     let session = currentSession;
