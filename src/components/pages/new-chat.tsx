@@ -90,8 +90,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('currentUser') || '{}') : null;
   const userId = currentUser?.id;
 
-  // 使用配置钩子（优先级：用户配置 > 全局配置）
-  const { config: activeKey, source: configSource, loading: configLoading, refetch: refetchConfig } = useLLMConfig(userId);
+  // 使用配置钩子（仅全局配置）
+  const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
 
   // 设置默认模型
   useEffect(() => {
@@ -169,7 +169,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     if (!activeKey) {
       setError('请先配置 API 密钥');
-      setShowSettings(true);
       return;
     }
 
@@ -454,14 +453,14 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       {/* 配置来源提示 */}
       <div className="border-b border-border bg-muted/30 px-4 py-1 text-xs text-muted-foreground flex items-center justify-between">
         <span>
-          配置来源: {configSource === 'global' ? '🌐 全局配置' : '👤 个人配置'}
-          {configSource === 'global' && activeKey.name && ` (${activeKey.name})`}
+          {configSource === 'global' ? `🌐 全局配置${activeKey?.name ? ` (${activeKey.name})` : ''}` : '⚠️ 未配置，请联系管理员配置'}
         </span>
         <button
           onClick={() => setShowSettings(true)}
           className="hover:text-foreground transition-colors"
         >
           <Settings className="w-3 h-3" />
+          <span>配置详情</span>
         </button>
       </div>
 
