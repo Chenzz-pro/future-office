@@ -75,6 +75,19 @@ export class EKPConfigRepository {
     return rows.map(row => this.parseConfig(row));
   }
 
+  async findByUserId(userId: string): Promise<EKPConfig | null> {
+    const query = `
+      SELECT id, user_id as userId, ekp_address as baseUrl, username, password, config, created_at as createdAt, updated_at as updatedAt
+      FROM ekp_configs
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    const { rows } = await dbManager.query<EKPConfigRow>(query, [userId]);
+    return rows.length > 0 ? this.parseConfig(rows[0]) : null;
+  }
+
   async findById(id: string): Promise<EKPConfig | null> {
     const query = `
       SELECT id, user_id as userId, ekp_address as baseUrl, username, password, config, created_at as createdAt, updated_at as updatedAt

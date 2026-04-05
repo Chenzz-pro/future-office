@@ -53,6 +53,18 @@ export class ApiKeyRepository {
     return rows;
   }
 
+  async findByUserId(userId: string): Promise<ApiKey[]> {
+    const query = `
+      SELECT id, user_id as userId, name, provider, api_key as apiKey, base_url as baseUrl, is_active as isActive, created_at as createdAt, updated_at as updatedAt
+      FROM api_keys
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `;
+
+    const { rows } = await dbManager.query<ApiKey>(query, [userId]);
+    return rows;
+  }
+
   async findById(id: string): Promise<ApiKey | null> {
     const query = `
       SELECT id, user_id as userId, name, provider, api_key as apiKey, base_url as baseUrl, is_active as isActive, created_at as createdAt, updated_at as updatedAt
