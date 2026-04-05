@@ -54,12 +54,43 @@ export async function POST(request: NextRequest) {
         .map((s: string) => s.trim())
         .filter((s: string) => s && !s.startsWith('--'));
 
+      const failedStatements: { sql: string; error: string }[] = [];
+
       for (const statement of statements) {
+        if (!statement) continue;
         try {
           await tempPool.query(statement);
         } catch (err) {
-          console.warn('执行SQL失败（可能是已存在）:', err);
+          const error = err instanceof Error ? err.message : String(err);
+          console.warn('执行SQL失败:', error);
+          console.warn('SQL:', statement.substring(0, 100));
+          failedStatements.push({ sql: statement, error });
         }
+      }
+
+      // 检查关键表是否创建成功
+      try {
+        const [rows] = await tempPool.query('SHOW TABLES LIKE "database_configs"');
+        if (!Array.isArray(rows) || rows.length === 0) {
+          await tempPool.end();
+          return NextResponse.json(
+            {
+              success: false,
+              error: '关键表 database_configs 创建失败，请检查日志或权限',
+              failedStatements: failedStatements.slice(0, 3), // 只返回前3个错误
+            },
+            { status: 500 }
+          );
+        }
+      } catch (err) {
+        await tempPool.end();
+        return NextResponse.json(
+          {
+            success: false,
+            error: '无法验证表是否创建成功: ' + (err instanceof Error ? err.message : String(err)),
+          },
+          { status: 500 }
+        );
       }
 
       await tempPool.end();
