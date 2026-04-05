@@ -22,8 +22,8 @@ export class DatabaseConfigRepository {
   /**
    * 创建数据库配置
    */
-  async create(config: Omit<DatabaseConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-    const id = crypto.randomUUID();
+  async create(config: Omit<DatabaseConfig, 'id' | 'createdAt' | 'updatedAt'>, customId?: string): Promise<string> {
+    const id = customId || crypto.randomUUID();
     const sql = `
       INSERT INTO database_configs (id, name, type, host, port, database_name, username, password, is_active, is_default)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
