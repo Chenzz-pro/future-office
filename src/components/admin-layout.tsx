@@ -6,9 +6,6 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  LayoutDashboard,
-  Bot,
-  Sparkles,
   Users,
   Settings,
   ChevronRight,
@@ -17,7 +14,6 @@ import {
   X,
   Search,
   Bell,
-  Database
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -37,59 +33,16 @@ interface SubMenuItem {
 
 const menuItems: MenuItem[] = [
   {
-    id: 'overview',
-    label: '系统概览',
-    icon: <LayoutDashboard className="w-5 h-5" />,
-    path: '/admin/overview',
-  },
-  {
-    id: 'agents',
-    label: '智能体',
-    icon: <Bot className="w-5 h-5" />,
-    path: '/admin/agents',
-    subItems: [
-      { id: 'agents-list', label: '智能体列表', path: '/admin/agents/list' },
-      { id: 'agents-create', label: '创建智能体', path: '/admin/agents/create' },
-    ],
-  },
-  {
-    id: 'skills',
-    label: '技能',
-    icon: <Sparkles className="w-5 h-5" />,
-    path: '/admin/skills',
-    subItems: [
-      { id: 'skills-list', label: '技能列表', path: '/admin/skills/list' },
-      { id: 'skills-templates', label: '技能模板', path: '/admin/skills/templates' },
-    ],
-  },
-  {
     id: 'organization',
-    label: '组织权限管理',
+    label: '组织架构',
     icon: <Users className="w-5 h-5" />,
-    path: '/admin/organization',
-    subItems: [
-      { id: 'org-structure', label: '组织架构', path: '/admin/organization/structure' },
-      { id: 'org-overview', label: '组织概览', path: '/admin/organization/overview' },
-      { id: 'org-structure', label: '组织架构', path: '/admin/organization/structure' },
-      { id: 'org-members', label: '成员管理', path: '/admin/organization/members' },
-      { id: 'org-permissions', label: '权限管理', path: '/admin/organization/permissions' },
-    ],
+    path: '/admin/organization/structure',
   },
   {
-    id: 'integration',
-    label: '集成中心',
+    id: 'permissions',
+    label: '权限管理',
     icon: <Settings className="w-5 h-5" />,
-    path: '/admin/integration/llm',
-    subItems: [
-      { id: 'int-llm', label: '大模型配置', path: '/admin/integration/llm' },
-      { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration/ekp' },
-    ],
-  },
-  {
-    id: 'database',
-    label: '数据库配置',
-    icon: <Database className="w-5 h-5" />,
-    path: '/admin/database',
+    path: '/admin/organization/permissions',
   },
 ];
 
