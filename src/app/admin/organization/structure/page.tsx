@@ -151,10 +151,13 @@ export default function OrganizationStructurePage() {
     const needsParent = ['department', 'position', 'person'].includes(currentView);
 
     if (needsParent && !selectedNode) {
-      alert('请先在左侧选择一个父级组织');
+      // 使用更明显的提示
+      const message = `创建${viewConfigs.find(c => c.type === currentView)?.label}需要先选择父级组织`;
+      alert(message);
       return;
     }
 
+    console.log('[handleCreate] 打开新建对话框', { currentView, selectedNode, needsParent });
     setDialogMode('create');
     setDialogInitialData(null);
     setDialogOpen(true);
@@ -419,10 +422,21 @@ export default function OrganizationStructurePage() {
                 size="sm"
                 onClick={handleCreate}
                 disabled={['department', 'position', 'person'].includes(currentView) && !selectedNode}
+                title={
+                  ['department', 'position', 'person'].includes(currentView) && !selectedNode
+                    ? `请先在左侧选择一个${viewConfigs.find(c => c.type === currentView)?.label === 'department' ? '机构' : viewConfigs.find(c => c.type === currentView)?.label === 'position' ? '部门' : '部门'}作为父级`
+                    : `新建${viewConfigs.find(c => c.type === currentView)?.label}`
+                }
               >
                 <Plus className="w-4 h-4 mr-1" />
                 新建
               </Button>
+              {/* 提示信息 */}
+              {['department', 'position', 'person'].includes(currentView) && !selectedNode && (
+                <span className="text-xs text-gray-500">
+                  提示：请先在左侧选择父级组织
+                </span>
+              )}
               <Button variant="outline" size="sm" onClick={handleQuickSort}>
                 快速排序
               </Button>
