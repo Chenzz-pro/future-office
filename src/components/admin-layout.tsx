@@ -78,10 +78,10 @@ const menuItems: MenuItem[] = [
     id: 'integration',
     label: '集成中心',
     icon: <Settings className="w-5 h-5" />,
-    path: '/admin/integration',
+    path: '/admin/integration/llm',
     subItems: [
-      { id: 'int-llm', label: '大模型配置', path: '/admin/integration?tab=llm' },
-      { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration?tab=ekp' },
+      { id: 'int-llm', label: '大模型配置', path: '/admin/integration/llm' },
+      { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration/ekp' },
     ],
   },
   {
