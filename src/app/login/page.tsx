@@ -59,7 +59,7 @@ export default function LoginPage() {
         localStorage.setItem('users', JSON.stringify(validUsers));
       }
 
-      const user = validUsers.find(u => u.username === formData.username && u.password === formData.password);
+      const user = validUsers.find((u: { username: string; password: string; role: string; id: string; email: string }) => u.username === formData.username && u.password === formData.password);
 
       if (!user) {
         setError('用户名或密码错误');
