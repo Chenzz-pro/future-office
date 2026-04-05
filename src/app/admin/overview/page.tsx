@@ -142,7 +142,7 @@ export default function SystemOverview() {
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                 <div className="w-2 h-2 mt-2 bg-blue-600 rounded-full flex-shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">新增智能体 &quot;客服助手&quot;</p>
+                  <p className="text-sm font-medium text-gray-900">新增智能体 "客服助手"</p>
                   <p className="text-xs text-gray-500 mt-1">由 管理员 创建</p>
                   <p className="text-xs text-gray-400 mt-1">10 分钟前</p>
                 </div>
@@ -151,7 +151,7 @@ export default function SystemOverview() {
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                 <div className="w-2 h-2 mt-2 bg-green-600 rounded-full flex-shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">用户 &quot;张三&quot; 加入组织</p>
+                  <p className="text-sm font-medium text-gray-900">用户 张三 加入组织</p>
                   <p className="text-xs text-gray-500 mt-1">邀请码: INV202401</p>
                   <p className="text-xs text-gray-400 mt-1">30 分钟前</p>
                 </div>
@@ -160,7 +160,7 @@ export default function SystemOverview() {
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                 <div className="w-2 h-2 mt-2 bg-purple-600 rounded-full flex-shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">更新技能 &quot;EKP 待办查询&quot;</p>
+                  <p className="text-sm font-medium text-gray-900">更新技能 "EKP 待办查询"</p>
                   <p className="text-xs text-gray-500 mt-1">优化了查询性能</p>
                   <p className="text-xs text-gray-400 mt-1">1 小时前</p>
                 </div>

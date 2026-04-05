@@ -5,19 +5,18 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import {
-  LayoutDashboard,
-  Bot,
-  Sparkles,
-  Users,
-  Settings,
+import { 
+  LayoutDashboard, 
+  Bot, 
+  Sparkles, 
+  Users, 
+  Settings, 
   ChevronRight,
   LogOut,
   Menu,
   X,
   Search,
-  Bell,
-  Database
+  Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -68,7 +67,9 @@ const menuItems: MenuItem[] = [
     icon: <Users className="w-5 h-5" />,
     path: '/admin/organization',
     subItems: [
+      { id: 'org-overview', label: '组织概览', path: '/admin/organization/overview' },
       { id: 'org-structure', label: '组织架构', path: '/admin/organization/structure' },
+      { id: 'org-members', label: '成员管理', path: '/admin/organization/members' },
       { id: 'org-permissions', label: '权限管理', path: '/admin/organization/permissions' },
     ],
   },
@@ -79,17 +80,9 @@ const menuItems: MenuItem[] = [
     path: '/admin/integration',
     subItems: [
       { id: 'int-overview', label: '集成概览', path: '/admin/integration/overview' },
-      { id: 'int-llm', label: '大模型配置', path: '/admin/integration/llm' },
-      { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration/ekp' },
       { id: 'int-api', label: 'API 管理', path: '/admin/integration/api' },
       { id: 'int-webhook', label: 'Webhook 配置', path: '/admin/integration/webhook' },
     ],
-  },
-  {
-    id: 'database',
-    label: '数据库配置',
-    icon: <Database className="w-5 h-5" />,
-    path: '/admin/database',
   },
 ];
 
@@ -102,7 +95,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
     // 检查用户登录状态和角色
@@ -278,8 +271,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </header>
 
-        {/* 内容区 */}
-        <main className="flex-1 overflow-auto p-6">
+        {/* 内容区域 */}
+        <main className="flex-1 overflow-auto p-6 bg-gray-50">
           {children}
         </main>
       </div>
