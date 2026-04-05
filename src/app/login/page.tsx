@@ -38,16 +38,6 @@ export default function LoginPage() {
     }
   }, [router]);
 
-  useEffect(() => {
-    // 检测二级域名
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      if (hostname.startsWith('admin.')) {
-        setUserType('admin');
-      }
-    }
-  }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -73,19 +63,6 @@ export default function LoginPage() {
 
       if (!user) {
         setError('用户名或密码错误');
-        setLoading(false);
-        return;
-      }
-
-      // 检查角色是否匹配域名
-      if (userType === 'admin' && user.role !== 'admin') {
-        setError('该账号不是管理员账号');
-        setLoading(false);
-        return;
-      }
-
-      if (userType === 'user' && user.role === 'admin') {
-        setError('请使用管理员域名登录管理员账号');
         setLoading(false);
         return;
       }
@@ -121,6 +98,7 @@ export default function LoginPage() {
   const isAdmin = userType === 'admin';
   const title = isAdmin ? '管理员登录' : '未来办公系统';
   const description = isAdmin ? '登录到系统管理后台' : '登录到未来办公 AI 协作平台';
+  const testAccounts = '普通用户：user / user123\n管理员：admin / admin123';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4">
@@ -190,7 +168,7 @@ export default function LoginPage() {
 
             <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
               <p className="font-medium mb-1">测试账号：</p>
-              <p>{isAdmin ? '管理员：admin / admin123' : '普通用户：user / user123'}</p>
+              <p className="whitespace-pre-line">{testAccounts}</p>
             </div>
           </CardContent>
 
