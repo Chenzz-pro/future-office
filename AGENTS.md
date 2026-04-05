@@ -72,16 +72,18 @@
 ## 用户管理
 
 ### 核心逻辑
-- **组织架构中的人员 = 系统的普通用户**
-- 在组织架构添加人员时，**同时**创建：
-  - `sys_org_person` 表记录（组织架构人员）
-  - `users` 表记录（系统用户）
-- 两个表通过 `users.person_id` 关联 `sys_org_person.fd_id`
+- **sys_org_person 表就是系统用户表**
+- 在组织架构添加人员时，直接创建 sys_org_person 记录
+- sys_org_person.fd_id 即为系统的 userId
+- 无需单独的 users 表
 
 ### 用户登录
 - 支持用户名/密码登录：`POST /api/auth/login`
+  - 在 sys_org_person 表中通过 fd_login_name 查找
+  - 验证 fd_password 字段
+  - 返回 userId（即 fd_id）
 - 支持钉钉信息登录：通过 `rtx_account` 或 `email` 匹配
-- 登录成功后返回 `userId`（users.id）
+- 登录成功后返回 `userId`（sys_org_person.fd_id）
 - 前端将 `userId` 保存到 localStorage（key: `current-user-id`）
 
 ### API 接口
@@ -90,7 +92,7 @@
 
 ### 用户会话
 - 所有会话 API 请求需要通过 `X-User-ID` 请求头传递用户 ID
-- 前端从 localStorage 读取 `current-user-id`
+- 前端从 localStorage 读取 `current-user-id`（即 sys_org_person.fd_id）
 - useChatHistory Hook 自动处理用户 ID
 
 ## 自定义技能系统

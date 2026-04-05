@@ -1,6 +1,6 @@
 /**
  * 用户认证 API
- * 支持通过钉钉信息登录
+ * sys_org_person 就是系统用户表
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +8,7 @@ import { dbManager } from '@/lib/database/manager';
 
 /**
  * POST /api/auth/login
- * 通过用户名/密码登录
+ * 通过用户名/密码或钉钉信息登录
  */
 export async function POST(request: NextRequest) {
   try {
@@ -18,61 +18,49 @@ export async function POST(request: NextRequest) {
 
     // 支持用户名/密码登录
     if (username && password) {
-      // 在 users 表中查找用户
-      const userResult = await dbManager.query(
-        'SELECT * FROM users WHERE username = ? AND status = ?',
-        [username, 'active']
+      // 在 sys_org_person 中查找用户
+      const result = await dbManager.query(
+        'SELECT * FROM sys_org_person WHERE fd_login_name = ? AND fd_is_login_enabled = 1',
+        [username]
       );
-      const userRows = userResult.rows as Array<Record<string, unknown>>;
+      const rows = result.rows as Array<Record<string, unknown>>;
 
-      if (userRows.length === 0) {
+      if (rows.length === 0) {
         return NextResponse.json(
           { success: false, error: '用户不存在或已被禁用' },
           { status: 401 }
         );
       }
 
-      const user = userRows[0];
+      const person = rows[0];
 
       // 验证密码
       const hashedPassword = Buffer.from(password).toString('base64');
-      if (user.password !== hashedPassword) {
+      if (person.fd_password !== hashedPassword) {
         return NextResponse.json(
           { success: false, error: '密码错误' },
           { status: 401 }
         );
       }
 
-      // 获取人员信息
-      let person: Record<string, unknown> | null = null;
-      if (user.person_id) {
-        const personResult = await dbManager.query(
-          'SELECT * FROM sys_org_person WHERE fd_id = ?',
-          [user.person_id]
-        );
-        const personRows = personResult.rows as Array<Record<string, unknown>>;
-        if (personRows.length > 0) {
-          person = personRows[0];
-        }
-      }
+      const userId = person.fd_id as string;
 
       console.log('[API:Auth] 登录成功', {
-        userId: user.id,
-        username: user.username,
-        personId: user.person_id,
-        personName: person?.fd_name,
+        userId,
+        username: person.fd_login_name,
+        personName: person.fd_name,
       });
 
       return NextResponse.json({
         success: true,
         data: {
-          userId: user.id as string,
-          username: user.username as string,
-          personId: user.person_id as string | null,
-          personName: person?.fd_name as string | null,
-          email: user.email as string | null,
-          role: user.role as string,
-          status: user.status as string,
+          userId, // sys_org_person.fd_id 就是 userId
+          username: person.fd_login_name as string,
+          personName: person.fd_name as string,
+          email: person.fd_email as string | null,
+          mobile: person.fd_mobile as string | null,
+          deptId: person.fd_dept_id as string | null,
+          rtxAccount: person.fd_rtx_account as string | null,
         },
       });
     }
@@ -86,7 +74,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 在 sys_org_person 中查找人员
-    let query = 'SELECT * FROM sys_org_person WHERE 1=1';
+    let query = 'SELECT * FROM sys_org_person WHERE fd_is_login_enabled = 1';
     const params: unknown[] = [];
 
     if (rtx_account) {
@@ -108,42 +96,24 @@ export async function POST(request: NextRequest) {
     }
 
     const person = rows[0];
-    const personId = person.fd_id as string;
-
-    // 获取对应的 users 表记录
-    const userResult = await dbManager.query(
-      'SELECT * FROM users WHERE person_id = ?',
-      [personId]
-    );
-    const userRows = userResult.rows as Array<Record<string, unknown>>;
-
-    if (userRows.length === 0) {
-      console.error('[API:Auth] 用户记录不存在', { personId });
-      return NextResponse.json(
-        { success: false, error: '用户记录不存在' },
-        { status: 500 }
-      );
-    }
-
-    const user = userRows[0];
+    const userId = person.fd_id as string;
 
     console.log('[API:Auth] 登录成功', {
-      userId: user.id,
-      username: user.username,
-      personId: user.person_id,
+      userId,
+      username: person.fd_login_name,
       personName: person.fd_name,
     });
 
     return NextResponse.json({
       success: true,
       data: {
-        userId: user.id as string,
-        username: user.username as string,
-        personId: user.person_id as string,
+        userId,
+        username: person.fd_login_name as string,
         personName: person.fd_name as string,
-        email: user.email as string | null,
-        role: user.role as string,
-        status: user.status as string,
+        email: person.fd_email as string | null,
+        mobile: person.fd_mobile as string | null,
+        deptId: person.fd_dept_id as string | null,
+        rtxAccount: person.fd_rtx_account as string | null,
       },
     });
   } catch (error: unknown) {
@@ -158,7 +128,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/auth/current
- * 获取当前登录用户信息（从 header 获取）
+ * 获取当前登录用户信息（从 header 获取 userId）
  */
 export async function GET(request: NextRequest) {
   try {
@@ -171,45 +141,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 获取用户信息
-    const userResult = await dbManager.query(
-      'SELECT * FROM users WHERE id = ?',
+    // 获取人员信息
+    const result = await dbManager.query(
+      'SELECT * FROM sys_org_person WHERE fd_id = ?',
       [userId]
     );
-    const userRows = userResult.rows as Array<Record<string, unknown>>;
+    const rows = result.rows as Array<Record<string, unknown>>;
 
-    if (userRows.length === 0) {
+    if (rows.length === 0) {
       return NextResponse.json(
         { success: false, error: '用户不存在' },
         { status: 404 }
       );
     }
 
-    const user = userRows[0];
-
-    // 获取人员信息
-    let person: Record<string, unknown> | null = null;
-    if (user.person_id) {
-      const personResult = await dbManager.query(
-        'SELECT * FROM sys_org_person WHERE fd_id = ?',
-        [user.person_id]
-      );
-      const personRows = personResult.rows as Array<Record<string, unknown>>;
-      if (personRows.length > 0) {
-        person = personRows[0];
-      }
-    }
+    const person = rows[0];
 
     return NextResponse.json({
       success: true,
       data: {
-        userId: user.id as string,
-        username: user.username as string,
-        personId: user.person_id as string | null,
-        personName: person?.fd_name as string | null,
-        email: user.email as string | null,
-        role: user.role as string,
-        status: user.status as string,
+        userId: person.fd_id as string,
+        username: person.fd_login_name as string,
+        personName: person.fd_name as string,
+        email: person.fd_email as string | null,
+        mobile: person.fd_mobile as string | null,
+        deptId: person.fd_dept_id as string | null,
+        rtxAccount: person.fd_rtx_account as string | null,
       },
     });
   } catch (error: unknown) {

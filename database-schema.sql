@@ -23,8 +23,10 @@ CREATE TABLE IF NOT EXISTS database_configs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据库配置表';
 
 -- ============================================================
--- 2. 用户表
+-- 2. 用户表（已废弃，使用 sys_org_person 表作为用户表）
 -- ============================================================
+-- 注意：此表已废弃，请使用 sys_org_person 表作为系统用户表
+-- sys_org_person.fd_id 即为用户 ID
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(36) PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL COMMENT '用户名',
@@ -40,14 +42,14 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_email (email),
     INDEX idx_role (role),
     INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表（已废弃，使用 sys_org_person）';
 
 -- ============================================================
 -- 3. API Keys 配置表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS api_keys (
     id VARCHAR(36) PRIMARY KEY,
-    user_id VARCHAR(36) NOT NULL COMMENT '用户ID',
+    user_id VARCHAR(36) NOT NULL COMMENT '用户ID（sys_org_person.fd_id）',
     name VARCHAR(100) NOT NULL COMMENT '配置名称',
     provider ENUM('openai', 'claude', 'deepseek', 'doubao', 'custom') NOT NULL COMMENT '提供商',
     api_key VARCHAR(500) NOT NULL COMMENT 'API Key（加密）',
@@ -55,7 +57,6 @@ CREATE TABLE IF NOT EXISTS api_keys (
     is_active BOOLEAN DEFAULT TRUE COMMENT '是否激活',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id),
     INDEX idx_provider (provider),
     INDEX idx_active (is_active)
@@ -66,12 +67,11 @@ CREATE TABLE IF NOT EXISTS api_keys (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id VARCHAR(36) PRIMARY KEY,
-    user_id VARCHAR(36) NOT NULL COMMENT '用户ID',
+    user_id VARCHAR(36) NOT NULL COMMENT '用户ID（sys_org_person.fd_id）',
     title VARCHAR(500) NOT NULL COMMENT '会话标题',
     agent_id VARCHAR(36) COMMENT '使用的智能体ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id),
     INDEX idx_created_at (created_at),
     INDEX idx_updated_at (updated_at)
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS custom_skills (
     id VARCHAR(36) PRIMARY KEY,
-    user_id VARCHAR(36) NOT NULL COMMENT '创建用户ID',
+    user_id VARCHAR(36) NOT NULL COMMENT '创建用户ID（sys_org_person.fd_id）',
     name VARCHAR(100) NOT NULL COMMENT '技能名称',
     description TEXT COMMENT '技能描述',
     icon VARCHAR(50) COMMENT '图标名称',
@@ -110,7 +110,6 @@ CREATE TABLE IF NOT EXISTS custom_skills (
     response_parsing JSON COMMENT '响应解析规则',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id),
     INDEX idx_category (category),
     INDEX idx_enabled (enabled)
@@ -121,7 +120,7 @@ CREATE TABLE IF NOT EXISTS custom_skills (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ekp_configs (
     id VARCHAR(36) PRIMARY KEY,
-    user_id VARCHAR(36) NOT NULL COMMENT '用户ID',
+    user_id VARCHAR(36) NOT NULL COMMENT '用户ID（sys_org_person.fd_id）',
     ekp_address VARCHAR(500) NOT NULL COMMENT 'EKP地址',
     username VARCHAR(100) COMMENT '用户名',
     password VARCHAR(255) COMMENT '密码（加密）',
@@ -129,7 +128,6 @@ CREATE TABLE IF NOT EXISTS ekp_configs (
     config JSON COMMENT '额外配置',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='EKP配置表';
 
@@ -141,11 +139,9 @@ CREATE TABLE IF NOT EXISTS organizations (
     name VARCHAR(100) NOT NULL COMMENT '组织名称',
     parent_id VARCHAR(36) COMMENT '父组织ID',
     description TEXT COMMENT '描述',
-    manager_id VARCHAR(36) COMMENT '负责人ID',
+    manager_id VARCHAR(36) COMMENT '负责人ID（sys_org_person.fd_id）',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (parent_id) REFERENCES organizations(id) ON DELETE SET NULL,
-    FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_parent_id (parent_id),
     INDEX idx_manager_id (manager_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='组织架构表';
