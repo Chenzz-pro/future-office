@@ -24,6 +24,9 @@ coverage/
 .env.test.local
 .env.production.local
 
+# Database configuration file (contains sensitive info)
+.db-config.json
+
 # Logs
 logs/
 *.log
