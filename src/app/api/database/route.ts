@@ -303,8 +303,7 @@ export async function POST(request: NextRequest) {
       });
 
       // 保存数据库配置
-      await databaseConfigRepository.create({
-        id: configId,
+      const savedConfigId = await databaseConfigRepository.create({
         name: '默认配置',
         type: 'mysql',
         host,
@@ -312,15 +311,16 @@ export async function POST(request: NextRequest) {
         databaseName,
         username,
         password,
-        isActive: true,
-        isDefault: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as unknown as import('@/lib/database').DatabaseConfig);
+        isActive: false, // 先设置为不激活
+        isDefault: false, // 先设置为非默认
+      } as unknown as import('@/lib/database').DatabaseConfig, configId);
+
+      // 设置为激活配置（确保只有一个配置是激活的）
+      await databaseConfigRepository.setActive(savedConfigId);
 
       // 缓存配置，用于页面刷新后自动重新连接
       lastActiveConfig = {
-        id: configId,
+        id: savedConfigId,
         name: '默认配置',
         type: 'mysql',
         host,
@@ -488,11 +488,14 @@ export async function POST(request: NextRequest) {
         databaseName: config.databaseName,
         username: config.username,
         password: config.password || '',
-        isActive: true,
-        isDefault: true,
+        isActive: false, // 先设置为不激活
+        isDefault: false, // 先设置为非默认
       });
 
-      // 5. 更新 dbManager 的配置 ID
+      // 5. 设置为激活配置（确保只有一个配置是激活的）
+      await databaseConfigRepository.setActive(configId);
+
+      // 6. 更新 dbManager 的配置 ID
       const currentConfig = dbManager.getConfig();
       if (currentConfig) {
         currentConfig.id = configId;
