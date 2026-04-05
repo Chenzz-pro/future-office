@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Settings, Key } from 'lucide-react';
@@ -7,6 +9,17 @@ import LLMConfigPanel from './llm-config-panel';
 import EKPConfigPanel from './ekp-config-panel';
 
 export default function IntegrationCenter() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState('llm');
+
+  // 根据URL参数设置初始页签
+  useEffect(() => {
+    if (tabParam === 'llm' || tabParam === 'ekp') {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
@@ -16,7 +29,7 @@ export default function IntegrationCenter() {
       </div>
 
       {/* 页签切换 */}
-      <Tabs defaultValue="llm" className="space-y-6">
+      <Tabs defaultValue="llm" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full max-w-[400px] grid-cols-2">
           <TabsTrigger value="llm" className="flex items-center gap-2">
             <Key className="w-4 h-4" />

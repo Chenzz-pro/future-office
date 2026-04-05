@@ -80,9 +80,8 @@ const menuItems: MenuItem[] = [
     icon: <Settings className="w-5 h-5" />,
     path: '/admin/integration',
     subItems: [
-      { id: 'int-overview', label: '集成概览', path: '/admin/integration/overview' },
-      { id: 'int-api', label: 'API 管理', path: '/admin/integration/api' },
-      { id: 'int-webhook', label: 'Webhook 配置', path: '/admin/integration/webhook' },
+      { id: 'int-llm', label: '大模型配置', path: '/admin/integration?tab=llm' },
+      { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration?tab=ekp' },
     ],
   },
   {
