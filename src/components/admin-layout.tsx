@@ -69,9 +69,6 @@ const menuItems: MenuItem[] = [
     path: '/admin/organization',
     subItems: [
       { id: 'org-structure', label: '组织架构', path: '/admin/organization/structure' },
-      { id: 'org-overview', label: '组织概览', path: '/admin/organization/overview' },
-      { id: 'org-structure', label: '组织架构', path: '/admin/organization/structure' },
-      { id: 'org-members', label: '成员管理', path: '/admin/organization/members' },
       { id: 'org-permissions', label: '权限管理', path: '/admin/organization/permissions' },
     ],
   },
