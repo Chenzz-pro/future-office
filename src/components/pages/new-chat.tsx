@@ -79,6 +79,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const [selectedModel, setSelectedModel] = useState('gpt-4o');
   const [customSkills, setCustomSkills] = useState<CustomSkill[]>([]);
   const [executingSkill, setExecutingSkill] = useState<string | null>(null);
+  const [dbConnected, setDbConnected] = useState(false);
+  const [dbCheckLoading, setDbCheckLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -90,6 +92,28 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
   // 使用配置钩子（仅全局配置）
   const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
+
+  // 检查数据库连接状态
+  useEffect(() => {
+    checkDatabaseConnection();
+  }, []);
+
+  const checkDatabaseConnection = async () => {
+    try {
+      setDbCheckLoading(true);
+      const response = await fetch('/api/database');
+      const data = await response.json();
+      setDbConnected(data.success || false);
+      if (!data.success) {
+        console.log('[NewChat] 数据库未连接:', data.error);
+      }
+    } catch (error) {
+      console.error('[NewChat] 检查数据库连接失败:', error);
+      setDbConnected(false);
+    } finally {
+      setDbCheckLoading(false);
+    }
+  };
 
   // 设置默认模型
   useEffect(() => {
@@ -138,8 +162,13 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
+    if (!dbConnected) {
+      setError('数据库未连接，请稍后重试或联系管理员检查数据库配置');
+      return;
+    }
+
     if (!activeKey) {
-      setError('请先配置 API 密钥');
+      setError('API Key 未配置，请联系管理员配置 AI 模型 API Key');
       return;
     }
 
@@ -514,6 +543,44 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           </div>
         )}
       </div>
+
+      {/* 状态提示 */}
+      {dbCheckLoading && (
+        <div className="px-4 py-2">
+          <div className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            正在检查系统状态...
+          </div>
+        </div>
+      )}
+
+      {!dbConnected && !dbCheckLoading && (
+        <div className="px-4 py-2">
+          <div className="max-w-3xl mx-auto flex items-start gap-3 px-4 py-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-yellow-800 dark:text-yellow-200">数据库未连接</p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                当前功能受限，对话历史无法保存。请稍后重试或联系管理员检查数据库配置。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dbConnected && !activeKey && !configLoading && (
+        <div className="px-4 py-2">
+          <div className="max-w-3xl mx-auto flex items-start gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-blue-800 dark:text-blue-200">API Key 未配置</p>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                请联系管理员配置 AI 模型 API Key 后使用对话功能。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 错误提示 */}
       {error && (
