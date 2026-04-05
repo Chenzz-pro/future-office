@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { MainContent } from '@/components/main-content';
 import { HistoryPanel } from '@/components/history-panel';
@@ -11,11 +12,31 @@ export default function Home() {
   const [showHistory, setShowHistory] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const router = useRouter();
   const { loadSession, setCurrentSession } = useChatHistory();
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+
+    // 检查用户登录状态
+    const userStr = localStorage.getItem('currentUser');
+    if (!userStr) {
+      router.push('/login');
+      return;
+    }
+
+    const user = JSON.parse(userStr);
+
+    // 如果是管理员，跳转到管理员页面
+    if (user.role === 'admin') {
+      router.push('/admin/overview');
+      return;
+    }
+
+    // 普通用户设置认证状态
+    setAuthenticated(true);
+  }, [router]);
 
   // 处理选择历史会话
   const handleSelectSession = (session: ChatSession) => {
@@ -32,7 +53,7 @@ export default function Home() {
     setActiveTab('new-chat');
   };
 
-  if (!mounted) {
+  if (!mounted || !authenticated) {
     return (
       <div className="flex h-screen bg-background">
         <div className="w-64 bg-sidebar animate-pulse" />
@@ -44,25 +65,25 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       {/* 左侧导航 */}
-      <Sidebar 
-        activeTab={activeTab} 
+      <Sidebar
+        activeTab={activeTab}
         setActiveTab={setActiveTab}
         showHistory={showHistory}
         setShowHistory={setShowHistory}
         onSelectSession={handleSelectSession}
       />
-      
+
       {/* 历史对话面板 */}
       {showHistory && (
-        <HistoryPanel 
-          onClose={() => setShowHistory(false)} 
+        <HistoryPanel
+          onClose={() => setShowHistory(false)}
           onSelectSession={handleSelectSession}
         />
       )}
-      
+
       {/* 主内容区 */}
-      <MainContent 
-        activeTab={activeTab} 
+      <MainContent
+        activeTab={activeTab}
         setActiveTab={setActiveTab}
         onNewChat={handleNewChat}
         selectedSessionId={selectedSessionId}

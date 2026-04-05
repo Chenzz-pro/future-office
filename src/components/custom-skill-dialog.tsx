@@ -620,7 +620,7 @@ export function CustomSkillDialog({
               </div>
             ) : (
               <div className="text-sm text-muted-foreground py-4 text-center border border-dashed border-border rounded-lg">
-                暂无请求参数，点击上方"添加参数"按钮添加
+                暂无请求参数，点击上方&quot;添加参数&quot;按钮添加
               </div>
             )}
           </div>

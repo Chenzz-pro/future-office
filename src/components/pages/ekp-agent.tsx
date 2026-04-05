@@ -570,13 +570,13 @@ export default function EKPAgent() {
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
                     <span className="px-3 py-1 bg-primary/10 rounded-full text-xs">
-                      "我想请5天年假"
+                      &quot;我想请5天年假&quot;
                     </span>
                     <span className="px-3 py-1 bg-primary/10 rounded-full text-xs">
-                      "报销200元差旅费"
+                      &quot;报销200元差旅费&quot;
                     </span>
                     <span className="px-3 py-1 bg-primary/10 rounded-full text-xs">
-                      "下周一到周五请假"
+                      &quot;下周一到周五请假&quot;
                     </span>
                   </div>
                 </div>
