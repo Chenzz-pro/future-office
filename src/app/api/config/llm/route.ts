@@ -3,67 +3,54 @@ import { dbManager } from '@/lib/database/manager';
 import { ApiKeyRepository } from '@/lib/database/repositories/apikey-admin.repository';
 
 /**
- * GET /api/config/llm - 获取 LLM 配置（优先级：用户配置 > 全局配置）
+ * GET /api/config/llm - 获取 LLM 配置（仅全局配置）
  *
- * 查询参数：
- * - userId: 用户ID（可选，用于获取用户级配置）
+ * 个人配置功能已移除，只返回管理员配置的全局配置
  */
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    // 如果数据库未连接，返回空（使用前端 localStorage 配置）
+    // 如果数据库未连接，返回空
     if (!dbManager.isConnected()) {
       return NextResponse.json({
-        success: true,
-        useGlobal: false,
+        success: false,
         config: null,
-        message: '数据库未连接，使用前端配置',
+        source: 'none',
+        message: '数据库未连接，请联系管理员检查数据库配置'
       });
     }
 
     const apiKeyRepo = new ApiKeyRepository();
 
-    // 1. 如果提供了 userId，尝试获取用户级配置
-    if (userId && userId !== 'system') {
-      const userKeys = await apiKeyRepo.findByUserId(userId);
-      const activeUserKey = userKeys.find(k => k.isActive);
-
-      if (activeUserKey) {
-        return NextResponse.json({
-          success: true,
-          useGlobal: false,
-          config: activeUserKey,
-          source: 'user',
-        });
-      }
-    }
-
-    // 2. 降级使用全局配置（system 级别）
+    // 获取全局配置（system 级别）
     const globalKeys = await apiKeyRepo.findByUserId('system');
     const activeGlobalKey = globalKeys.find(k => k.isActive);
 
     if (activeGlobalKey) {
       return NextResponse.json({
         success: true,
-        useGlobal: true,
         config: activeGlobalKey,
         source: 'global',
+        sourceName: activeGlobalKey.name || '全局配置',
+        message: '使用全局配置'
       });
     }
 
-    // 3. 都没有配置
+    // 未配置全局配置
     return NextResponse.json({
-      success: true,
-      useGlobal: false,
+      success: false,
       config: null,
-      message: '暂无可用配置',
+      source: 'none',
+      message: '未配置全局LLM，请联系管理员配置'
     });
   } catch (error) {
     console.error('获取 LLM 配置失败:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '未知错误' },
+      {
+        success: false,
+        config: null,
+        source: 'none',
+        message: error instanceof Error ? error.message : '获取配置失败'
+      },
       { status: 500 }
     );
   }

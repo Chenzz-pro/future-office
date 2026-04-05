@@ -88,8 +88,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('currentUser') || '{}') : null;
   const userId = currentUser?.id;
 
-  // 使用配置钩子（优先级：用户配置 > 全局配置）
-  const { config: activeKey, source: configSource, loading: configLoading, refetch: refetchConfig } = useLLMConfig(userId);
+  // 使用配置钩子（仅全局配置）
+  const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
 
   // 设置默认模型
   useEffect(() => {
@@ -140,7 +140,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     if (!activeKey) {
       setError('请先配置 API 密钥');
-      setShowSettings(true);
       return;
     }
 
@@ -249,8 +248,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     if (!currentSession) {
       // 如果没有当前会话，创建一个
       if (!activeKey) {
-        setError('请先在设置中配置 API 密钥');
-        setShowSettings(true);
+        setError('请先配置 API 密钥');
         return;
       }
       createSession(selectedModel, activeKey.provider);
@@ -379,14 +377,14 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       {/* 配置来源提示 */}
       <div className="border-b border-border bg-muted/30 px-4 py-1 text-xs text-muted-foreground flex items-center justify-between">
         <span>
-          配置来源: {configSource === 'global' ? '🌐 全局配置' : '👤 个人配置'}
-          {configSource === 'global' && activeKey.name && ` (${activeKey.name})`}
+          {configSource === 'global' ? `🌐 全局配置${activeKey?.name ? ` (${activeKey.name})` : ''}` : '⚠️ 未配置，请联系管理员配置'}
         </span>
         <button
           onClick={() => setShowSettings(true)}
           className="hover:text-foreground transition-colors"
         >
           <Settings className="w-3 h-3" />
+          <span>配置详情</span>
         </button>
       </div>
 
@@ -523,6 +521,9 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           <div className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-2 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
+            {error.includes('请先配置') && (
+              <span className="text-xs ml-2">请联系管理员配置</span>
+            )}
           </div>
         </div>
       )}
@@ -629,16 +630,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       {showSettings && (
         <SettingsDialogWrapper
           onClose={() => setShowSettings(false)}
-          onKeysChange={(keys) => {
-            setApiKeys(keys);
-            const activeKey = keys.find((k: ApiKey) => k.isActive);
-            if (activeKey) {
-              if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
-              else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
-              else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
-              else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
-            }
-          }}
+          onKeysChange={() => {}}
         />
       )}
     </div>
