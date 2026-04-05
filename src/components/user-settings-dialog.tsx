@@ -10,35 +10,14 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface ApiKey {
-  id: string;
-  userId: string;
-  name: string;
-  provider: 'openai' | 'claude' | 'deepseek' | 'doubao' | 'custom';
-  apiKey: string;
-  baseUrl?: string;
-  isActive: boolean;
-}
-
-interface User {
-  fd_id: string;
-  fd_name: string;
-  username: string;
-  email: string;
-  role: string;
-  fd_email?: string;
-  fd_avatar?: string;
-  avatar?: string;
-}
-
 interface UserSettingsDialogProps {
   open: boolean;
   onClose: () => void;
-  onKeysChange?: (keys: ApiKey[]) => void;
+  onKeysChange?: (keys: any[]) => void;
 }
 
 export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettingsDialogProps) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAvatarUpload, setShowAvatarUpload] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string>('');
 
@@ -60,12 +39,8 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
       reader.onloadend = () => {
         setAvatarPreview(reader.result as string);
         // 更新用户信息
-        const updatedUser: User = {
-          fd_id: currentUser?.fd_id || '',
-          fd_name: currentUser?.fd_name || '',
-          username: currentUser?.username || '',
-          email: currentUser?.email || '',
-          role: currentUser?.role || '',
+        const updatedUser = {
+          ...currentUser,
           avatar: reader.result as string,
         };
         localStorage.setItem('currentUser', JSON.stringify(updatedUser));
