@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Paperclip, 
-  Brain, 
-  Mic, 
+import {
+  Paperclip,
+  Brain,
+  Mic,
   Send,
   Image as ImageIcon,
   Code,
@@ -12,7 +12,6 @@ import {
   Search,
   HelpCircle,
   PenTool,
-  MoreHorizontal,
   User,
   Bot,
   Loader2,
@@ -27,6 +26,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChatHistory, Message, ChatSession } from '@/hooks/use-chat-history';
+import { useLLMConfig } from '@/hooks/use-llm-config';
 import { CustomSkill } from '@/types/custom-skill';
 
 interface ApiKey {
@@ -76,41 +76,54 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [selectedModel, setSelectedModel] = useState('gpt-4o');
   const [customSkills, setCustomSkills] = useState<CustomSkill[]>([]);
   const [executingSkill, setExecutingSkill] = useState<string | null>(null);
+  const [dbConnected, setDbConnected] = useState(false);
+  const [dbCheckLoading, setDbCheckLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const {
-    sessions,
-    currentSession,
-    setCurrentSession,
-    createSession,
-    addMessage,
-    updateSession,
-  } = useChatHistory();
+  const { sessions, currentSession, setCurrentSession, createSession, addMessage, updateSession } = useChatHistory();
 
-  // 加载 API Keys
+  // 获取当前用户ID
+  const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('currentUser') || '{}') : null;
+  const userId = currentUser?.id;
+
+  // 使用配置钩子（仅全局配置）
+  const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
+
+  // 检查数据库连接状态
   useEffect(() => {
-    const savedKeys = localStorage.getItem('ai-api-keys');
-    if (savedKeys) {
-      try {
-        const keys = JSON.parse(savedKeys);
-        setApiKeys(keys);
-        const activeKey = keys.find((k: ApiKey) => k.isActive);
-        if (activeKey) {
-          if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
-          else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
-          else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
-          else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
-        }
-      } catch {
-        setApiKeys([]);
-      }
-    }
+    checkDatabaseConnection();
   }, []);
+
+  const checkDatabaseConnection = async () => {
+    try {
+      setDbCheckLoading(true);
+      const response = await fetch('/api/database');
+      const data = await response.json();
+      setDbConnected(data.success || false);
+      if (!data.success) {
+        console.log('[NewChat] 数据库未连接:', data.error);
+      }
+    } catch (error) {
+      console.error('[NewChat] 检查数据库连接失败:', error);
+      setDbConnected(false);
+    } finally {
+      setDbCheckLoading(false);
+    }
+  };
+
+  // 设置默认模型
+  useEffect(() => {
+    if (activeKey) {
+      if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
+      else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
+      else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
+      else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
+    }
+  }, [activeKey]);
 
   // 加载自定义技能
   useEffect(() => {
@@ -146,24 +159,18 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     }
   }, []);
 
-  const getActiveApiKey = (): ApiKey | null => {
-    return apiKeys.find(k => k.isActive) || null;
-  };
-
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    const activeKey = getActiveApiKey();
-    if (!activeKey) {
-      setError('请先在设置中配置 API 密钥');
-      setShowSettings(true);
-      return;
-    }
+    console.log('[sendMessage] 开始发送消息');
+    console.log('[sendMessage] dbConnected:', dbConnected);
+    console.log('[sendMessage] activeKey:', activeKey ? '已配置' : '未配置');
 
     // 如果没有当前会话，创建一个
     let session = currentSession;
     if (!session) {
-      session = createSession(selectedModel, activeKey.provider);
+      console.log('[sendMessage] 创建新会话');
+      session = createSession(selectedModel, activeKey?.provider || 'unknown');
     }
 
     const userMessage: Message = {
@@ -172,6 +179,29 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       content: inputValue.trim(),
       timestamp: new Date(),
     };
+
+    console.log('[sendMessage] 添加用户消息:', userMessage.content);
+
+    // 先添加用户消息到界面
+    addMessage(session.id, userMessage);
+    setInputValue('');
+    setIsLoading(true);
+    setError(null);
+
+    // 检查数据库连接和API配置
+    if (!dbConnected) {
+      console.log('[sendMessage] 数据库未连接');
+      setError('数据库未连接，消息已显示但无法保存到历史记录。请稍后重试或联系管理员检查数据库配置。');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!activeKey) {
+      console.log('[sendMessage] API Key 未配置');
+      setError('API Key 未配置，消息已显示但无法获取 AI 回复。请联系管理员配置 AI 模型 API Key。');
+      setIsLoading(false);
+      return;
+    }
 
     // 添加用户消息
     addMessage(session.id, userMessage);
@@ -186,6 +216,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       { role: 'user' as const, content: userMessage.content },
     ];
 
+    console.log('[sendMessage] 调用 Chat API');
+    console.log('[sendMessage] 消息数量:', chatMessages.length);
+    console.log('[sendMessage] 模型:', selectedModel);
+    console.log('[sendMessage] 提供商:', activeKey.provider);
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -199,24 +234,37 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         }),
       });
 
+      console.log('[sendMessage] Chat API 响应状态:', response.status);
+
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('[sendMessage] Chat API 错误:', errorData);
         throw new Error(errorData.error || '请求失败');
       }
 
       // 流式读取响应
       const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法读取响应');
+      if (!reader) {
+        console.error('[sendMessage] 无法读取响应');
+        throw new Error('无法读取响应');
+      }
 
       let assistantContent = '';
       const decoder = new TextDecoder();
+      let chunksReceived = 0;
+
+      console.log('[sendMessage] 开始读取流式响应');
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('[sendMessage] 流式响应结束，共收到', chunksReceived, '个数据块');
+          break;
+        }
 
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n');
+        chunksReceived++;
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -227,16 +275,20 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
               const data = JSON.parse(trimmed.slice(6));
               if (data.content) {
                 assistantContent += data.content;
+                console.log('[sendMessage] 收到内容片段:', assistantContent.length, '字符');
               }
-            } catch {
-              // 忽略解析错误
+            } catch (err) {
+              console.error('[sendMessage] 解析数据块失败:', err);
             }
           }
         }
       }
 
+      console.log('[sendMessage] 助手回复完成，总长度:', assistantContent.length);
+
       // 添加助手消息
       if (assistantContent) {
+        console.log('[sendMessage] 添加助手消息');
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -246,10 +298,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         addMessage(session.id, assistantMessage);
       }
     } catch (err) {
-      console.error('Chat error:', err);
+      console.error('[sendMessage] Chat error:', err);
       setError(err instanceof Error ? err.message : '请求失败，请重试');
     } finally {
       setIsLoading(false);
+      console.log('[sendMessage] 发送消息流程结束');
     }
   };
 
@@ -264,10 +317,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const executeCustomSkill = async (skill: CustomSkill) => {
     if (!currentSession) {
       // 如果没有当前会话，创建一个
-      const activeKey = getActiveApiKey();
       if (!activeKey) {
-        setError('请先在设置中配置 API 密钥');
-        setShowSettings(true);
+        setError('请先配置 API 密钥');
         return;
       }
       createSession(selectedModel, activeKey.provider);
@@ -360,11 +411,53 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   };
 
   const hasMessages = (currentSession?.messages.length || 0) > 0;
-  const activeKey = getActiveApiKey();
   const messages = currentSession?.messages || [];
+
+  // 配置加载中或未配置时的提示
+  if (configLoading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!activeKey) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center bg-background">
+        <AlertCircle className="w-16 h-16 text-muted-foreground mb-4" />
+        <h2 className="text-xl font-semibold mb-2">未配置 AI 服务</h2>
+        <p className="text-muted-foreground mb-6 text-center max-w-md">
+          {configSource === 'global' 
+            ? '管理员尚未配置全局 AI 服务'
+            : '请先在设置中配置 API 密钥，或联系管理员配置全局服务'}
+        </p>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+        >
+          打开设置
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-background">
+      {/* 配置来源提示 */}
+      <div className="border-b border-border bg-muted/30 px-4 py-1 text-xs text-muted-foreground flex items-center justify-between">
+        <span>
+          {configSource === 'global' ? `🌐 全局配置${activeKey?.name ? ` (${activeKey.name})` : ''}` : '⚠️ 未配置，请联系管理员配置'}
+        </span>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="hover:text-foreground transition-colors"
+        >
+          <Settings className="w-3 h-3" />
+          <span>配置详情</span>
+        </button>
+      </div>
+
       {/* 顶部工具栏 */}
       <div className="border-b border-border bg-card/50 px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -492,12 +585,53 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         )}
       </div>
 
+      {/* 状态提示 */}
+      {dbCheckLoading && (
+        <div className="px-4 py-2">
+          <div className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            正在检查系统状态...
+          </div>
+        </div>
+      )}
+
+      {!dbConnected && !dbCheckLoading && (
+        <div className="px-4 py-2">
+          <div className="max-w-3xl mx-auto flex items-start gap-3 px-4 py-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-yellow-800 dark:text-yellow-200">数据库未连接</p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                当前功能受限，对话历史无法保存。请稍后重试或联系管理员检查数据库配置。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dbConnected && !activeKey && !configLoading && (
+        <div className="px-4 py-2">
+          <div className="max-w-3xl mx-auto flex items-start gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-blue-800 dark:text-blue-200">API Key 未配置</p>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                请联系管理员配置 AI 模型 API Key 后使用对话功能。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 错误提示 */}
       {error && (
         <div className="px-4 py-2">
           <div className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-2 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
+            {error.includes('请先配置') && (
+              <span className="text-xs ml-2">请联系管理员配置</span>
+            )}
           </div>
         </div>
       )}
@@ -604,16 +738,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       {showSettings && (
         <SettingsDialogWrapper
           onClose={() => setShowSettings(false)}
-          onKeysChange={(keys) => {
-            setApiKeys(keys);
-            const activeKey = keys.find((k: ApiKey) => k.isActive);
-            if (activeKey) {
-              if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
-              else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
-              else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
-              else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
-            }
-          }}
+          onKeysChange={() => {}}
         />
       )}
     </div>

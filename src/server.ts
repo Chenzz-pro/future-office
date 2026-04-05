@@ -1,6 +1,7 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
+import { initializeApp } from './lib/app-initializer';
 
 const dev = process.env.COZE_PROJECT_ENV !== 'PROD';
 const hostname = process.env.HOSTNAME || 'localhost';
@@ -10,7 +11,10 @@ const port = parseInt(process.env.PORT || '5000', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
+  // 应用启动时自动初始化（重新连接数据库）
+  await initializeApp();
+
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url!, true);
