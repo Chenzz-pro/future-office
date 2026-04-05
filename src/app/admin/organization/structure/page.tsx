@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
+import { OrgElementDialog } from '@/components/org-element-dialog';
 import {
   Search,
   ChevronRight,
@@ -25,9 +26,19 @@ import {
   RefreshCw,
   Edit,
   Trash2,
-  User
+  User,
 } from 'lucide-react';
 import { OrgElement, OrgPerson, OrgTreeNode } from '@/types/org-structure';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // 视图类型
 type ViewType = 'organization' | 'department' | 'position' | 'person';
@@ -50,7 +61,14 @@ export default function OrganizationStructurePage() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  const currentConfig = viewConfigs.find(c => c.type === currentView);
+  // 对话框状态
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
+  const [dialogInitialData, setDialogInitialData] = useState<OrgElement | OrgPerson | null>(null);
+
+  // 删除确认对话框状态
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<(OrgElement | OrgPerson) | null>(null);
 
   // 加载树数据
   const loadTreeData = async () => {
@@ -108,6 +126,7 @@ export default function OrganizationStructurePage() {
   // 监听选择节点和视图变化，重新加载列表
   useEffect(() => {
     loadListData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNode, currentView, searchKeyword]);
 
   // 节点展开/折叠
@@ -124,6 +143,100 @@ export default function OrganizationStructurePage() {
   // 选择节点
   const handleSelectNode = (node: OrgTreeNode) => {
     setSelectedNode(node);
+  };
+
+  // 打开新建对话框
+  const handleCreate = () => {
+    if (!selectedNode) {
+      alert('请先选择一个层级');
+      return;
+    }
+    setDialogMode('create');
+    setDialogInitialData(null);
+    setDialogOpen(true);
+  };
+
+  // 打开编辑对话框
+  const handleEdit = (item: OrgElement | OrgPerson) => {
+    setDialogMode('edit');
+    setDialogInitialData(item);
+    setDialogOpen(true);
+  };
+
+  // 保存数据
+  const handleSave = async (data: Record<string, unknown>) => {
+    try {
+      const response = await fetch('/api/organization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: dialogMode === 'create' ? 'create' : 'update',
+          type: currentView,
+          data,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || '保存失败');
+      }
+
+      // 刷新数据
+      await loadTreeData();
+      await loadListData();
+    } catch (error) {
+      console.error('保存失败:', error);
+      throw error;
+    }
+  };
+
+  // 打开删除确认对话框
+  const handleDelete = (item: OrgElement | OrgPerson) => {
+    setDeleteItem(item);
+    setDeleteDialogOpen(true);
+  };
+
+  // 确认删除
+  const handleConfirmDelete = async () => {
+    if (!deleteItem) return;
+
+    try {
+      const response = await fetch('/api/organization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          type: currentView,
+          id: deleteItem.fd_id,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || '删除失败');
+      }
+
+      // 刷新数据
+      await loadTreeData();
+      await loadListData();
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      console.error('删除失败:', error);
+      alert('删除失败，请重试');
+    }
+  };
+
+  // 其他按钮处理
+  const handleQuickSort = () => {
+    alert('快速排序功能开发中');
+  };
+
+  const handleSetInvalid = () => {
+    alert('置为无效功能开发中');
+  };
+
+  const handleChangeParent = () => {
+    alert('快捷调换上级功能开发中');
   };
 
   // 渲染树节点
@@ -298,17 +411,17 @@ export default function OrganizationStructurePage() {
 
             {/* 操作按钮 */}
             <div className="flex items-center gap-2">
-              <Button size="sm">
+              <Button size="sm" onClick={handleCreate} disabled={!selectedNode}>
                 <Plus className="w-4 h-4 mr-1" />
                 新建
               </Button>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleQuickSort}>
                 快速排序
               </Button>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleSetInvalid}>
                 置为无效
               </Button>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleChangeParent}>
                 快捷调换上级
               </Button>
             </div>
@@ -375,10 +488,10 @@ export default function OrganizationStructurePage() {
 
                       {/* 操作按钮 */}
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => {/* TODO: 编辑 */}}>
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => {/* TODO: 删除 */}}>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(item)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -390,6 +503,33 @@ export default function OrganizationStructurePage() {
           </div>
         </Card>
       </div>
+
+      {/* 新建/编辑对话框 */}
+      <OrgElementDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSave={handleSave}
+        mode={dialogMode}
+        viewType={currentView}
+        initialData={dialogInitialData}
+        parentId={selectedNode?.id}
+      />
+
+      {/* 删除确认对话框 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除&quot;{deleteItem?.fd_name}&quot;吗？此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete}>删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
