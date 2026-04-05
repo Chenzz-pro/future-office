@@ -93,6 +93,28 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   // 使用配置钩子（仅全局配置）
   const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
 
+  // 检查数据库连接状态
+  useEffect(() => {
+    checkDatabaseConnection();
+  }, []);
+
+  const checkDatabaseConnection = async () => {
+    try {
+      setDbCheckLoading(true);
+      const response = await fetch('/api/database');
+      const data = await response.json();
+      setDbConnected(data.success || false);
+      if (!data.success) {
+        console.log('[NewChat] 数据库未连接:', data.error);
+      }
+    } catch (error) {
+      console.error('[NewChat] 检查数据库连接失败:', error);
+      setDbConnected(false);
+    } finally {
+      setDbCheckLoading(false);
+    }
+  };
+
   // 设置默认模型
   useEffect(() => {
     if (activeKey) {
@@ -167,8 +189,13 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
+    if (!dbConnected) {
+      setError('数据库未连接，请稍后重试或联系管理员检查数据库配置');
+      return;
+    }
+
     if (!activeKey) {
-      setError('请先配置 API 密钥');
+      setError('API Key 未配置，请联系管理员配置 AI 模型 API Key');
       return;
     }
 
