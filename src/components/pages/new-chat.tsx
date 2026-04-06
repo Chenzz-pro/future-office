@@ -228,26 +228,27 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     console.log('[sendMessage] 添加用户消息:', userMessage.content);
 
-    // 构建对话历史（使用添加用户消息之前的历史）
-    const conversationHistory = session.messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-
+    console.log('[sendMessage] 构建对话历史（使用添加用户消息之前的历史）');
     console.log('[sendMessage] 调用新的统一聊天API');
     console.log('[sendMessage] 对话历史长度:', conversationHistory.length);
     console.log('[sendMessage] 对话历史内容:', conversationHistory.map(m => `${m.role}: ${m.content.substring(0, 30)}...`));
 
-    // 先添加用户消息到会话中（等待完成）
-    console.log('[sendMessage] 开始添加用户消息到会话');
-    await addMessage(session.id, userMessage);
-    console.log('[sendMessage] 用户消息已添加到会话');
-
-    // 清空输入框和错误信息（在消息添加成功后）
-    setInputValue('');
-    setError(null);
-
     try {
+      // 先添加用户消息到会话中（等待完成）
+      console.log('[sendMessage] 开始添加用户消息到会话');
+      await addMessage(session.id, userMessage);
+      console.log('[sendMessage] 用户消息已添加到会话');
+
+      // 清空输入框和错误信息（在消息添加成功后）
+      setInputValue('');
+      setError(null);
+
+      // 构建对话历史（使用添加用户消息之前的历史）
+      const conversationHistory = session.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+
       // 添加超时机制，防止 API 调用卡住
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
