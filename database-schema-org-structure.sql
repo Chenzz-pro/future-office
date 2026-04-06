@@ -117,6 +117,72 @@ CREATE TABLE IF NOT EXISTS sys_org_staffing_level (
 -- 初始化数据
 -- ============================================
 
+-- 插入默认管理员账号到 sys_org_person
+-- 密码：admin123（使用 bcrypt 加密）
+INSERT INTO sys_org_person (
+    fd_id,
+    fd_name,
+    fd_login_name,
+    fd_password,
+    fd_email,
+    fd_role,
+    fd_is_login_enabled,
+    fd_is_business_related,
+    fd_user_type,
+    fd_create_time,
+    fd_alter_time
+) VALUES
+(
+    '00000000-0000-0000-0000-000000000001',
+    '系统管理员',
+    'admin',
+    '$2b$10$DId8bUro45mx1.fpSIJJV.MXHImaJM4kdb9V34feSKiU7dmRxeOTq',
+    'admin@example.com',
+    'admin',
+    1,
+    1,
+    'internal',
+    NOW(),
+    NOW()
+)
+ON DUPLICATE KEY UPDATE
+    fd_password = VALUES(fd_password),
+    fd_role = VALUES(fd_role),
+    fd_alter_time = NOW();
+
+-- 插入默认普通用户账号
+-- 密码：user123
+INSERT INTO sys_org_person (
+    fd_id,
+    fd_name,
+    fd_login_name,
+    fd_password,
+    fd_email,
+    fd_role,
+    fd_is_login_enabled,
+    fd_is_business_related,
+    fd_user_type,
+    fd_create_time,
+    fd_alter_time
+) VALUES
+(
+    '00000000-0000-0000-0000-000000000002',
+    '普通用户',
+    'user',
+    '$2b$10$2AzAhhA3wExFpcAfOyKsU.9BDM4dfkYm5qMvGKEvAOwHKvSBLh7R6',
+    'user@example.com',
+    'user',
+    1,
+    1,
+    'internal',
+    NOW(),
+    NOW()
+)
+ON DUPLICATE KEY UPDATE
+    fd_password = VALUES(fd_password),
+    fd_role = VALUES(fd_role),
+    fd_alter_time = NOW();
+
 -- 插入根机构
 INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_creator_id)
 VALUES (

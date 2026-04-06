@@ -273,7 +273,11 @@ function buildTree(flatData: any[], rootType?: number): any[] {
   });
 
   // 按照名称排序
-  const sortNodes = (nodes: any[]) => {
+  interface TreeNode {
+    name: string;
+    children?: TreeNode[];
+  }
+  const sortNodes = (nodes: TreeNode[]) => {
     nodes.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
     nodes.forEach(node => {
       if (node.children && node.children.length > 0) {
