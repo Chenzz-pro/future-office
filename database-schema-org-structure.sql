@@ -122,16 +122,69 @@ INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is
 VALUES (
     UUID(),
     1,
-    '未来办公集团',
+    '海峡人力',
     0,
     'ORG001',
     1,
     1,
     '根机构',
     NOW(),
-    (SELECT id FROM users WHERE username = 'admin' LIMIT 1)
+    NULL
 )
-ON DUPLICATE KEY UPDATE fd_name = '未来办公集团';
+ON DUPLICATE KEY UPDATE fd_name = '海峡人力';
+
+-- 插入一级部门（隶属于海峡人力）
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentorgid)
+VALUES
+-- 董事会
+(UUID(), 2, '董事会', 1, 'DEPT001', 1, 1, '董事会', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '海峡人力' LIMIT 1)),
+-- 经营班子
+(UUID(), 2, '经营班子', 2, 'DEPT002', 1, 1, '经营班子', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '海峡人力' LIMIT 1)),
+-- 人力资源部
+(UUID(), 2, '人力资源部', 3, 'DEPT003', 1, 1, '人力资源部', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '海峡人力' LIMIT 1)),
+-- 财务资金部
+(UUID(), 2, '财务资金部', 4, 'DEPT004', 1, 1, '财务资金部', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '海峡人力' LIMIT 1)),
+-- 省外区域中心
+(UUID(), 2, '省外区域中心', 5, 'DEPT005', 1, 1, '省外区域中心', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '海峡人力' LIMIT 1))
+ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
+
+-- 插入人力资源部下的子部门
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+VALUES
+-- 人力一组
+(UUID(), 2, '人力一组', 1, 'DEPT003001', 1, 1, '人力一组', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '人力资源部' LIMIT 1)),
+-- 人力二组
+(UUID(), 2, '人力二组', 2, 'DEPT003002', 1, 1, '人力二组', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '人力资源部' LIMIT 1)),
+-- 人力三组
+(UUID(), 2, '人力三组', 3, 'DEPT003003', 1, 1, '人力三组', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '人力资源部' LIMIT 1))
+ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
+
+-- 插入财务资金部下的子部门
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+VALUES
+-- 资金部
+(UUID(), 2, '资金部', 1, 'DEPT004001', 1, 1, '资金部', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '财务资金部' LIMIT 1)),
+-- 财务部
+(UUID(), 2, '财务部', 2, 'DEPT004002', 1, 1, '财务部', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '财务资金部' LIMIT 1))
+ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
+
+-- 插入省外区域中心下的子部门
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+VALUES
+-- 广东运营中心
+(UUID(), 2, '广东运营中心', 1, 'DEPT005001', 1, 1, '广东运营中心', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '省外区域中心' LIMIT 1)),
+-- 陕西运营中心
+(UUID(), 2, '陕西运营中心', 2, 'DEPT005002', 1, 1, '陕西运营中心', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '省外区域中心' LIMIT 1))
+ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
+
+-- 插入陕西运营中心下的子部门
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+VALUES
+-- 分公司1
+(UUID(), 2, '分公司1', 1, 'DEPT005002001', 1, 1, '分公司1', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '陕西运营中心' LIMIT 1)),
+-- 分公司2
+(UUID(), 2, '分公司2', 2, 'DEPT005002002', 1, 1, '分公司2', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '陕西运营中心' LIMIT 1))
+ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
 
 -- 插入职务级别
 INSERT INTO sys_org_staffing_level (fd_id, fd_name, fd_level, fd_description, fd_is_default, fd_is_available) VALUES
