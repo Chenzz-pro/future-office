@@ -18,62 +18,67 @@ http://your-domain/login
 
 ## 完整部署流程
 
-### 步骤 1：连接数据库
+### 步骤 1：配置数据库并初始化系统
 
-#### 方式1：使用数据库管理页面（推荐）
+访问 `/login`，如果数据库未连接或系统未初始化，会自动跳转到系统初始化页面（`/system-init`）。
 
-1. 登录系统 - 访问 `/login`
-2. 如果数据库未连接，会自动跳转到系统初始化页面
-3. 在系统初始化页面中，先配置数据库连接
-4. 填写数据库连接信息：
-   - 主机地址：`localhost`
-   - 端口：`3306`
-   - 数据库名：`futureoffice`
-   - 用户名：`root`
-   - 密码：`你的数据库密码`
-5. 点击"测试连接"
-6. 点击"保存"
-7. 点击"连接"激活数据库
+在系统初始化页面中：
 
-#### 方式2：使用 API 接口
+1. **配置数据库连接**（如果数据库未连接）
+   - 填写数据库连接信息：
+     - 主机地址：`localhost`
+     - 端口：`3306`
+     - 数据库名：`futureoffice`
+     - 用户名：`root`
+     - 密码：`你的数据库密码`
+   - 点击"测试连接"
+   - 点击"保存并连接"
+
+2. **初始化数据库表结构**（如果数据库是新建的）
+   - 连接数据库后，页面会自动检查系统状态
+   - 如果系统未初始化（没有管理员账号），会显示创建管理员账号的表单
+   - 也可以使用 API 初始化表结构（见下方）
+
+3. **创建管理员账号**
+   - 填写管理员信息：
+     - 用户名：`admin`
+     - 密码：`admin123`（至少 6 位）
+     - 邮箱：`admin@example.com`
+     - 姓名：`系统管理员`
+   - 点击"创建管理员账号"
+   - 创建成功后自动跳转到登录页
+
+#### 使用 API 接口
 
 ```bash
-# 1. 测试连接
-curl -X POST http://localhost:5000/api/database?action=test \
+curl -X POST http://localhost:5000/api/database?action=init \
   -H "Content-Type: application/json" \
   -d '{
-    "id": "test",
-    "name": "MySQL",
-    "type": "mysql",
     "host": "localhost",
     "port": 3306,
     "databaseName": "futureoffice",
     "username": "root",
     "password": "password"
   }'
-
-# 2. 连接数据库
-curl -X POST http://localhost:5000/api/database?action=connect \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id": "test",
-    "name": "MySQL",
-    "type": "mysql",
-    "host": "localhost",
-    "port": 3306,
-    "databaseName": "futureoffice",
-    "username": "root",
-    "password": "password",
-    "isActive": true,
-    "isDefault": true
-  }'
 ```
 
-### 步骤 2：初始化数据库表结构
+初始化会自动创建以下表：
+- `users`（临时表，用于迁移）
+- `api_keys`
+- `chat_sessions`
+- `chat_messages`
+- `custom_skills`
+- `ekp_configs`
+- `database_configs`
+- `organizations`
+- `sys_org_element`（组织架构表）
+- `sys_org_person`（人员表，也是系统用户表）
+- `sys_org_post_person`（岗位人员关联表）
+- `sys_org_staffing_level`（职务级别表）
 
-如果数据库是新建的，需要初始化表结构。
+### 使用 API 接口初始化数据库（可选）
 
-#### 使用 API 接口
+如果数据库是新建的，需要初始化表结构，可以使用以下 API：
 
 ```bash
 curl -X POST http://localhost:5000/api/database?action=init \
@@ -116,36 +121,7 @@ curl -X POST http://localhost:5000/api/database?action=init \
 - 三级部门：陕西运营中心下的两个分公司
 - 职务级别：普通员工、组长、主管、经理、总监、副总经理、总经理
 
-### 步骤 3：创建管理员账号（可选）
-
-如果初始化时没有创建默认管理员账号，可以通过以下方式创建：
-
-#### 方式1：使用系统初始化页面（推荐）
-
-1. 访问 `/login`
-2. 系统会自动检测并跳转到 `/system-init`
-3. 填写管理员信息：
-   - 用户名：`admin`
-   - 密码：`admin123`（至少 6 位）
-   - 邮箱：`admin@example.com`
-   - 姓名：`系统管理员`
-4. 点击"创建管理员账号"
-5. 创建成功后自动跳转到登录页
-
-#### 方式2：使用 API 接口
-
-```bash
-curl -X POST http://localhost:5000/api/system/init \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "password": "admin123",
-    "email": "admin@example.com",
-    "personName": "系统管理员"
-  }'
-```
-
-### 步骤 4：登录系统
+### 步骤 2：登录系统
 
 使用默认管理员账号登录：
 - 用户名：`admin`
@@ -153,7 +129,7 @@ curl -X POST http://localhost:5000/api/system/init \
 
 **安全提示**：首次登录后，建议立即修改密码！
 
-### 步骤 5：执行数据迁移（可选）
+### 步骤 3：执行数据迁移（可选）
 
 如果从旧版本升级，需要将 users 表的数据迁移到 sys_org_person 表。
 
@@ -356,11 +332,20 @@ curl -X POST http://localhost:5000/api/auth/login \
 
 ### Q2: 首次部署后无法登录怎么办？
 
-**A**:
-1. 访问 `/login`，系统会自动检查状态
-2. 如果数据库未连接，会自动跳转到系统初始化页面
-3. 如果系统未初始化，会提示创建管理员账号
-4. 按照页面提示完成初始化
+**A**: 首次部署后，访问 `/login` 会自动检查系统状态：
+
+1. 如果数据库未连接，会自动跳转到 `/system-init` 页面
+2. 在系统初始化页面中：
+   - 填写数据库连接信息（主机地址、端口、数据库名、用户名、密码）
+   - 点击"测试连接"
+   - 点击"保存并连接"
+3. 连接成功后，如果系统未初始化（没有管理员账号）：
+   - 填写管理员信息（用户名、密码、邮箱、姓名）
+   - 点击"创建管理员账号"
+   - 创建成功后自动跳转到登录页
+4. 使用默认账号登录：admin/admin123
+
+**提示**：如果初始化数据库时执行了数据库初始化脚本，会自动创建默认账号（admin/admin123 和 user/user123），直接登录即可。
 
 ### Q3: 忘记管理员密码怎么办？
 

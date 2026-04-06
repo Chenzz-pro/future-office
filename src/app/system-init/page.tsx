@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Database, CheckCircle, AlertCircle, Lock, User, Mail } from 'lucide-react';
+import { Database, CheckCircle, AlertCircle, Lock, User, Mail, RefreshCw, Play } from 'lucide-react';
 
 interface SystemStatus {
   database: {
@@ -34,6 +34,22 @@ export default function SystemInitPage() {
   const [initSuccess, setInitSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // 数据库配置状态
+  const [dbConfig, setDbConfig] = useState({
+    id: 'default',
+    name: 'MySQL',
+    type: 'mysql',
+    host: 'localhost',
+    port: 3306,
+    databaseName: 'futureoffice',
+    username: 'root',
+    password: '',
+  });
+  const [dbStep, setDbStep] = useState<'test' | 'connect' | 'connected'>('test');
+  const [dbLoading, setDbLoading] = useState(false);
+  const [dbError, setDbError] = useState('');
+  const [dbMessage, setDbMessage] = useState('');
+
   // 检查系统状态
   const checkStatus = async () => {
     try {
@@ -52,6 +68,70 @@ export default function SystemInitPage() {
       setError('检查系统状态失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 测试数据库连接
+  const handleTestDb = async () => {
+    setDbError('');
+    setDbMessage('');
+    setDbLoading(true);
+
+    try {
+      const response = await fetch('/api/database?action=test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dbConfig),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setDbMessage('数据库连接成功');
+        setDbStep('connect');
+      } else {
+        setDbError(data.error || '数据库连接失败');
+      }
+    } catch (err) {
+      console.error('测试数据库连接失败:', err);
+      setDbError('数据库连接失败');
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // 保存并连接数据库
+  const handleConnectDb = async () => {
+    setDbError('');
+    setDbMessage('');
+    setDbLoading(true);
+
+    try {
+      const response = await fetch('/api/database?action=connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...dbConfig,
+          isActive: true,
+          isDefault: true,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setDbMessage('数据库连接已保存');
+        setDbStep('connected');
+        // 刷新状态
+        await checkStatus();
+      } else {
+        setDbError(data.error || '保存数据库连接失败');
+      }
+    } catch (err) {
+      console.error('保存数据库连接失败:', err);
+      setDbError('保存数据库连接失败');
+    } finally {
+      setDbLoading(false);
     }
   };
 
@@ -170,15 +250,111 @@ export default function SystemInitPage() {
             </Alert>
           </div>
 
-          {/* 如果数据库未连接，显示提示 */}
+          {/* 如果数据库未连接，显示数据库配置表单 */}
           {!status?.database.connected && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>需要先配置数据库</AlertTitle>
-              <AlertDescription>
-                请先在数据库配置页面连接数据库，然后刷新此页面。
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-4">
+              <Alert>
+                <Database className="h-4 w-4" />
+                <AlertTitle>需要配置数据库</AlertTitle>
+                <AlertDescription>
+                  请填写数据库连接信息并测试连接，然后初始化系统。
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-3">
+                <Label>数据库配置</Label>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="主机地址 (例如: localhost)"
+                    value={dbConfig.host}
+                    onChange={(e) => setDbConfig({ ...dbConfig, host: e.target.value })}
+                    disabled={dbStep !== 'test'}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      placeholder="端口 (例如: 3306)"
+                      value={dbConfig.port}
+                      onChange={(e) => setDbConfig({ ...dbConfig, port: parseInt(e.target.value) || 3306 })}
+                      disabled={dbStep !== 'test'}
+                    />
+                    <Input
+                      placeholder="数据库名"
+                      value={dbConfig.databaseName}
+                      onChange={(e) => setDbConfig({ ...dbConfig, databaseName: e.target.value })}
+                      disabled={dbStep !== 'test'}
+                    />
+                  </div>
+                  <Input
+                    placeholder="用户名"
+                    value={dbConfig.username}
+                    onChange={(e) => setDbConfig({ ...dbConfig, username: e.target.value })}
+                    disabled={dbStep !== 'test'}
+                  />
+                  <Input
+                    type="password"
+                    placeholder="密码"
+                    value={dbConfig.password}
+                    onChange={(e) => setDbConfig({ ...dbConfig, password: e.target.value })}
+                    disabled={dbStep !== 'test'}
+                  />
+                </div>
+
+                {dbError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{dbError}</AlertDescription>
+                  </Alert>
+                )}
+
+                {dbMessage && (
+                  <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertDescription>{dbMessage}</AlertDescription>
+                  </Alert>
+                )}
+
+                {dbStep === 'test' && (
+                  <Button
+                    onClick={handleTestDb}
+                    disabled={dbLoading}
+                    className="w-full"
+                  >
+                    {dbLoading ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        测试连接中...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        测试连接
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {dbStep === 'connect' && (
+                  <Button
+                    onClick={handleConnectDb}
+                    disabled={dbLoading}
+                    className="w-full"
+                  >
+                    {dbLoading ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        保存连接中...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="mr-2 h-4 w-4" />
+                        保存并连接
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </div>
           )}
 
           {/* 如果数据库已连接但未初始化，显示初始化表单 */}
