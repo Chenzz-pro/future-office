@@ -85,6 +85,14 @@ function savePendingSync(pending: PendingSyncSession[]) {
 // API 调用辅助函数
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const userId = getCurrentUserId();
+
+  console.log('[fetchWithAuth] 发起请求:', {
+    url,
+    method: options.method || 'GET',
+    userId,
+    hasBody: !!options.body,
+  });
+
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -96,6 +104,12 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
   if (!response.ok) {
     const error = await response.json();
+    console.error('[fetchWithAuth] 请求失败:', {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      error,
+    });
     throw new Error(error.error || '请求失败');
   }
 

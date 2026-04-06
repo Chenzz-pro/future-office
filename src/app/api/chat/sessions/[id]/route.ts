@@ -50,6 +50,11 @@ export async function PUT(
     const { id } = await params;
     const userId = request.headers.get('X-User-ID');
 
+    console.log('[API:ChatSession:PUT] 权限检查:', {
+      sessionId: id,
+      requestUserId: userId,
+    });
+
     if (!userId) {
       return NextResponse.json({ success: false, error: '缺少用户 ID' }, { status: 400 });
     }
@@ -60,8 +65,20 @@ export async function PUT(
       return NextResponse.json({ success: false, error: '会话不存在' }, { status: 404 });
     }
 
+    console.log('[API:ChatSession:PUT] 会话数据:', {
+      sessionId: session.id,
+      sessionUserId: session.userId,
+      userId: userId,
+      match: session.userId === userId,
+    });
+
     // 检查权限：只能更新自己的会话
     if (session.userId !== userId) {
+      console.error('[API:ChatSession:PUT] 权限拒绝:', {
+        sessionUserId: session.userId,
+        requestUserId: userId,
+        sessionId: id,
+      });
       return NextResponse.json({ success: false, error: '无权更新该会话' }, { status: 403 });
     }
 

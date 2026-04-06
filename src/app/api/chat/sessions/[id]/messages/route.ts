@@ -51,6 +51,11 @@ export async function POST(
     const { id: sessionId } = await params;
     const userId = request.headers.get('X-User-ID');
 
+    console.log('[API:ChatMessages:POST] 权限检查:', {
+      sessionId,
+      requestUserId: userId,
+    });
+
     if (!userId) {
       return NextResponse.json({ success: false, error: '缺少用户 ID' }, { status: 400 });
     }
@@ -62,7 +67,19 @@ export async function POST(
       return NextResponse.json({ success: false, error: '会话不存在' }, { status: 404 });
     }
 
+    console.log('[API:ChatMessages:POST] 会话数据:', {
+      sessionId: session.id,
+      sessionUserId: session.userId,
+      requestUserId: userId,
+      match: session.userId === userId,
+    });
+
     if (session.userId !== userId) {
+      console.error('[API:ChatMessages:POST] 权限拒绝:', {
+        sessionUserId: session.userId,
+        requestUserId: userId,
+        sessionId,
+      });
       return NextResponse.json({ success: false, error: '无权访问该会话' }, { status: 403 });
     }
 
