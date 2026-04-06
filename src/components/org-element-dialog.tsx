@@ -168,8 +168,6 @@ export function OrgElementDialog({
         parentId,
       });
 
-      let result;
-
       // 如果提供了 onSave prop，使用旧的方式
       if (onSave) {
         await onSave({
@@ -196,7 +194,7 @@ export function OrgElementDialog({
         }),
       });
 
-      result = await response.json();
+      const result = await response.json();
 
       if (result.success) {
         console.log('[OrgElementDialog] 保存成功', result);
@@ -417,7 +415,7 @@ export function OrgElementDialog({
                   <Label htmlFor="fd_password">
                     登录密码 <span className="text-gray-500 text-xs font-normal ml-1">
                       (留空则自动生成12位随机密码)
-                    </Label>
+                    </span>
                   </Label>
                   <Input
                     id="fd_password"
