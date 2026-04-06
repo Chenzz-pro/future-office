@@ -48,8 +48,7 @@ const menuItems: MenuItem[] = [
     icon: <Bot className="w-5 h-5" />,
     path: '/admin/agents',
     subItems: [
-      { id: 'agents-list', label: '智能体列表', path: '/admin/agents/list' },
-      { id: 'agents-create', label: '创建智能体', path: '/admin/agents/create' },
+      { id: 'agents-list', label: '智能体列表', path: '/admin/agents' },
     ],
   },
   {
@@ -57,10 +56,6 @@ const menuItems: MenuItem[] = [
     label: '技能',
     icon: <Sparkles className="w-5 h-5" />,
     path: '/admin/skills',
-    subItems: [
-      { id: 'skills-list', label: '技能列表', path: '/admin/skills/list' },
-      { id: 'skills-templates', label: '技能模板', path: '/admin/skills/templates' },
-    ],
   },
   {
     id: 'organization',
