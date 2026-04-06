@@ -128,10 +128,15 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
     });
   } else {
     // 创建组织元素
+    // 根据类型选择正确的父ID字段
+    // 机构和部门使用 fd_parentorgid，岗位使用 fd_parentid
+    const parentField = (type === 'position') ? 'fd_parentid' : 'fd_parentorgid';
+    const parentId = data[parentField as string] || data.fd_parentid || null;
+
     await dbManager.query(
       `INSERT INTO sys_org_element (
-        fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_org_email, fd_memo, fd_parentid
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_org_email, fd_memo, fd_parentid, fd_parentorgid
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         orgType,
@@ -140,10 +145,11 @@ async function createOrgElement(type: string, data: Record<string, unknown>) {
         data.fd_order || 0,
         data.fd_email || '',
         data.fd_memo || '',
-        data.fd_parentid || null,
+        type === 'position' ? parentId : null, // fd_parentid: 仅岗位使用
+        type === 'position' ? null : parentId, // fd_parentorgid: 机构和部门使用
       ]
     );
-    console.log('[createOrgElement] 组织元素创建成功', { id, orgType });
+    console.log('[createOrgElement] 组织元素创建成功', { id, orgType, parentField, parentId });
   }
 
   return NextResponse.json({ success: true, data: { id } });
@@ -357,7 +363,8 @@ async function getOrgList(type: string, parentId: string, keyword: string) {
 
         if (parentOrgType === 1) {
           // 如果父节点是机构，查询该机构下所有部门的人员
-          query += ' AND fd_dept_id IN (SELECT fd_id FROM sys_org_element WHERE fd_parentid = ? AND fd_org_type = 2)';
+          // 注意：部门使用 fd_parentorgid 指向父机构/部门
+          query += ' AND fd_dept_id IN (SELECT fd_id FROM sys_org_element WHERE fd_parentorgid = ? AND fd_org_type = 2)';
           params.push(parentId);
         } else if (parentOrgType === 2) {
           // 如果父节点是部门，直接查询该部门的人员
@@ -385,8 +392,12 @@ async function getOrgList(type: string, parentId: string, keyword: string) {
     }
 
     if (parentId) {
-      query += ' AND fd_parentid = ?';
+      // 根据类型使用不同的父ID字段
+      // 机构和部门使用 fd_parentorgid，岗位使用 fd_parentid
+      const parentField = (type === 'position') ? 'fd_parentid' : 'fd_parentorgid';
+      query += ` AND ${parentField} = ?`;
       params.push(parentId);
+      console.log('[getOrgList] 查询子节点:', { type, parentField, parentId });
     }
   }
 
