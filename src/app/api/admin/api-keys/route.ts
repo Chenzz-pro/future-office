@@ -6,9 +6,9 @@ import { ApiKeyRepository } from '@/lib/database/repositories/apikey-admin.repos
 async function ensureSystemUser(): Promise<void> {
   const systemUserId = '00000000-0000-0000-0000-000000000000';
 
-  // 检查 system 用户是否存在
+  // 检查 sys_org_person 表中是否存在 system 用户
   const { rows } = await dbManager.query(
-    'SELECT id FROM users WHERE id = ?',
+    'SELECT fd_id FROM sys_org_person WHERE fd_id = ?',
     [systemUserId]
   );
 
@@ -16,9 +16,9 @@ async function ensureSystemUser(): Promise<void> {
     // system 用户不存在，创建它
     console.log('[API Keys] System user not found, creating...');
     await dbManager.query(
-      `INSERT INTO users (id, username, password, email, role, status)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [systemUserId, 'system', 'system', 'system@system.local', 'admin', 'active']
+      `INSERT INTO sys_org_person (fd_id, fd_name, fd_login_name, fd_email, fd_role, fd_is_login_enabled, fd_is_business_related, fd_user_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [systemUserId, 'System', 'system', 'system@system.local', 'admin', 0, 1, 'system']
     );
     console.log('[API Keys] System user created successfully');
   }
