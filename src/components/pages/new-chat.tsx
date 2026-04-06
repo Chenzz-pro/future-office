@@ -183,9 +183,13 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   }, []);
 
   const sendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    const trimmedInput = inputValue.trim();
+    if (!trimmedInput || isLoading) return;
 
     console.log('[sendMessage] 开始发送消息');
+
+    // 立即设置 loading 状态，防止重复发送
+    setIsLoading(true);
 
     // 获取当前用户信息
     const userId = localStorage.getItem('current-user-id') || '';
@@ -195,6 +199,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     if (!userId) {
       console.error('[sendMessage] 用户ID未找到，请先登录');
       setError('⚠️ 未找到用户信息，请先登录');
+      setIsLoading(false);
       return;
     }
 
@@ -204,13 +209,20 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     let session = currentSession;
     if (!session) {
       console.log('[sendMessage] 创建新会话');
-      session = await createSession(selectedModel, activeKey?.provider || 'unknown');
+      try {
+        session = await createSession(selectedModel, activeKey?.provider || 'unknown');
+      } catch (err) {
+        console.error('[sendMessage] 创建会话失败:', err);
+        setError('创建会话失败，请重试');
+        setIsLoading(false);
+        return;
+      }
     }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue.trim(),
+      content: trimmedInput,
       timestamp: new Date(),
     };
 
@@ -219,7 +231,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     // 先添加用户消息到界面
     addMessage(session.id, userMessage);
     setInputValue('');
-    setIsLoading(true);
     setError(null);
 
     // 构建对话历史
@@ -244,9 +255,10 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         }),
       });
 
-      console.log('[sendMessage] API 响应状态:', response.status);
+      console.log('[sendMessage] API 响应:', { status: response.status, ok: response.ok });
 
       const data = await response.json();
+      console.log('[sendMessage] 响应数据:', data);
 
       if (!response.ok || !data.success) {
         console.error('[sendMessage] API 错误:', data);
@@ -255,7 +267,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
       // 添加助手消息
       const assistantContent = data.data?.content || '处理完成';
-      console.log('[sendMessage] 助手回复:', assistantContent);
+      console.log('[sendMessage] 助手回复内容:', assistantContent);
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -264,8 +276,13 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         timestamp: new Date(),
       };
 
+      console.log('[sendMessage] 准备添加助手消息:', assistantMessage);
+
       if (session) {
-        addMessage(session.id, assistantMessage);
+        await addMessage(session.id, assistantMessage);
+        console.log('[sendMessage] 助手消息已添加');
+      } else {
+        console.warn('[sendMessage] 会话不存在，无法添加助手消息');
       }
     } catch (err) {
       console.error('[sendMessage] Chat error:', err);
