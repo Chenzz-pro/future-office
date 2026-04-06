@@ -29,11 +29,18 @@ export async function initializeApp() {
 
     // 调试日志：输出所有环境变量
     console.log('[Initialize] 环境变量检查:', {
-      DB_HOST: envDbConfig.host ? '✅ 已设置' : '❌ 未设置',
+      DB_HOST: envDbConfig.host ? `✅ ${envDbConfig.host}` : '❌ 未设置',
       DB_PORT: envDbConfig.port,
-      DB_USER: envDbConfig.username ? '✅ 已设置' : '❌ 未设置',
-      DB_PASSWORD: envDbConfig.password ? '✅ 已设置' : '❌ 未设置',
-      DB_NAME: envDbConfig.databaseName ? '✅ 已设置' : '❌ 未设置',
+      DB_USER: envDbConfig.username ? `✅ ${envDbConfig.username}` : '❌ 未设置',
+      DB_PASSWORD: envDbConfig.password ? '✅ 已设置（长度:' + envDbConfig.password.length + '）' : '❌ 未设置',
+      DB_NAME: envDbConfig.databaseName ? `✅ ${envDbConfig.databaseName}` : '❌ 未设置',
+      NODE_ENV: process.env.NODE_ENV,
+      COZE_PROJECT_ENV: process.env.COZE_PROJECT_ENV,
+      '所有环境变量': {
+        ...envDbConfig,
+        NODE_ENV: process.env.NODE_ENV,
+        COZE_PROJECT_ENV: process.env.COZE_PROJECT_ENV,
+      },
     });
 
     // 2. 如果配置了环境变量，直接连接
