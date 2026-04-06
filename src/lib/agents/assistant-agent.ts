@@ -194,6 +194,7 @@ export class AssistantAgent {
 
     // 调用 oneAPI 生成响应
     try {
+      console.log('[AssistantAgent] 开始调用 oneAPI，准备获取响应');
       // 直接读取配置文件，避免依赖 dbManager 单例
       const fs = await import('fs');
       const path = await import('path');
@@ -311,8 +312,10 @@ export class AssistantAgent {
 
       console.log('[AssistantAgent] oneAPI 响应成功', {
         responseLength: response.length,
+        responsePreview: response.substring(0, 100),
       });
 
+      console.log('[AssistantAgent] 准备返回成功结果');
       return {
         success: true,
         data: {
@@ -323,7 +326,12 @@ export class AssistantAgent {
       };
     } catch (error) {
       console.error('[AssistantAgent] oneAPI 调用失败', error);
+      console.error('[AssistantAgent] 错误详情:', {
+        message: error instanceof Error ? error.message : '未知错误',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
+      console.log('[AssistantAgent] 降级到固定响应');
       // 降级到固定响应
       return this.getFixedResponse(context.message);
     }

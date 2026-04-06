@@ -46,11 +46,23 @@ export class RootAgent {
       }
 
       // 步骤3：任务分发
+      console.log('[RootAgent] 准备分发任务', { intent });
       const result = await this.dispatch(context, intent);
-      console.log('[RootAgent] 任务分发结果', result);
+      console.log('[RootAgent] 任务分发结果', {
+        success: result.success,
+        agentType: result.agentType,
+        hasData: !!result.data,
+        error: result.error,
+      });
 
       // 步骤4：结果汇总
-      return this.summarize(result);
+      const summarizedResult = this.summarize(result);
+      console.log('[RootAgent] 结果汇总完成', {
+        success: summarizedResult.success,
+        agentType: summarizedResult.agentType,
+        hasData: !!summarizedResult.data,
+      });
+      return summarizedResult;
     } catch (error) {
       console.error('[RootAgent] 处理请求失败', error);
       return {

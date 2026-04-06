@@ -259,7 +259,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       console.log('[sendMessage] API 响应:', { status: response.status, ok: response.ok });
 
       const data = await response.json();
-      console.log('[sendMessage] 响应数据:', data);
+      console.log('[sendMessage] 响应数据:', JSON.stringify(data, null, 2));
 
       if (!response.ok || !data.success) {
         console.error('[sendMessage] API 错误:', data);
@@ -269,6 +269,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       // 添加助手消息
       const assistantContent = data.data?.content || '处理完成';
       console.log('[sendMessage] 助手回复内容:', assistantContent);
+      console.log('[sendMessage] 助手回复长度:', assistantContent.length);
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
