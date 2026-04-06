@@ -4,6 +4,7 @@
  */
 
 import { ASSISTANT_AGENT_CONFIG } from '@/lib/constants/agents';
+import { oneAPIManager } from '@/lib/oneapi';
 import type {
   AgentContext,
   AgentResult,
@@ -191,13 +192,134 @@ export class AssistantAgent {
   ): Promise<AgentResult> {
     console.log('[AssistantAgent] 通用对话', { userId: context.userId });
 
-    // 调用大模型生成响应
-    // 简化实现：返回固定响应
+    // 调用 oneAPI 生成响应
+    try {
+      // 直接读取配置文件，避免依赖 dbManager 单例
+      const fs = await import('fs');
+      const path = await import('path');
+      const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
+
+      let dbConfig = null;
+      try {
+        if (fs.existsSync(CONFIG_FILE_PATH)) {
+          const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+          dbConfig = JSON.parse(data);
+          console.log('[AssistantAgent] 从配置文件读取数据库配置');
+        }
+      } catch (err) {
+        console.error('[AssistantAgent] 读取配置文件失败:', err);
+      }
+
+      if (!dbConfig) {
+        console.log('[AssistantAgent] 未找到数据库配置，返回固定响应');
+        return this.getFixedResponse(context.message);
+      }
+
+      // 创建临时连接池读取 oneAPI 配置
+      const mysql = (await import('mysql2/promise')).default;
+      const connection = await mysql.createConnection({
+        host: dbConfig.host,
+        port: dbConfig.port,
+        user: dbConfig.username,
+        password: dbConfig.password,
+        database: dbConfig.databaseName,
+      });
+
+      console.log('[AssistantAgent] 临时连接数据库成功');
+
+      // 查询启用的 oneAPI 配置
+      const [rows] = await connection.execute(
+        'SELECT * FROM oneapi_configs WHERE enabled = 1 LIMIT 1'
+      );
+
+      await connection.end();
+
+      const configs = rows as any[];
+      if (!configs || configs.length === 0) {
+        console.log('[AssistantAgent] 未找到启用的 oneAPI 配置，返回固定响应');
+        return this.getFixedResponse(context.message);
+      }
+
+      const config = configs[0];
+      console.log('[AssistantAgent] 使用 oneAPI 配置:', {
+        name: config.name,
+        baseUrl: config.base_url,
+        model: config.model,
+        enabled: config.enabled,
+      });
+
+      if (!config.enabled) {
+        console.log('[AssistantAgent] oneAPI 未启用，返回固定响应');
+        return this.getFixedResponse(context.message);
+      }
+
+      console.log('[AssistantAgent] 调用 oneAPI 生成响应');
+
+      // 创建 oneAPI 客户端
+      const { OneAPIClient } = await import('@/lib/oneapi/client');
+      const client = new OneAPIClient({
+        id: config.id,
+        name: config.name,
+        baseUrl: config.base_url,
+        apiKey: config.api_key,
+        model: config.model,
+        enabled: config.enabled,
+        createdAt: config.created_at,
+        updatedAt: config.updated_at,
+      });
+
+      // 构建消息列表
+      const messages = [
+        {
+          role: 'system' as const,
+          content: '你是企业OA系统的个人助理，负责回答用户的各种问题。请用友好、专业的语气回答。',
+        },
+        {
+          role: 'user' as const,
+          content: context.message,
+        },
+      ];
+
+      // 如果有对话历史，添加到消息列表中
+      if (context.conversationHistory && context.conversationHistory.length > 0) {
+        messages.splice(1, 0, ...context.conversationHistory);
+      }
+
+      // 调用 oneAPI
+      const response = await client.chat(messages, {
+        temperature: 0.7,
+        maxTokens: 2000,
+      });
+
+      console.log('[AssistantAgent] oneAPI 响应成功', {
+        responseLength: response.length,
+      });
+
+      return {
+        success: true,
+        data: {
+          type: 'general',
+          content: response,
+        },
+        agentType: 'assistant',
+      };
+    } catch (error) {
+      console.error('[AssistantAgent] oneAPI 调用失败', error);
+
+      // 降级到固定响应
+      return this.getFixedResponse(context.message);
+    }
+  }
+
+  /**
+   * 返回固定响应
+   */
+  private getFixedResponse(message: string): AgentResult {
     return {
       success: true,
       data: {
         type: 'general',
-        content: `我收到了您的消息："${context.message}"，正在为您处理...`,
+        content: `我收到了您的消息："${message}"，正在为您处理...`,
       },
       agentType: 'assistant',
     };

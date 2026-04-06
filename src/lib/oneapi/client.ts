@@ -52,7 +52,21 @@ export class OneAPIClient {
     });
 
     try {
-      const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
+      // 处理 baseUrl，确保不会重复 /v1 路径
+      let apiUrl = this.config.baseUrl;
+      // 如果 baseUrl 以 /V1 或 /v1 结尾，去掉它
+      if (apiUrl.endsWith('/V1') || apiUrl.endsWith('/v1')) {
+        apiUrl = apiUrl.slice(0, -3);
+      }
+      // 确保 baseUrl 不以 / 结尾
+      if (apiUrl.endsWith('/')) {
+        apiUrl = apiUrl.slice(0, -1);
+      }
+
+      const fullUrl = `${apiUrl}/v1/chat/completions`;
+      console.log('[OneAPIClient] 完整 URL:', fullUrl);
+
+      const response = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
