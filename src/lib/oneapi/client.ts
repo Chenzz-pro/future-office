@@ -3,6 +3,9 @@
  * 用于调用oneAPI服务进行大模型对话
  */
 
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
 import type {
   OneAPIConfig,
   OneAPIRequest,
@@ -52,87 +55,114 @@ export class OneAPIClient {
     });
 
     try {
-      // 添加超时控制（10秒 - 缩短超时时间以快速失败）
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-        console.error('[OneAPIClient] 请求超时（10秒），中断请求');
-      }, 10000);
+      // 处理 baseUrl，确保不会重复 /v1 路径
+      let apiUrl = this.config.baseUrl;
+      // 如果 baseUrl 以 /V1 或 /v1 结尾，去掉它
+      if (apiUrl.endsWith('/V1') || apiUrl.endsWith('/v1')) {
+        apiUrl = apiUrl.slice(0, -3);
+      }
+      // 确保 baseUrl 不以 / 结尾
+      if (apiUrl.endsWith('/')) {
+        apiUrl = apiUrl.slice(0, -1);
+      }
 
-      try {
-        // 处理 baseUrl，确保不会重复 /v1 路径
-        let apiUrl = this.config.baseUrl;
-        // 如果 baseUrl 以 /V1 或 /v1 结尾，去掉它
-        if (apiUrl.endsWith('/V1') || apiUrl.endsWith('/v1')) {
-          apiUrl = apiUrl.slice(0, -3);
-        }
-        // 确保 baseUrl 不以 / 结尾
-        if (apiUrl.endsWith('/')) {
-          apiUrl = apiUrl.slice(0, -1);
-        }
+      const fullUrl = `${apiUrl}/v1/chat/completions`;
+      console.log('[OneAPIClient] 完整 URL:', fullUrl);
 
-        const fullUrl = `${apiUrl}/v1/chat/completions`;
-        console.log('[OneAPIClient] 完整 URL:', fullUrl);
-        console.log('[OneAPIClient] 开始发送请求...');
+      // 解析 URL
+      const urlObj = new URL(fullUrl);
+      const isHttps = urlObj.protocol === 'https:';
+      const httpModule = isHttps ? https : http;
 
-        const requestStartTime = Date.now();
+      const requestStartTime = Date.now();
 
-        const response = await fetch(fullUrl, {
+      // 使用 Promise 包装 http 请求
+      return new Promise((resolve, reject) => {
+        // 增加超时时间到 30 秒，给 oneAPI 更多的响应时间
+        const timeoutId = setTimeout(() => {
+          console.error('[OneAPIClient] 请求超时（30秒）');
+          reject(new Error('oneAPI请求超时（30秒）'));
+        }, 30000);
+
+        const options = {
+          hostname: urlObj.hostname,
+          port: urlObj.port || (isHttps ? 443 : 80),
+          path: urlObj.pathname + urlObj.search,
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.config.apiKey}`,
+            'Authorization': `Bearer ${this.config.apiKey}`,
+            'Content-Length': Buffer.byteLength(JSON.stringify(requestBody)),
           },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        });
+          timeout: 30000,
+        };
 
-        const requestDuration = Date.now() - requestStartTime;
-        console.log('[OneAPIClient] 收到响应:', {
-          status: response.status,
-          duration: `${requestDuration}ms`,
-        });
+        const req = httpModule.request(options, (res) => {
+          clearTimeout(timeoutId);
 
-        clearTimeout(timeoutId);
+          let data = '';
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[OneAPIClient] 请求失败:', {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText,
+          res.on('data', (chunk) => {
+            data += chunk;
           });
-          throw new Error(`oneAPI请求失败: ${response.status} ${response.statusText}`);
-        }
 
-        console.log('[OneAPIClient] 开始解析响应 JSON...');
-        const data: OneAPIResponse = await response.json();
+          res.on('end', () => {
+            const requestDuration = Date.now() - requestStartTime;
+            console.log('[OneAPIClient] 收到响应:', {
+              status: res.statusCode,
+              duration: `${requestDuration}ms`,
+            });
 
-        if (!data.choices || data.choices.length === 0) {
-          throw new Error('oneAPI返回的响应为空');
-        }
+            try {
+              if (res.statusCode !== 200) {
+                console.error('[OneAPIClient] 请求失败:', {
+                  status: res.statusCode,
+                  statusMessage: res.statusMessage,
+                  body: data,
+                });
+                reject(new Error(`oneAPI请求失败: ${res.statusCode} ${res.statusMessage}`));
+                return;
+              }
 
-        const content = data.choices[0].message.content;
-        console.log('[OneAPIClient] 请求成功:', {
-          tokens: data.usage?.total_tokens,
-          contentLength: content.length,
-          duration: `${Date.now() - requestStartTime}ms`,
+              console.log('[OneAPIClient] 开始解析响应 JSON...');
+              const parsedData: OneAPIResponse = JSON.parse(data);
+
+              if (!parsedData.choices || parsedData.choices.length === 0) {
+                reject(new Error('oneAPI返回的响应为空'));
+                return;
+              }
+
+              const content = parsedData.choices[0].message.content;
+              console.log('[OneAPIClient] 请求成功:', {
+                tokens: parsedData.usage?.total_tokens,
+                contentLength: content.length,
+                duration: `${Date.now() - requestStartTime}ms`,
+              });
+
+              resolve(content);
+            } catch (error) {
+              console.error('[OneAPIClient] 解析响应失败:', error);
+              reject(error);
+            }
+          });
         });
 
-        return content;
-      } catch (error) {
-        clearTimeout(timeoutId);
-        const isAbort = error instanceof Error && error.name === 'AbortError';
-        if (isAbort) {
-          console.error('[OneAPIClient] 请求被中断（超时）');
-        } else {
-          console.error('[OneAPIClient] 请求异常:', {
-            message: error instanceof Error ? error.message : '未知错误',
-            name: error instanceof Error ? error.name : 'Unknown',
-          });
-        }
-        throw error;
-      }
+        req.on('error', (error) => {
+          clearTimeout(timeoutId);
+          console.error('[OneAPIClient] 请求异常:', error);
+          reject(error);
+        });
+
+        req.on('timeout', () => {
+          clearTimeout(timeoutId);
+          req.destroy();
+          console.error('[OneAPIClient] 请求超时（socket timeout）');
+          reject(new Error('oneAPI请求超时（socket timeout）'));
+        });
+
+        req.write(JSON.stringify(requestBody));
+        req.end();
+      });
     } catch (error) {
       console.error('[OneAPIClient] 调用失败:', error);
       throw error;
