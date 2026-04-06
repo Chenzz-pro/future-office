@@ -242,36 +242,15 @@ export interface StaffingLevelDTO {
 // ============================================
 
 /**
- * 组织架构树节点接口
+ * 组织架构树节点接口（只包含机构和部门）
  */
 export interface OrgTreeNode {
   id: string;
   name: string;
-  type: OrgElementType | 4;  // 1=机构, 2=部门, 3=岗位, 4=人员
-  typeLabel?: string;
-  order: number;
-  no?: string;
-  isAvailable?: boolean;
-  isBusiness?: boolean;
-  email?: string;
-  personsNumber?: number;
-  memo?: string;
-  hierarchyId?: string;
-  createTime?: Date;
-  isExternal?: boolean;
-  thisLeaderId?: string;
-  thisLeaderName?: string;
-  superLeaderId?: string;
-  superLeaderName?: string;
-  parentOrgId?: string;
-  parentOrgName?: string;
+  type: OrgElementType;  // 1=机构, 2=部门
   parentId?: string;
-  parentName?: string;
-  creatorId?: string;
   children?: OrgTreeNode[];
   personCount?: number;  // 人员数量（含下级）
-  level?: number;  // 层级深度
-  path?: string[];  // 完整路径
 }
 
 // ============================================

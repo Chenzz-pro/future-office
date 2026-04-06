@@ -299,7 +299,7 @@ export class OrgElementRepository {
         ) {
           const node = this.mapRowToTreeNode(row);
           node.children = buildTree(row.fd_id);
-          node.personCount = node.children.reduce((sum, child) => sum + (child.personsNumber || 0), 0) + row.fd_persons_number;
+          node.personCount = node.children.reduce((sum, child) => sum + (child.personCount || 0), 0) + row.fd_persons_number;
           nodes.push(node);
         }
       }
@@ -400,29 +400,9 @@ export class OrgElementRepository {
       id: row.fd_id,
       name: row.fd_name,
       type: row.fd_org_type,
-      typeLabel: row.fd_org_type === 1 ? '机构' : row.fd_org_type === 2 ? '部门' : '岗位',
-      order: row.fd_order,
-      no: row.fd_no,
-      isAvailable: !!row.fd_is_available,
-      isBusiness: !!row.fd_is_business,
-      email: row.fd_org_email,
-      personsNumber: row.fd_persons_number,
-      memo: row.fd_memo,
-      hierarchyId: row.fd_hierarchy_id,
-      createTime: new Date(row.fd_create_time),
-      isExternal: !!row.fd_is_external,
-      thisLeaderId: row.fd_this_leaderid,
-      thisLeaderName: row.fd_this_leader_name,
-      superLeaderId: row.fd_super_leaderid,
-      superLeaderName: row.fd_super_leader_name,
-      parentOrgId: row.fd_parentorgid,
-      parentOrgName: row.fd_parentorg_name,
-      parentId: row.fd_parentid,
-      parentName: row.fd_parent_name,
-      creatorId: row.fd_creator_id,
+      parentId: row.fd_parentid || row.fd_parentorgid,
       children: [],
-      personCount: 0,
-      level: (row.fd_hierarchy_id?.split('/').filter(Boolean).length || 1) - 1
+      personCount: row.fd_persons_number || 0,
     };
   }
 }

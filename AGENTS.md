@@ -161,8 +161,43 @@ interface CustomSkill {
 - `/admin/agents` - 智能体管理
 - `/admin/skills` - 技能管理
 - `/admin/organization` - 组织权限管理
+- `/admin/organization/structure` - 组织架构树
 - `/admin/integration` - 集成中心
 - `/admin/database` - 数据库配置（新增）
+
+## 组织架构管理
+
+### 组织架构树
+组织架构树展示机构和部门的层级结构，不显示人员。
+
+**树形结构规则：**
+- 机构（type=1）：作为根节点，没有父节点
+- 部门（type=2）：支持多级嵌套，父节点可以是机构或另一个部门
+- 人员不显示在树中，只在右侧列表中显示
+
+**示例结构：**
+```
+海峡人力
+├── 董事会
+├── 经营班子
+├── 人力资源部
+│   ├── 人力一组
+│   ├── 人力二组
+│   └── 人力三组
+├── 财务资金部
+│   ├── 资金部
+│   └── 财务部
+└── 省外区域中心
+    ├── 广东运营中心
+    └── 陕西运营中心
+        ├── 分公司1
+        └── 分公司2
+```
+
+**API 接口：**
+- `GET /api/organization?action=tree&type=1` - 获取树形数据（只显示机构）
+- `GET /api/organization?action=tree&type=2` - 获取树形数据（显示机构和部门）
+- `GET /api/organization?action=list&type=person&parentId=xxx` - 获取指定部门的人员列表
 
 ## EKP 集成
 
