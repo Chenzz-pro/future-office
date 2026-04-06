@@ -17,7 +17,6 @@ export async function GET(request: NextRequest) {
       database: {
         connected: dbManager.isConnected(),
         config: dbManager.getConfig(),
-        poolStatus: dbManager.getPoolStatus(),
       },
       recommendations: [] as string[],
     };
@@ -30,19 +29,6 @@ export async function GET(request: NextRequest) {
       diagnosis.recommendations.push('💡 检查数据库用户名和密码是否正确');
     } else {
       diagnosis.recommendations.push('✅ 数据库连接正常');
-
-      // 检查连接池状态
-      if (diagnosis.database.poolStatus) {
-        const { totalConnections, freeConnections, queuedRequests } = diagnosis.database.poolStatus;
-
-        if (totalConnections >= 10) {
-          diagnosis.recommendations.push('⚠️ 数据库连接池使用率较高，建议优化查询性能');
-        }
-
-        if (queuedRequests > 0) {
-          diagnosis.recommendations.push(`⚠️ 当前有 ${queuedRequests} 个请求在排队等待连接`);
-        }
-      }
     }
 
     return NextResponse.json({
