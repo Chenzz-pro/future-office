@@ -45,7 +45,19 @@ export class ChatSessionRepository {
   async findById(id: string): Promise<ChatSession | null> {
     const sql = 'SELECT * FROM chat_sessions WHERE id = ?';
     const { rows } = await dbManager.query<ChatSession>(sql, [id]);
-    return rows[0] || null;
+    const row = rows[0];
+
+    if (!row) return null;
+
+    // MySQL 返回下划线命名，转换为 TypeScript 驼峰命名
+    return {
+      id: (row as any).id,
+      userId: (row as any).user_id,
+      title: (row as any).title,
+      agentId: (row as any).agent_id,
+      createdAt: (row as any).created_at,
+      updatedAt: (row as any).updated_at,
+    };
   }
 
   /**
