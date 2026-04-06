@@ -365,18 +365,105 @@ export async function POST(request: NextRequest) {
 
     if (action === 'connect') {
       const body = await request.json();
-      const { configId } = body;
 
-      const config = await databaseConfigRepository.findById(configId);
-      if (!config) {
+      // 支持两种方式：
+      // 1. 传递 configId（从数据库读取配置）
+      // 2. 传递完整的配置对象（直接连接）
+      let config: import('@/lib/database').DatabaseConfig | null = null;
+
+      if (body.configId) {
+        config = await databaseConfigRepository.findById(body.configId);
+        if (!config) {
+          return NextResponse.json(
+            { success: false, error: '配置不存在' },
+            { status: 404 }
+          );
+        }
+      } else if (body.host && body.databaseName && body.username) {
+        // 使用传递的配置对象
+        config = {
+          id: body.id || 'default',
+          name: body.name || '默认配置',
+          type: 'mysql',
+          host: body.host,
+          port: body.port ?? 3306,
+          databaseName: body.databaseName,
+          username: body.username,
+          password: body.password,
+          isActive: body.isActive ?? true,
+          isDefault: body.isDefault ?? false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as import('@/lib/database').DatabaseConfig;
+      } else {
         return NextResponse.json(
-          { success: false, error: '配置不存在' },
-          { status: 404 }
+          { success: false, error: '缺少必要参数（configId 或 配置信息）' },
+          { status: 400 }
         );
       }
 
+      // 先连接数据库
       await dbManager.connect(config);
-      await databaseConfigRepository.setActive(configId);
+
+      // 检查 database_configs 表是否存在，如果不存在则创建
+      try {
+        const checkResult = await dbManager.query<any>(
+          'SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
+          ['database_configs']
+        );
+        const tableExists = checkResult.rows[0]?.count > 0;
+
+        if (!tableExists) {
+          console.log('[API:Database:Connect] database_configs 表不存在，创建中...');
+          await dbManager.query(`
+            CREATE TABLE database_configs (
+              id VARCHAR(36) PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              type VARCHAR(20) NOT NULL,
+              host VARCHAR(255) NOT NULL,
+              port INT NOT NULL,
+              database_name VARCHAR(100) NOT NULL,
+              username VARCHAR(100) NOT NULL,
+              password VARCHAR(255) NOT NULL,
+              is_active BOOLEAN DEFAULT FALSE,
+              is_default BOOLEAN DEFAULT FALSE,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+          `);
+          console.log('[API:Database:Connect] database_configs 表创建成功');
+        }
+      } catch (err) {
+        console.warn('[API:Database:Connect] 检查或创建 database_configs 表失败:', err);
+      }
+
+      // 尝试保存配置到数据库
+      try {
+        const existingConfig = await databaseConfigRepository.findById(config.id);
+        const configData: Omit<import('@/lib/database').DatabaseConfig, 'id' | 'createdAt' | 'updatedAt'> = {
+          name: config.name,
+          type: config.type,
+          host: config.host,
+          port: config.port,
+          databaseName: config.databaseName,
+          username: config.username,
+          password: config.password,
+          isActive: config.isActive,
+          isDefault: config.isDefault,
+        };
+
+        if (!existingConfig) {
+          await databaseConfigRepository.create(configData, config.id);
+        } else {
+          await databaseConfigRepository.update(config.id, configData);
+        }
+
+        // 设置为激活状态
+        await databaseConfigRepository.setActive(config.id);
+      } catch (err) {
+        console.warn('[API:Database:Connect] 保存配置失败:', err);
+        // 保存失败不影响连接成功
+      }
 
       // 缓存配置，用于页面刷新后自动重新连接
       lastActiveConfig = config;
