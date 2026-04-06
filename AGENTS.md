@@ -30,10 +30,18 @@
 │   │   ├── page.tsx        # 主页面
 │   │   ├── layout.tsx      # 根布局
 │   │   ├── globals.css     # 全局样式
+│   │   ├── login/          # 登录页面
+│   │   │   └── page.tsx    # 登录页面（支持自动跳转）
+│   │   ├── system-init/    # 系统初始化页面
+│   │   │   └── page.tsx    # 系统初始化页面（数据库配置和初始化）
 │   │   └── api/            # API 路由
 │   │       ├── chat/       # 对话 API
 │   │       ├── ekp/        # EKP 集成 API
-│   │       └── custom-skill/ # 自定义技能 API
+│   │       ├── custom-skill/ # 自定义技能 API
+│   │       ├── auth/       # 认证 API（登录、密码管理）
+│   │       ├── database/   # 数据库管理 API（初始化、连接、迁移）
+│   │       ├── organization/ # 组织架构管理 API
+│   │       └── system/     # 系统管理 API（状态检查、初始化）
 │   ├── components/         # 业务组件
 │   │   ├── sidebar.tsx     # 左侧导航栏
 │   │   ├── main-content.tsx # 主内容区（页签系统）
@@ -146,6 +154,44 @@ interface CustomSkill {
 }
 ```
 
+## 系统初始化
+
+### 概述
+系统初始化功能支持在首次部署时自动创建数据库、初始化表结构和创建默认账号。
+
+### 核心功能
+- **数据库配置** - 配置 MySQL 数据库连接信息
+- **自动初始化** - 自动创建数据库、表结构和默认账号
+- **状态检查** - 检查数据库连接状态和系统初始化状态
+- **登录引导** - 初始化成功后提供登录引导和自动跳转
+
+### 默认账号
+系统初始化后会自动创建以下默认账号：
+- **管理员账号**：`admin` / `admin123` - 拥有所有权限
+- **普通用户账号**：`user` / `user123` - 可以访问基本功能
+
+### 默认组织架构
+系统初始化后会自动创建完整的组织架构，包括海峡人力及其下属部门。
+
+### API 接口
+- `GET /api/system/status` - 获取系统状态（数据库连接、初始化状态）
+- `POST /api/system/init` - 初始化系统（创建管理员账号）
+
+### 页面路由
+- `/system-init` - 系统初始化页面
+- `/login` - 登录页面（自动检测系统状态并跳转）
+
+### 初始化流程
+1. 访问系统初始化页面 `/system-init`
+2. 填写数据库配置信息
+3. 点击"保存并连接"按钮
+4. 系统自动创建数据库和表结构
+5. 自动创建默认账号和组织架构
+6. 显示登录引导卡片，5秒后自动跳转到登录页面
+
+### 相关文档
+- 详细部署指南：[SYSTEM_INIT_GUIDE.md](./SYSTEM_INIT_GUIDE.md)
+
 ## 管理员后台
 
 ### 核心功能
@@ -220,6 +266,20 @@ interface CustomSkill {
 
 ### 概述
 系统支持从 localStorage 迁移到 MySQL 数据库，实现数据持久化和多数据库管理。
+
+### 数据库初始化脚本
+- **文件名**: `database-schema-org-structure.sql`
+- **功能**: 创建组织架构表结构和系统默认账号
+- **包含内容**:
+  - 组织架构表（sys_org_element、sys_org_person、sys_org_post_person）
+  - 默认管理员账号（admin/admin123）
+  - 默认普通用户账号（user/user123）
+  - 默认组织架构（海峡人力及其下属部门）
+  - 系统配置表（database_configs、chat_sessions、chat_messages、custom_skills、ekp_configs）
+
+### 初始化方法
+1. **自动初始化**：访问 `/system-init` 页面，填写数据库配置后系统自动执行初始化
+2. **手动初始化**：执行 `mysql -u root -p future_office < database-schema-org-structure.sql`
 
 ### sys_org_person 表（系统用户表）
 sys_org_person 表既是组织架构的人员表，也是系统的用户表。

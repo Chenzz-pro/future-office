@@ -62,9 +62,27 @@ export default function SystemInitPage() {
       if (data.success) {
         setStatus(data.data);
 
-        // 如果已初始化且数据库已连接，显示登录引导
-        if (data.data.initialized.status && data.data.database.connected) {
-          setShowLoginGuide(true);
+        // 如果数据库已连接
+        if (data.data.database.connected) {
+          setDbMessage('数据库连接成功');
+          setDbError('');
+          setDbStep('connected');
+
+          // 如果已初始化且数据库已连接，显示登录引导
+          if (data.data.initialized.status) {
+            setShowLoginGuide(true);
+          } else {
+            setShowLoginGuide(false);
+          }
+        } else {
+          // 数据库未连接
+          if (dbStep === 'connected') {
+            // 之前显示连接成功，但现在连接失败，显示错误
+            setDbError('数据库连接失败，请检查配置信息');
+            setDbMessage('');
+            setDbStep('connect');
+          }
+          setShowLoginGuide(false);
         }
       }
     } catch (err) {
@@ -141,19 +159,30 @@ export default function SystemInitPage() {
       const data = await response.json();
 
       if (data.success) {
-        setDbMessage('数据库连接已保存');
-        setDbStep('connected');
-        // 刷新状态
+        // 先显示正在验证的消息
+        setDbMessage('数据库连接成功，正在验证...');
+        // 刷新状态以验证连接是否真正成功
         await checkStatus();
       } else {
-        setDbError(data.error || '保存数据库连接失败');
+        // 连接失败，显示错误信息
+        setDbError(data.error || '数据库连接失败，请检查配置信息');
+        setDbStep('connect'); // 保持在 connect 状态，允许重新尝试
       }
     } catch (err) {
       console.error('保存数据库连接失败:', err);
-      setDbError('保存数据库连接失败');
+      const errorMessage = err instanceof Error ? err.message : '保存数据库连接失败';
+      setDbError(errorMessage);
+      setDbStep('connect'); // 保持在 connect 状态，允许重新尝试
     } finally {
       setDbLoading(false);
     }
+  };
+
+  // 重新测试连接
+  const handleRetryConnection = () => {
+    setDbStep('connect');
+    setDbError('');
+    setDbMessage('');
   };
 
   // 初始化系统
@@ -277,8 +306,15 @@ export default function SystemInitPage() {
               <Alert>
                 <Database className="h-4 w-4" />
                 <AlertTitle>需要配置数据库</AlertTitle>
-                <AlertDescription>
-                  请填写数据库连接信息并测试连接，然后初始化系统。
+                <AlertDescription className="space-y-2">
+                  <p>请填写数据库连接信息并测试连接，然后初始化系统。</p>
+                  <p className="text-xs text-gray-500">
+                    💡 <strong>关于系统初始化：</strong>
+                  </p>
+                  <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside ml-2">
+                    <li>如果数据库是全新的，需要您手动创建管理员账号</li>
+                    <li>如果数据库已有管理员账号，系统会自动跳转到登录页</li>
+                  </ul>
                 </AlertDescription>
               </Alert>
 
@@ -356,23 +392,56 @@ export default function SystemInitPage() {
                 )}
 
                 {dbStep === 'connect' && (
-                  <Button
-                    onClick={handleConnectDb}
-                    disabled={dbLoading}
-                    className="w-full"
-                  >
-                    {dbLoading ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        保存连接中...
-                      </>
-                    ) : (
-                      <>
-                        <Database className="mr-2 h-4 w-4" />
-                        保存并连接
-                      </>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={handleConnectDb}
+                      disabled={dbLoading}
+                      className="w-full"
+                    >
+                      {dbLoading ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          保存连接中...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="mr-2 h-4 w-4" />
+                          保存并连接
+                        </>
+                      )}
+                    </Button>
+
+                    {dbError && (
+                      <Button
+                        onClick={handleRetryConnection}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        重新测试连接
+                      </Button>
                     )}
-                  </Button>
+                  </div>
+                )}
+
+                {/* 数据库连接失败时的帮助信息 */}
+                {dbError && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-sm text-amber-800">数据库连接失败</p>
+                        <p className="text-xs text-amber-700">请检查以下几点：</p>
+                        <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside ml-3">
+                          <li>数据库地址和端口是否正确</li>
+                          <li>数据库名称是否存在</li>
+                          <li>用户名和密码是否正确</li>
+                          <li>数据库服务是否正在运行</li>
+                          <li>网络连接是否正常</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

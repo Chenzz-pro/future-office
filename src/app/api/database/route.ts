@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
       // 读取 SQL 脚本
       const sqlScript = fs.readFileSync(
-        path.join(process.cwd(), 'database-schema.sql'),
+        path.join(process.cwd(), 'database-schema-org-structure.sql'),
         'utf-8'
       );
 
@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
 
       // 读取 SQL 脚本
       const sqlScript = fs.readFileSync(
-        path.join(process.cwd(), 'database-schema.sql'),
+        path.join(process.cwd(), 'database-schema-org-structure.sql'),
         'utf-8'
       );
 
@@ -529,7 +529,7 @@ export async function POST(request: NextRequest) {
       const fs = await import('fs');
       const path = await import('path');
       const sqlScript = fs.readFileSync(
-        path.join(process.cwd(), 'database-schema.sql'),
+        path.join(process.cwd(), 'database-schema-org-structure.sql'),
         'utf-8'
       );
 
