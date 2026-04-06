@@ -4,6 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import mysql from 'mysql2/promise';
 
+// 配置文件路径（用于存储数据库连接信息）
+const CONFIG_FILE_PATH = path.join(process.cwd(), '.db-config.json');
+
 // 缓存最后激活的配置，用于页面刷新后自动重新连接
 let lastActiveConfig: import('@/lib/database').DatabaseConfig | null = null;
 
@@ -499,6 +502,14 @@ export async function POST(request: NextRequest) {
       // 缓存配置，用于页面刷新后自动重新连接
       lastActiveConfig = config;
 
+      // 保存配置到文件（用于应用重启后自动重连）
+      try {
+        saveConfigToFile(config);
+        console.log('[API:Database:Connect] ✅ 数据库配置已保存到文件');
+      } catch (err) {
+        console.log('[API:Database:Connect] ℹ️ 配置文件保存失败（可能是只读文件系统）:', err instanceof Error ? err.message : String(err));
+      }
+
       console.log('[API:Database:Connect] ✅ 数据库连接流程完成');
 
       // 检查系统是否已初始化（检查是否有 admin 用户）
@@ -683,6 +694,51 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * 保存配置到文件
+ */
+function saveConfigToFile(config: import('@/lib/database').DatabaseConfig): void {
+  try {
+    const configData = {
+      id: config.id,
+      name: config.name,
+      type: config.type,
+      host: config.host,
+      port: config.port,
+      databaseName: config.databaseName,
+      username: config.username,
+      password: config.password,
+      isActive: config.isActive,
+      isDefault: config.isDefault,
+      createdAt: config.createdAt,
+      updatedAt: config.updatedAt,
+    };
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(configData, null, 2));
+  } catch (err) {
+    console.error('[API:Database] ❌ 保存配置文件失败:', err);
+    throw err;
+  }
+}
+
+/**
+ * 从配置文件加载配置
+ */
+function loadConfigFromFile(): import('@/lib/database').DatabaseConfig | null {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      const config = JSON.parse(data) as import('@/lib/database').DatabaseConfig;
+      // 确保日期字段是 Date 对象
+      if (config.createdAt) config.createdAt = new Date(config.createdAt);
+      if (config.updatedAt) config.updatedAt = new Date(config.updatedAt);
+      return config;
+    }
+  } catch (err) {
+    console.error('[API:Database] ❌ 读取配置文件失败:', err);
+  }
+  return null;
+}
+
+/**
  * GET /api/database
  * 获取数据库配置列表和状态
  */
@@ -704,55 +760,107 @@ export async function GET() {
   } catch (error) {
     console.error('获取数据库配置失败:', error);
 
-    // 如果错误是因为数据库未连接，尝试使用缓存的配置自动重新连接
-    if (error instanceof Error && error.message === '数据库未连接' && lastActiveConfig) {
-      console.log('[GET] 数据库未连接，尝试使用缓存的配置自动重新连接...');
+    // 如果错误是因为数据库未连接，尝试从配置文件读取并自动重新连接
+    if (error instanceof Error && error.message === '数据库未连接') {
+      const fileConfig = loadConfigFromFile();
 
-      try {
-        // 使用临时连接池测试连接
-        const testPool = mysql.createPool({
-          host: lastActiveConfig.host,
-          port: lastActiveConfig.port,
-          user: lastActiveConfig.username,
-          password: lastActiveConfig.password,
-          database: lastActiveConfig.databaseName,
-          waitForConnections: true,
-          connectionLimit: 1,
-        });
+      // 优先尝试配置文件
+      if (fileConfig) {
+        console.log('[GET] 数据库未连接，尝试从配置文件自动重新连接...');
 
-        await testPool.getConnection();
-        await testPool.end();
+        try {
+          // 使用临时连接池测试连接
+          const testPool = mysql.createPool({
+            host: fileConfig.host,
+            port: fileConfig.port,
+            user: fileConfig.username,
+            password: fileConfig.password,
+            database: fileConfig.databaseName,
+            waitForConnections: true,
+            connectionLimit: 1,
+          });
 
-        // 连接成功，使用 dbManager 连接
-        await dbManager.connect(lastActiveConfig);
+          await testPool.getConnection();
+          await testPool.end();
 
-        // 重新读取配置列表
-        const configs = await databaseConfigRepository.findAll();
-        const isConnected = dbManager.isConnected();
-        const currentConfig = dbManager.getConfig();
+          // 连接成功，使用 dbManager 连接
+          await dbManager.connect(fileConfig);
 
-        console.log('[GET] 自动重新连接成功');
+          // 更新缓存
+          lastActiveConfig = fileConfig;
 
-        return NextResponse.json({
-          success: true,
-          data: {
-            configs,
-            isConnected,
-            currentConfig,
-          },
-        });
-      } catch (connectError) {
-        console.error('[GET] 自动重新连接失败:', connectError);
-        // 连接失败，返回未连接状态
-        return NextResponse.json({
-          success: true,
-          data: {
-            configs: [],
-            isConnected: false,
-            currentConfig: null,
-          },
-        });
+          // 重新读取配置列表
+          const configs = await databaseConfigRepository.findAll();
+          const isConnected = dbManager.isConnected();
+          const currentConfig = dbManager.getConfig();
+
+          console.log('[GET] ✅ 通过配置文件自动重新连接成功');
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              configs,
+              isConnected,
+              currentConfig,
+            },
+          });
+        } catch (connectError) {
+          console.error('[GET] 配置文件自动重新连接失败:', connectError);
+        }
       }
+
+      // 尝试使用内存缓存的配置自动重新连接
+      if (lastActiveConfig) {
+        console.log('[GET] 数据库未连接，尝试使用内存缓存的配置自动重新连接...');
+
+        try {
+          // 使用临时连接池测试连接
+          const testPool = mysql.createPool({
+            host: lastActiveConfig.host,
+            port: lastActiveConfig.port,
+            user: lastActiveConfig.username,
+            password: lastActiveConfig.password,
+            database: lastActiveConfig.databaseName,
+            waitForConnections: true,
+            connectionLimit: 1,
+          });
+
+          await testPool.getConnection();
+          await testPool.end();
+
+          // 连接成功，使用 dbManager 连接
+          await dbManager.connect(lastActiveConfig);
+
+          // 重新读取配置列表
+          const configs = await databaseConfigRepository.findAll();
+          const isConnected = dbManager.isConnected();
+          const currentConfig = dbManager.getConfig();
+
+          console.log('[GET] 自动重新连接成功');
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              configs,
+              isConnected,
+              currentConfig,
+            },
+          });
+        } catch (connectError) {
+          console.error('[GET] 自动重新连接失败:', connectError);
+        }
+      }
+
+      // 所有重连尝试都失败，返回未连接状态
+      console.log('[GET] 所有重连尝试失败，返回未连接状态');
+      return NextResponse.json({
+        success: true,
+        data: {
+          configs: [],
+          isConnected: false,
+          currentConfig: null,
+        },
+      });
     }
 
     // 检查是否有环境变量配置，尝试使用环境变量重新连接
