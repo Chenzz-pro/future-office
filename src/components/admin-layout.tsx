@@ -132,6 +132,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = () => {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('current-user-id');
     router.push('/login');
   };
 

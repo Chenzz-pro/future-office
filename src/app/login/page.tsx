@@ -92,6 +92,9 @@ export default function LoginPage() {
           role: data.data.role,
         }));
 
+        // 保存用户 ID（用于 API 请求）
+        localStorage.setItem('current-user-id', data.data.userId);
+
         // 跳转到首页
         router.push('/');
       } else {

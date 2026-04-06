@@ -77,6 +77,7 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
   // 退出登录
   const handleLogout = () => {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('current-user-id');
     router.push('/login');
   };
 

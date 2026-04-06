@@ -86,10 +86,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
   const { sessions, currentSession, setCurrentSession, createSession, addMessage, updateSession } = useChatHistory();
 
-  // 获取当前用户ID
-  const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('currentUser') || '{}') : null;
-  const userId = currentUser?.id;
-
   // 使用配置钩子（仅全局配置）
   const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
 

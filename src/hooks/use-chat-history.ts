@@ -35,7 +35,11 @@ const STORAGE_KEY_PENDING = 'chat-sessions-pending';
 // 获取当前用户 ID
 function getCurrentUserId(): string {
   const userId = localStorage.getItem('current-user-id');
-  return userId || 'user'; // 默认使用 'user'
+  if (!userId) {
+    console.warn('[useChatHistory] 未找到 current-user-id，使用默认值 "user"');
+    return 'user'; // 默认使用 'user'
+  }
+  return userId;
 }
 
 // 降级到 localStorage
