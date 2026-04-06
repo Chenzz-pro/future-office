@@ -41,7 +41,10 @@ export class DatabaseManager {
         database: config.databaseName,
         waitForConnections: true,
         connectionLimit: 10,
-        queueLimit: 0,
+        queueLimit: 10, // 允许排队，避免直接报错
+        connectTimeout: 60000, // 连接超时60秒
+        acquireTimeout: 60000, // 获取连接超时60秒
+        timeout: 60000, // 查询超时60秒
       };
 
       this.pool = mysql.createPool(options);
@@ -183,6 +186,25 @@ export class DatabaseManager {
     const connected = this.pool !== null;
     console.log(`[isConnected] pool=${!!this.pool}, connected=${connected}`);
     return connected;
+  }
+
+  /**
+   * 获取连接池状态
+   */
+  public getPoolStatus(): {
+    totalConnections: number;
+    freeConnections: number;
+    queuedRequests: number;
+  } | null {
+    if (!this.pool) {
+      return null;
+    }
+
+    return {
+      totalConnections: this.pool.pool._allConnections.length,
+      freeConnections: this.pool.pool._freeConnections.length,
+      queuedRequests: this.pool.pool._connectionQueue.length,
+    };
   }
 
   /**
