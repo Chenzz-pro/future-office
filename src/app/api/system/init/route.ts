@@ -7,6 +7,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
 import { hashPassword } from '@/lib/password/password-utils';
 
+// 角色ID常量
+const ADMIN_ROLE_ID = '00000000-0000-0000-0000-000000000001';
+const MANAGER_ROLE_ID = '00000000-0000-0000-0000-000000000002';
+const USER_ROLE_ID = '00000000-0000-0000-0000-000000000003';
+
 /**
  * GET /api/system/init
  * 检查系统是否已初始化
@@ -25,12 +30,32 @@ export async function GET(request: NextRequest) {
     }
 
     // 检查是否存在管理员账号
-    const result = await dbManager.query<{ count: number }>(
-      'SELECT COUNT(*) as count FROM sys_org_person WHERE fd_role = ?',
-      ['admin']
-    );
+    // 支持两种查询方式：新的角色ID方式和旧的字符串方式（向后兼容）
+    let count = 0;
 
-    const count = (result.rows[0] as { count: number } | undefined)?.count || 0;
+    try {
+      // 尝试使用新的角色ID方式查询
+      const result = await dbManager.query<{ count: number }>(
+        `SELECT COUNT(*) as count
+         FROM sys_org_person
+         WHERE fd_role = ? OR fd_role = ?`,
+        [ADMIN_ROLE_ID, MANAGER_ROLE_ID]
+      );
+      count = (result.rows[0] as { count: number } | undefined)?.count || 0;
+    } catch (error) {
+      // 如果查询失败（可能是数据库结构未更新），尝试使用旧的字符串方式
+      try {
+        const fallbackResult = await dbManager.query<{ count: number }>(
+          `SELECT COUNT(*) as count
+           FROM sys_org_person
+           WHERE fd_role = ? OR fd_role = ?`,
+          ['admin', 'manager']
+        );
+        count = (fallbackResult.rows[0] as { count: number } | undefined)?.count || 0;
+      } catch (fallbackError) {
+        console.error('[API:System:Init] 查询管理员账号失败:', fallbackError);
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -98,6 +123,7 @@ export async function POST(request: NextRequest) {
     // 创建管理员账号
     const adminId = crypto.randomUUID();
 
+    // 使用角色ID创建管理员账号
     await dbManager.query(
       `INSERT INTO sys_org_person (
         fd_id,
@@ -118,7 +144,7 @@ export async function POST(request: NextRequest) {
         adminUsername,
         hashedPassword,
         adminEmail,
-        'admin',
+        ADMIN_ROLE_ID,
         1,
         1,
         'internal',

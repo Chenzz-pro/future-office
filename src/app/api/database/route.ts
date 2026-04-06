@@ -169,6 +169,26 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       } as unknown as import('@/lib/database').DatabaseConfig);
 
+      // 自动执行角色表迁移（确保兼容新旧数据库）
+      console.log('[init] 开始执行角色表迁移检查...');
+      try {
+        const migrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (migrateResponse.ok) {
+          const migrateResult = await migrateResponse.json();
+          console.log('[init] 角色表迁移完成:', migrateResult.message);
+        } else {
+          console.warn('[init] 角色表迁移失败，但不影响初始化流程');
+        }
+      } catch (migrateError) {
+        console.warn('[init] 角色表迁移失败，但不影响初始化流程:', migrateError);
+      }
+
       return NextResponse.json({
         success: true,
         message: '数据库初始化成功',
@@ -337,6 +357,26 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+
+      // 自动执行角色表迁移（确保兼容新旧数据库）
+      console.log('[recreate] 开始执行角色表迁移检查...');
+      try {
+        const migrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (migrateResponse.ok) {
+          const migrateResult = await migrateResponse.json();
+          console.log('[recreate] 角色表迁移完成:', migrateResult.message);
+        } else {
+          console.warn('[recreate] 角色表迁移失败，但不影响初始化流程');
+        }
+      } catch (migrateError) {
+        console.warn('[recreate] 角色表迁移失败，但不影响初始化流程:', migrateError);
+      }
 
       return NextResponse.json({
         success: true,

@@ -41,7 +41,23 @@ CREATE TABLE IF NOT EXISTS sys_org_element (
     INDEX fd_name_simple_pinyin (fd_name_simple_pinyin)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='组织架构统一表（机构/部门/岗位）';
 
--- 2. 人员表 (sys_org_person)
+-- 2. 角色表 (sys_role)
+CREATE TABLE IF NOT EXISTS sys_role (
+  fd_id VARCHAR(36) PRIMARY KEY COMMENT '角色ID',
+  fd_name VARCHAR(100) NOT NULL COMMENT '角色名称',
+  fd_code VARCHAR(50) NOT NULL UNIQUE COMMENT '角色代码（唯一标识）',
+  fd_description VARCHAR(500) DEFAULT NULL COMMENT '角色描述',
+  fd_order INT DEFAULT 0 COMMENT '排序号',
+  fd_is_available TINYINT(1) DEFAULT 1 COMMENT '是否可用（1=是，0=否）',
+  fd_create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  fd_update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  fd_create_by VARCHAR(36) DEFAULT NULL COMMENT '创建人ID',
+  fd_update_by VARCHAR(36) DEFAULT NULL COMMENT '更新人ID',
+  INDEX idx_role_code (fd_code),
+  INDEX idx_role_available (fd_is_available)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统角色表';
+
+-- 3. 人员表 (sys_org_person)
 CREATE TABLE IF NOT EXISTS sys_org_person (
     fd_id VARCHAR(36) PRIMARY KEY COMMENT 'ID',
     fd_name VARCHAR(100) NOT NULL COMMENT '姓名',
@@ -66,7 +82,7 @@ CREATE TABLE IF NOT EXISTS sys_org_person (
     fd_double_validation TINYINT(1) DEFAULT 0 COMMENT '双因子验证：1=启用，0=禁用',
     fd_is_business_related TINYINT(1) DEFAULT 1 COMMENT '是否业务相关：1=是，0=否',
     fd_is_login_enabled TINYINT(1) DEFAULT 1 COMMENT '是否登录系统：1=是，0=否',
-    fd_role ENUM('admin', 'user') DEFAULT 'user' COMMENT '用户角色：admin=管理员，user=普通用户',
+    fd_role VARCHAR(36) DEFAULT '00000000-0000-0000-0000-000000000003' COMMENT '用户角色ID（关联 sys_role.fd_id）',
     fd_memo TEXT COMMENT '备注',
     fd_create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     fd_alter_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
@@ -81,10 +97,15 @@ CREATE TABLE IF NOT EXISTS sys_org_person (
     INDEX idx_role (fd_role),
     INDEX fd_name (fd_name),
     FOREIGN KEY (fd_dept_id) REFERENCES sys_org_element(fd_id) ON DELETE SET NULL,
-    FOREIGN KEY (fd_post_id) REFERENCES sys_org_element(fd_id) ON DELETE SET NULL
+    FOREIGN KEY (fd_post_id) REFERENCES sys_org_element(fd_id) ON DELETE SET NULL,
+    FOREIGN KEY (fd_role) REFERENCES sys_role(fd_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人员表（系统用户表）';
 
--- 3. 岗位人员关联表 (sys_org_post_person)
+-- 迁移逻辑：如果 fd_role 字段是旧的 ENUM 类型，转换为外键
+-- 注意：MySQL 不支持在 CREATE TABLE IF NOT EXISTS 中检测字段类型变化
+-- 这里需要手动检查并执行迁移
+
+-- 4. 岗位人员关联表 (sys_org_post_person)
 CREATE TABLE IF NOT EXISTS sys_org_post_person (
     fd_id VARCHAR(36) PRIMARY KEY COMMENT 'ID',
     fd_post_id VARCHAR(36) NOT NULL COMMENT '岗位ID',
@@ -98,7 +119,7 @@ CREATE TABLE IF NOT EXISTS sys_org_post_person (
     FOREIGN KEY (fd_person_id) REFERENCES sys_org_person(fd_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='岗位人员关联表';
 
--- 4. 职务级别表 (sys_org_staffing_level)
+-- 5. 职务级别表 (sys_org_staffing_level)
 CREATE TABLE IF NOT EXISTS sys_org_staffing_level (
     fd_id VARCHAR(36) PRIMARY KEY COMMENT 'ID',
     fd_name VARCHAR(200) NOT NULL COMMENT '职务名称',
@@ -116,6 +137,16 @@ CREATE TABLE IF NOT EXISTS sys_org_staffing_level (
 -- ============================================
 -- 初始化数据
 -- ============================================
+
+-- 插入默认角色数据
+INSERT INTO sys_role (fd_id, fd_name, fd_code, fd_description, fd_order) VALUES
+('00000000-0000-0000-0000-000000000001', '超级管理员', 'admin', '拥有系统所有权限，包括组织管理、用户管理、系统配置等', 1),
+('00000000-0000-0000-0000-000000000002', '管理员', 'manager', '拥有大部分管理权限，包括用户管理、数据管理等', 2),
+('00000000-0000-0000-0000-000000000003', '普通用户', 'user', '普通用户权限，只能访问自己的数据', 3)
+ON DUPLICATE KEY UPDATE
+  fd_name = VALUES(fd_name),
+  fd_description = VALUES(fd_description),
+  fd_order = VALUES(fd_order);
 
 -- 插入默认管理员账号到 sys_org_person
 -- 密码：admin123（使用 bcrypt 加密）
@@ -138,7 +169,7 @@ INSERT INTO sys_org_person (
     'admin',
     '$2b$10$DId8bUro45mx1.fpSIJJV.MXHImaJM4kdb9V34feSKiU7dmRxeOTq',
     'admin@example.com',
-    'admin',
+    '00000000-0000-0000-0000-000000000001',
     1,
     1,
     'internal',
@@ -171,7 +202,7 @@ INSERT INTO sys_org_person (
     'user',
     '$2b$10$2AzAhhA3wExFpcAfOyKsU.9BDM4dfkYm5qMvGKEvAOwHKvSBLh7R6',
     'user@example.com',
-    'user',
+    '00000000-0000-0000-0000-000000000003',
     1,
     1,
     'internal',

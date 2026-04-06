@@ -83,8 +83,24 @@
 - **sys_org_person 表就是系统用户表**
 - 在组织架构添加人员时，直接创建 sys_org_person 记录
 - sys_org_person.fd_id 即为系统的 userId
-- sys_org_person.fd_role 字段标识用户角色（admin/user）
+- sys_org_person.fd_role 字段是外键，关联到 sys_role 表
 - 无需单独的 users 表
+
+### 角色管理
+- **角色表**：sys_role 表存储系统角色信息
+- **默认角色**：
+  - 超级管理员（ID: 00000000-0000-0000-0000-000000000001）- 拥有系统所有权限
+  - 管理员（ID: 00000000-0000-0000-0000-000000000002）- 拥有大部分管理权限
+  - 普通用户（ID: 00000000-0000-0000-0000-000000000003）- 普通用户权限
+- **角色字段**：sys_org_person.fd_role 是外键，关联 sys_role.fd_id
+- **角色迁移**：
+  - 支持从旧的 ENUM 类型（admin/user）迁移到外键关联
+  - 自动迁移 API：`POST /api/database/migrate/role`
+  - 检查迁移状态：`GET /api/database/migrate/role`
+- **API 接口**：
+  - `GET /api/organization/role` - 获取角色列表
+  - `POST /api/organization/role` - 创建/更新/删除角色
+  - `GET /api/organization/role/[id]` - 获取角色详情
 
 ### 密码管理
 - **密码加密**：使用 bcrypt 加密（盐值轮数 10）
@@ -230,6 +246,7 @@ interface CustomSkill {
 - `/admin/skills` - 技能管理
 - `/admin/organization` - 组织权限管理
 - `/admin/organization/structure` - 组织架构树
+- `/admin/organization/role` - 角色管理（新增）
 - `/admin/integration` - 集成中心
 - `/admin/database` - 数据库配置（新增）
 
@@ -294,10 +311,22 @@ interface CustomSkill {
 - **功能**: 创建组织架构表结构和系统默认账号
 - **包含内容**:
   - 组织架构表（sys_org_element、sys_org_person、sys_org_post_person）
-  - 默认管理员账号（admin/admin123）
-  - 默认普通用户账号（user/user123）
+  - 角色表（sys_role）- 包含默认角色（超级管理员、管理员、普通用户）
+  - 默认管理员账号（admin/admin123）- fd_role 关联超级管理员角色
+  - 默认普通用户账号（user/user123）- fd_role 关联普通用户角色
   - 默认组织架构（海峡人力及其下属部门）
   - 系统配置表（database_configs、chat_sessions、chat_messages、custom_skills、ekp_configs）
+
+### 角色表迁移
+- **迁移 API**: `/api/database/migrate/role`
+- **检查迁移状态**: `GET /api/database/migrate/role`
+  - 返回：`roleTableExists`（角色表是否存在）、`isEnumType`（fd_role 是否是 ENUM 类型）、`needMigration`（是否需要迁移）
+- **执行迁移**: `POST /api/database/migrate/role`
+  - 创建 sys_role 表（如果不存在）
+  - 插入默认角色数据
+  - 迁移 sys_org_person 表的 fd_role 字段（从 ENUM 改为外键）
+- **自动迁移**: 数据库初始化时会自动调用迁移 API，无需手动操作
+- **向后兼容**: 支持从旧的 ENUM 类型迁移到新的外键关联
 
 ### 初始化方法
 1. **自动初始化**：访问 `/system-init` 页面，填写数据库配置后系统自动执行初始化
@@ -310,14 +339,24 @@ sys_org_person 表既是组织架构的人员表，也是系统的用户表。
 - `fd_id` - 用户 ID（唯一标识）
 - `fd_login_name` - 登录名
 - `fd_password` - 密码（bcrypt 加密）
-- `fd_role` - 用户角色（admin/user）
+- `fd_role` - 用户角色 ID（外键关联 sys_role.fd_id）
 - `fd_is_login_enabled` - 是否允许登录（1=是，0=否）
 
 **角色权限：**
-- `admin` - 管理员，可访问所有功能
-- `user` - 普通用户，只能访问自己的数据和公开数据
+- 超级管理员（fd_role = 00000000-0000-0000-0000-000000000001）- 拥有系统所有权限
+- 管理员（fd_role = 00000000-0000-0000-0000-000000000002）- 拥有大部分管理权限
+- 普通用户（fd_role = 00000000-0000-0000-0000-000000000003）- 普通用户权限
+
+**sys_role 表（角色表）：**
+- `fd_id` - 角色 ID（主键）
+- `fd_name` - 角色名称
+- `fd_code` - 角色代码（唯一标识）
+- `fd_description` - 角色描述
+- `fd_order` - 排序号
+- `fd_is_available` - 是否可用（1=是，0=否）
 
 ### 数据库表结构
+- `sys_role` - 角色表（新增）
 - `users` - 用户表（已废弃，使用 sys_org_person）
 - `api_keys` - API Keys 配置表（系统级配置关联到 admin 用户）
 - `chat_sessions` - 对话会话表
@@ -330,6 +369,7 @@ sys_org_person 表既是组织架构的人员表，也是系统的用户表。
 ### 数据库迁移
 - **添加 role 字段**：`migrations/add_role_to_sys_org_person.sql`
 - **users 表迁移**：`migrations/migrate_users_to_sys_org_person.sql`
+- **角色表迁移**：`/api/database/migrate/role` - 将 fd_role 从 ENUM 迁移到外键
 
 ## 密码工具库
 
