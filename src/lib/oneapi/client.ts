@@ -52,12 +52,12 @@ export class OneAPIClient {
     });
 
     try {
-      // 添加超时控制（20秒）
+      // 添加超时控制（10秒 - 缩短超时时间以快速失败）
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
-        console.error('[OneAPIClient] 请求超时（20秒）');
-      }, 20000);
+        console.error('[OneAPIClient] 请求超时（10秒），中断请求');
+      }, 10000);
 
       try {
         // 处理 baseUrl，确保不会重复 /v1 路径
@@ -73,6 +73,9 @@ export class OneAPIClient {
 
         const fullUrl = `${apiUrl}/v1/chat/completions`;
         console.log('[OneAPIClient] 完整 URL:', fullUrl);
+        console.log('[OneAPIClient] 开始发送请求...');
+
+        const requestStartTime = Date.now();
 
         const response = await fetch(fullUrl, {
           method: 'POST',
@@ -82,6 +85,12 @@ export class OneAPIClient {
           },
           body: JSON.stringify(requestBody),
           signal: controller.signal,
+        });
+
+        const requestDuration = Date.now() - requestStartTime;
+        console.log('[OneAPIClient] 收到响应:', {
+          status: response.status,
+          duration: `${requestDuration}ms`,
         });
 
         clearTimeout(timeoutId);
@@ -96,6 +105,7 @@ export class OneAPIClient {
           throw new Error(`oneAPI请求失败: ${response.status} ${response.statusText}`);
         }
 
+        console.log('[OneAPIClient] 开始解析响应 JSON...');
         const data: OneAPIResponse = await response.json();
 
         if (!data.choices || data.choices.length === 0) {
@@ -104,13 +114,23 @@ export class OneAPIClient {
 
         const content = data.choices[0].message.content;
         console.log('[OneAPIClient] 请求成功:', {
-          tokens: data.usage.total_tokens,
+          tokens: data.usage?.total_tokens,
           contentLength: content.length,
+          duration: `${Date.now() - requestStartTime}ms`,
         });
 
         return content;
       } catch (error) {
         clearTimeout(timeoutId);
+        const isAbort = error instanceof Error && error.name === 'AbortError';
+        if (isAbort) {
+          console.error('[OneAPIClient] 请求被中断（超时）');
+        } else {
+          console.error('[OneAPIClient] 请求异常:', {
+            message: error instanceof Error ? error.message : '未知错误',
+            name: error instanceof Error ? error.name : 'Unknown',
+          });
+        }
         throw error;
       }
     } catch (error) {
