@@ -120,6 +120,11 @@ export default function SystemInitPage() {
 
   // 测试数据库连接
   const handleTestDb = async () => {
+    console.log('[handleTestDb] 开始测试连接...');
+    console.log('[handleTestDb] dbConfig:', {
+      ...dbConfig,
+      password: dbConfig.password ? '******' : '空',
+    });
     setDbError('');
     setDbMessage('');
     setDbLoading(true);
@@ -132,6 +137,7 @@ export default function SystemInitPage() {
       });
 
       const data = await response.json();
+      console.log('[handleTestDb] 响应:', data);
 
       if (data.success) {
         setDbMessage('数据库连接成功');
@@ -150,6 +156,18 @@ export default function SystemInitPage() {
   // 保存并连接数据库
   const handleConnectDb = async () => {
     console.log('[handleConnectDb] 开始连接数据库...');
+    console.log('[handleConnectDb] dbConfig:', {
+      ...dbConfig,
+      password: dbConfig.password ? '******' : '空',
+    });
+
+    // 验证密码是否为空
+    if (!dbConfig.password) {
+      setDbError('密码不能为空，请重新输入密码');
+      setDbStep('test'); // 返回到测试步骤，允许用户重新输入
+      return;
+    }
+
     setDbError('');
     setDbMessage('');
     setDbLoading(true);
@@ -381,6 +399,7 @@ export default function SystemInitPage() {
                     value={dbConfig.password}
                     onChange={(e) => setDbConfig({ ...dbConfig, password: e.target.value })}
                     disabled={dbStep !== 'test'}
+                    autoComplete="new-password"
                   />
                 </div>
 
@@ -465,6 +484,7 @@ export default function SystemInitPage() {
                           <li>用户名和密码是否正确</li>
                           <li>数据库服务是否正在运行</li>
                           <li>网络连接是否正常</li>
+                          <li><strong>请勿依赖浏览器自动填充，建议重新输入密码</strong></li>
                         </ul>
                       </div>
                     </div>

@@ -395,6 +395,14 @@ export async function POST(request: NextRequest) {
           createdAt: new Date(),
           updatedAt: new Date(),
         } as import('@/lib/database').DatabaseConfig;
+
+        console.log('[API:Database:Connect] 收到的数据库配置:', {
+          host: config.host,
+          port: config.port,
+          databaseName: config.databaseName,
+          username: config.username,
+          password: config.password ? '******' : '空',
+        });
       } else {
         return NextResponse.json(
           { success: false, error: '缺少必要参数（configId 或 配置信息）' },
