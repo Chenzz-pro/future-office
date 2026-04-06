@@ -228,11 +228,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     console.log('[sendMessage] 添加用户消息:', userMessage.content);
 
-    console.log('[sendMessage] 构建对话历史（使用添加用户消息之前的历史）');
-    console.log('[sendMessage] 调用新的统一聊天API');
-    console.log('[sendMessage] 对话历史长度:', conversationHistory.length);
-    console.log('[sendMessage] 对话历史内容:', conversationHistory.map(m => `${m.role}: ${m.content.substring(0, 30)}...`));
-
     try {
       // 先添加用户消息到会话中（等待完成）
       console.log('[sendMessage] 开始添加用户消息到会话');
@@ -248,6 +243,10 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         role: m.role,
         content: m.content,
       }));
+
+      console.log('[sendMessage] 调用新的统一聊天API');
+      console.log('[sendMessage] 对话历史长度:', conversationHistory.length);
+      console.log('[sendMessage] 对话历史内容:', conversationHistory.map(m => `${m.role}: ${m.content.substring(0, 30)}...`));
 
       // 添加超时机制，防止 API 调用卡住
       const controller = new AbortController();
