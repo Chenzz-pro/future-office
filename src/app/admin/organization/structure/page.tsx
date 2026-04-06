@@ -535,8 +535,12 @@ export default function OrganizationStructurePage() {
       {/* 新建/编辑对话框 */}
       <OrgElementDialog
         open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSave={handleSave}
+        onClose={() => {
+          setDialogOpen(false);
+          // 关闭对话框后刷新数据
+          loadTreeData();
+          loadListData();
+        }}
         mode={dialogMode}
         viewType={currentView}
         initialData={dialogInitialData}

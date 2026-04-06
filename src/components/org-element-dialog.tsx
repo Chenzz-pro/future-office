@@ -18,7 +18,7 @@ import type { OrgElement, OrgPerson } from '@/types/org-structure';
 interface OrgElementDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: Record<string, unknown>) => Promise<void>;
+  onSave?: (data: Record<string, unknown>) => Promise<void>;
   mode: 'create' | 'edit';
   viewType: 'organization' | 'department' | 'position' | 'person';
   initialData?: OrgElement | OrgPerson | null;
@@ -67,16 +67,52 @@ export function OrgElementDialog({
         parentId,
       });
 
-      await onSave({
-        ...formData,
-        ...(parentId && { fd_parentid: parentId }),
-        ...(mode === 'create' && {
-          fd_org_type: viewType === 'organization' ? 1 : viewType === 'department' ? 2 : 3,
+      let result;
+
+      // 如果提供了 onSave prop，使用旧的方式
+      if (onSave) {
+        await onSave({
+          ...formData,
+          ...(parentId && { fd_parentid: parentId }),
+          ...(mode === 'create' && {
+            fd_org_type: viewType === 'organization' ? 1 : viewType === 'department' ? 2 : 3,
+          }),
+        });
+        console.log('[OrgElementDialog] 保存成功');
+        onClose();
+        return;
+      }
+
+      // 否则，直接调用 API（新方式）
+      const response = await fetch('/api/organization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: mode === 'create' ? 'create' : 'update',
+          type: viewType === 'person' ? 'person' : viewType,
+          ...(mode === 'create' ? { data: formData } : { id: initialData?.fd_id, data: formData }),
+          ...(parentId && { parentId }),
         }),
       });
 
-      console.log('[OrgElementDialog] 保存成功');
-      onClose();
+      result = await response.json();
+
+      if (result.success) {
+        console.log('[OrgElementDialog] 保存成功', result);
+
+        // 如果有生成的密码，显示提示
+        if (result.message && result.generatedPassword) {
+          alert(`${result.message}\n\n请妥善保管登录密码！`);
+        } else if (result.message) {
+          alert(result.message);
+        } else {
+          alert('保存成功');
+        }
+
+        onClose();
+      } else {
+        throw new Error(result.error || '保存失败');
+      }
     } catch (error) {
       console.error('[OrgElementDialog] 保存失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -180,6 +216,20 @@ export function OrgElementDialog({
                     onChange={(e) => setFormData({ ...formData, fd_login_name: e.target.value })}
                     placeholder="请输入登录名"
                     required
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="fd_password">
+                    登录密码 <span className="text-gray-500 text-xs font-normal ml-1">
+                      (留空则自动生成12位随机密码)
+                    </span>
+                  </Label>
+                  <Input
+                    id="fd_password"
+                    type="password"
+                    value={String(formData.fd_password || '')}
+                    onChange={(e) => setFormData({ ...formData, fd_password: e.target.value })}
+                    placeholder="请输入登录密码（留空自动生成）"
                   />
                 </div>
               </>
