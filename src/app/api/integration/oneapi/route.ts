@@ -4,8 +4,31 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getOneAPIConfigRepository } from '@/lib/database/manager';
+import { getOneAPIConfigRepository, dbManager } from '@/lib/database/manager';
 import { oneAPIManager } from '@/lib/oneapi';
+import * as fs from 'fs';
+
+// 配置文件路径
+const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
+
+/**
+ * 从配置文件读取数据库配置
+ */
+function loadConfigFromFile() {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      const config = JSON.parse(data) as import('@/lib/database').DatabaseConfig;
+      // 确保日期字段是 Date 对象
+      if (config.createdAt) config.createdAt = new Date(config.createdAt);
+      if (config.updatedAt) config.updatedAt = new Date(config.updatedAt);
+      return config;
+    }
+  } catch (err) {
+    console.error('[API:OneAPI] ❌ 读取配置文件失败:', err);
+  }
+  return null;
+}
 
 /**
  * GET /api/integration/oneapi
@@ -15,6 +38,33 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
+
+    // 确保数据库已连接
+    if (!dbManager.isConnected()) {
+      console.log('[API:OneAPI:Get] 数据库未连接，尝试自动重新连接');
+
+      // 尝试从配置文件读取并自动重新连接
+      const fileConfig = loadConfigFromFile();
+
+      if (fileConfig) {
+        try {
+          console.log('[API:OneAPI:Get] 使用配置文件自动重新连接...');
+          await dbManager.connect(fileConfig);
+          console.log('[API:OneAPI:Get] ✅ 数据库重新连接成功');
+        } catch (connectError) {
+          console.error('[API:OneAPI:Get] 配置文件自动重新连接失败:', connectError);
+          return NextResponse.json({
+            success: false,
+            error: '数据库未连接，请先配置数据库连接',
+          });
+        }
+      } else {
+        return NextResponse.json({
+          success: false,
+          error: '数据库未连接，请先配置数据库连接',
+        });
+      }
+    }
 
     // 检查数据库是否已连接
     const repository = getOneAPIConfigRepository();
@@ -42,10 +92,17 @@ export async function GET(request: NextRequest) {
     if (action === 'list') {
       const configs = await repository.findAll();
 
-      // 隐藏API密钥
+      // 隐藏API密钥并转换为驼峰命名
       const maskedConfigs = configs.map((config) => ({
-        ...config,
-        api_key: config.api_key ? '******' : '',
+        id: config.id,
+        name: config.name,
+        description: config.description,
+        baseUrl: config.base_url,
+        apiKey: config.api_key ? '******' : '',
+        model: config.model,
+        enabled: config.enabled,
+        createdAt: config.created_at,
+        updatedAt: config.updated_at,
       }));
 
       return NextResponse.json({
@@ -69,10 +126,17 @@ export async function GET(request: NextRequest) {
 
     const config = configs[0];
 
-    // 隐藏API密钥
+    // 隐藏API密钥并转换为驼峰命名
     const maskedConfig = {
-      ...config,
-      api_key: config.api_key ? '******' : '',
+      id: config.id,
+      name: config.name,
+      description: config.description,
+      baseUrl: config.base_url,
+      apiKey: config.api_key ? '******' : '',
+      model: config.model,
+      enabled: config.enabled,
+      createdAt: config.created_at,
+      updatedAt: config.updated_at,
     };
 
     return NextResponse.json({

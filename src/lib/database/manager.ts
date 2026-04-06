@@ -5,6 +5,13 @@ import type { DatabaseConfig, DatabaseConnectionOptions, QueryResult } from './t
 import { oneAPIManager } from '@/lib/oneapi';
 import { OneAPIConfigRepository } from './repositories/oneapi-config.repository';
 
+// 使用全局变量确保单例在所有模块中共享
+// @ts-ignore
+declare global {
+  // eslint-disable-next-line no-var
+  var __dbManagerInstance__: DatabaseManager | undefined;
+}
+
 export class DatabaseManager {
   private static instance: DatabaseManager;
   private pool: mysql.Pool | null = null;
@@ -21,6 +28,14 @@ export class DatabaseManager {
       DatabaseManager.instance = new DatabaseManager();
     }
     return DatabaseManager.instance;
+  }
+
+  // 使用全局变量确保单例在所有模块中共享
+  public static getGlobalInstance(): DatabaseManager {
+    if (typeof globalThis.__dbManagerInstance__ === 'undefined') {
+      globalThis.__dbManagerInstance__ = DatabaseManager.getInstance();
+    }
+    return globalThis.__dbManagerInstance__;
   }
 
   /**
@@ -1093,10 +1108,24 @@ export class DatabaseManager {
   }
 }
 
-// 导出单例
-export const dbManager = DatabaseManager.getInstance();
+// 导出单例（使用全局实例确保跨模块共享）
+export const dbManager = DatabaseManager.getGlobalInstance();
 
 // 导出OneAPI配置Repository访问方法
 export function getOneAPIConfigRepository(): OneAPIConfigRepository | null {
-  return dbManager['oneAPIConfigRepository'];
+  // 使用全局实例而不是导出的 dbManager，确保跨模块共享
+  const globalDbManager = DatabaseManager.getGlobalInstance();
+  console.log('[getOneAPIConfigRepository] 开始获取 repository', {
+    'oneAPIConfigRepository': !!globalDbManager['oneAPIConfigRepository'],
+    'pool': !!globalDbManager['pool'],
+  });
+  // 如果 repository 未初始化且数据库已连接，自动初始化
+  if (!globalDbManager['oneAPIConfigRepository'] && globalDbManager['pool']) {
+    console.log('[getOneAPIConfigRepository] 动态初始化 OneAPI Repository');
+    globalDbManager['oneAPIConfigRepository'] = new OneAPIConfigRepository(globalDbManager['pool']);
+  }
+  console.log('[getOneAPIConfigRepository] repository', {
+    'exists': !!globalDbManager['oneAPIConfigRepository'],
+  });
+  return globalDbManager['oneAPIConfigRepository'];
 }
