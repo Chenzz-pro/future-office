@@ -393,9 +393,24 @@ export function useChatHistory() {
       session = currentSession;
     }
 
+    // 如果还是找不到，创建一个临时会话
     if (!session) {
-      console.error('[addMessage] 会话不存在:', sessionId);
-      throw new Error(`会话不存在: ${sessionId}`);
+      console.warn('[addMessage] 会话不存在，创建临时会话:', sessionId);
+      session = {
+        id: sessionId,
+        title: '新对话',
+        preview: '',
+        messages: [message],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        model: 'default',
+        provider: 'default',
+      };
+      // 添加到 sessions 列表
+      const newSessions = [session, ...sessions];
+      setSessions(newSessions);
+      setCurrentSession(session);
+      console.log('[addMessage] 临时会话已创建并添加到 sessions');
     }
 
     console.log('[addMessage] 找到会话:', session.id, '当前消息数:', session.messages.length);

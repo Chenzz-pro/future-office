@@ -833,12 +833,28 @@ export class DatabaseManager {
    */
   private async loadOneAPIConfig(): Promise<void> {
     try {
+      console.log('[OneAPI:Init] 开始加载oneAPI配置...');
+
       if (!this.oneAPIConfigRepository) {
-        console.log('[OneAPI:Init] OneAPI Repository未初始化');
+        console.log('[OneAPI:Init] OneAPI Repository未初始化，尝试初始化');
+        if (this.pool) {
+          this.oneAPIConfigRepository = new OneAPIConfigRepository(this.pool);
+          console.log('[OneAPI:Init] OneAPI Repository初始化成功');
+        } else {
+          console.log('[OneAPI:Init] 数据库连接池未初始化');
+          return;
+        }
+      }
+
+      // 检查表是否存在
+      const tableExists = await this.oneAPIConfigRepository.tableExists();
+      if (!tableExists) {
+        console.log('[OneAPI:Init] oneAPI配置表不存在，跳过加载');
         return;
       }
 
       // 查询启用的oneAPI配置
+      console.log('[OneAPI:Init] 查询启用的oneAPI配置...');
       const configs = await this.oneAPIConfigRepository.findEnabled();
 
       if (configs.length === 0) {
@@ -848,6 +864,13 @@ export class DatabaseManager {
 
       // 使用第一个启用的配置
       const config = configs[0];
+      console.log('[OneAPI:Init] 找到oneAPI配置:', {
+        id: config.id,
+        name: config.name,
+        baseUrl: config.base_url,
+        model: config.model,
+        enabled: config.enabled,
+      });
 
       // 初始化oneAPI管理器
       oneAPIManager.initialize({
