@@ -147,10 +147,47 @@ export function useChatHistory() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [isOnline, setIsOnline] = useState(true); // 数据库是否可用
+  const [userId, setUserId] = useState<string | null>(null); // 当前用户 ID
 
-  // 加载历史
+  // 监听用户登录状态变化
+  useEffect(() => {
+    const checkUserId = () => {
+      const currentUserId = getCurrentUserId();
+      console.log('[useChatHistory] 检查用户 ID:', currentUserId);
+      setUserId(currentUserId);
+    };
+
+    // 立即检查一次
+    checkUserId();
+
+    // 监听 localStorage 变化
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'current-user-id') {
+        console.log('[useChatHistory] 检测到 current-user-id 变化:', e.newValue);
+        checkUserId();
+      }
+    };
+
+    // 使用定时器定期检查（处理同页面登录的情况）
+    const intervalId = setInterval(checkUserId, 1000);
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  // 加载历史 - 当 userId 变化时重新加载
   useEffect(() => {
     async function loadSessions() {
+      // 检查是否已登录
+      if (!userId) {
+        console.log('[useChatHistory] 用户未登录，跳过加载会话');
+        setSessions([]);
+        return;
+      }
+
       try {
         const result = await fetchWithAuth('/api/chat/sessions');
 
@@ -211,7 +248,7 @@ export function useChatHistory() {
           // 过滤掉没有消息的会话
           const validSessions = sessionsWithMessages.filter((s): s is ChatSession => s !== null);
 
-          console.log('[useChatHistory] 加载完成:', {
+          console.log('[useChatHistory] 从数据库加载完成:', {
             total: dbSessions.length,
             valid: validSessions.length,
             filtered: dbSessions.length - validSessions.length,
@@ -230,7 +267,7 @@ export function useChatHistory() {
     }
 
     loadSessions();
-  }, []);
+  }, [userId]); // 当 userId 变化时重新加载
 
   // 创建新会话
   const createSession = useCallback(async (model: string, provider: string): Promise<ChatSession> => {
