@@ -33,12 +33,22 @@ const STORAGE_KEY_SESSIONS = 'chat-sessions';
 const STORAGE_KEY_PENDING = 'chat-sessions-pending';
 
 // 获取当前用户 ID
-function getCurrentUserId(): string {
+// 返回 null 表示未登录，返回字符串表示用户 ID（sys_org_person.fd_id）
+function getCurrentUserId(): string | null {
   const userId = localStorage.getItem('current-user-id');
+
   if (!userId) {
-    console.warn('[useChatHistory] 未找到 current-user-id，使用默认值 "user"');
-    return 'user'; // 默认使用 'user'
+    console.warn('[useChatHistory] 未找到 current-user-id，用户未登录');
+    return null; // 返回 null 表示未登录
   }
+
+  // 验证 userId 格式（应该是 UUID 格式）
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(userId)) {
+    console.error('[useChatHistory] current-user-id 格式无效:', userId);
+    return null;
+  }
+
   return userId;
 }
 
@@ -85,6 +95,16 @@ function savePendingSync(pending: PendingSyncSession[]) {
 // API 调用辅助函数
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const userId = getCurrentUserId();
+
+  // 检查是否已登录
+  if (!userId) {
+    const error = new Error('用户未登录，请先登录');
+    console.error('[fetchWithAuth] 用户未登录:', {
+      url,
+      method: options.method || 'GET',
+    });
+    throw error;
+  }
 
   console.log('[fetchWithAuth] 发起请求:', {
     url,
