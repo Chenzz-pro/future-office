@@ -5,7 +5,8 @@ import * as path from 'path';
 import mysql from 'mysql2/promise';
 
 // 配置文件路径（用于存储数据库连接信息）
-const CONFIG_FILE_PATH = path.join(process.cwd(), '.db-config.json');
+// 使用绝对路径，避免路径问题
+const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
 
 // 缓存最后激活的配置，用于页面刷新后自动重新连接
 let lastActiveConfig: import('@/lib/database').DatabaseConfig | null = null;
@@ -665,6 +666,16 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+
+      // 保存配置到文件（用于应用重启后自动重连）
+      try {
+        saveConfigToFile(lastActiveConfig);
+        console.log('[API:Database:Add] ✅ 数据库配置已保存到文件');
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[API:Database:Add] ❌ 保存配置文件失败:', errorMsg);
+        console.warn('[API:Database:Add] ⚠️  文件系统可能是只读的，应用重启后需要重新配置数据库');
+      }
 
       return NextResponse.json({
         success: true,

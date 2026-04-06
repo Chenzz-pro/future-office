@@ -10,23 +10,34 @@ import * as path from 'path';
 import mysql from 'mysql2/promise';
 
 // 配置文件路径
-const CONFIG_FILE_PATH = path.join(process.cwd(), '.db-config.json');
+const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
 
 /**
  * 从配置文件加载配置
  */
 function loadConfigFromFile(): any | null {
   try {
+    console.log('[System:Status:LoadConfig] 检查配置文件:', CONFIG_FILE_PATH);
     if (fs.existsSync(CONFIG_FILE_PATH)) {
+      console.log('[System:Status:LoadConfig] 配置文件存在，开始读取...');
       const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      console.log('[System:Status:LoadConfig] 配置文件内容长度:', data.length);
       const config = JSON.parse(data);
+      console.log('[System:Status:LoadConfig] 解析成功，配置信息:', {
+        host: config.host,
+        port: config.port,
+        databaseName: config.databaseName,
+        username: config.username,
+      });
       // 确保日期字段是 Date 对象
       if (config.createdAt) config.createdAt = new Date(config.createdAt);
       if (config.updatedAt) config.updatedAt = new Date(config.updatedAt);
       return config;
+    } else {
+      console.log('[System:Status:LoadConfig] 配置文件不存在');
     }
   } catch (err) {
-    console.error('[System:Status] 读取配置文件失败:', err);
+    console.error('[System:Status:LoadConfig] 读取配置文件失败:', err);
   }
   return null;
 }
@@ -76,10 +87,12 @@ function loadConfigFromEnv(): any | null {
  * 尝试自动重连
  */
 async function tryAutoReconnect(): Promise<boolean> {
+  console.log('[System:Status] 开始尝试自动重连...');
+
   // 优先级1：配置文件
   const fileConfig = loadConfigFromFile();
   if (fileConfig) {
-    console.log('[System:Status] 从配置文件读取配置，尝试自动重新连接...');
+    console.log('[System:Status] [1/3] 尝试从配置文件读取配置...');
 
     try {
       // 使用临时连接池测试连接
@@ -109,7 +122,7 @@ async function tryAutoReconnect(): Promise<boolean> {
   // 优先级2：环境变量
   const envConfig = loadConfigFromEnv();
   if (envConfig) {
-    console.log('[System:Status] 检测到环境变量配置，尝试自动重新连接...');
+    console.log('[System:Status] [2/3] 尝试从环境变量读取配置...');
 
     try {
       // 测试连接
@@ -136,12 +149,22 @@ async function tryAutoReconnect(): Promise<boolean> {
     }
   }
 
-  console.log('[System:Status] 无法自动重连（没有配置文件或环境变量）');
+  // 优先级3：从 database_configs 表读取配置
+  // 注意：这需要先连接到数据库，但连接数据库又需要配置信息
+  // 所以这里只能依赖环境变量或配置文件
+  // 如果都没有，则无法读取 database_configs 表
+
+  console.log('[System:Status] ❌ 无法自动重连');
+  console.log('[System:Status] 原因：');
+  console.log('[System:Status]   1. 配置文件不存在或连接失败');
+  console.log('[System:Status]   2. 环境变量未配置或连接失败');
+  console.log('[System:Status]   3. 无法从 database_configs 表读取（需要先连接数据库）');
   console.warn('[System:Status] ⚠️  应用重启后数据库连接丢失');
-  console.warn('[System:Status] 💡 建议解决方案：');
-  console.warn('[System:Status]    1. 使用环境变量配置数据库（.env 文件）');
+  console.warn('[System:Status] 💡 解决方案：');
+  console.warn('[System:Status]    1. 访问 /admin/database 查看已保存的数据库配置');
   console.warn('[System:Status]    2. 访问 /system-init 重新配置数据库');
-  console.warn('[System:Status]    3. 环境变量示例：DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD');
+  console.warn('[System:Status]    3. 配置环境变量（推荐）：DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD');
+
   return false;
 }
 
