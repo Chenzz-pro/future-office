@@ -164,6 +164,20 @@ export default function SystemInitPage() {
         }),
       });
 
+      // 检查 HTTP 状态码
+      if (!response.ok) {
+        let errorMessage = '数据库连接失败，请检查配置信息';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          // JSON 解析失败，使用默认错误信息
+        }
+        setDbError(errorMessage);
+        setDbStep('connect'); // 保持在 connect 状态，允许重新尝试
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
