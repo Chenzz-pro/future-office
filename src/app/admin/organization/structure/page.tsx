@@ -79,10 +79,11 @@ export default function OrganizationStructurePage() {
       const data = await response.json();
       if (data.success) {
         setTreeData(data.data || []);
-        // 默认展开第一个节点
-        if (data.data && data.data.length > 0) {
-          setExpandedNodes(new Set([data.data[0].id]));
-        }
+        // 默认不展开任何节点，让用户手动点击展开
+        // 如果需要默认展开第一个节点，可以取消下面的注释
+        // if (data.data && data.data.length > 0) {
+        //   setExpandedNodes(new Set([data.data[0].id]));
+        // }
       }
     } catch (error) {
       console.error('加载树数据失败:', error);
@@ -144,6 +145,13 @@ export default function OrganizationStructurePage() {
   // 选择节点
   const handleSelectNode = (node: OrgTreeNode) => {
     setSelectedNode(node);
+
+    // 如果节点有子节点且未展开，自动展开该节点
+    if (node.children && node.children.length > 0 && !expandedNodes.has(node.id)) {
+      const newExpanded = new Set(expandedNodes);
+      newExpanded.add(node.id);
+      setExpandedNodes(newExpanded);
+    }
   };
 
   // 打开新建对话框

@@ -241,8 +241,12 @@ async function getTreeData(type: number) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await dbManager.query<any>(query, params);
 
+  console.log('[API:Organization] 查询到组织数据:', result.rows.length, '条');
+
   // 构建树形结构（不包含人员）
   const treeData = buildTree(result.rows, type);
+
+  console.log('[API:Organization] 构建的树形结构:', JSON.stringify(treeData, null, 2));
 
   return NextResponse.json({ success: true, data: treeData });
 }
@@ -273,16 +277,32 @@ function buildTree(flatData: any[], rootType?: number): any[] {
 
     // 机构（type=1）没有父节点，作为根节点
     if (item.fd_org_type === 1) {
+      console.log('[buildTree] 添加根节点（机构）:', item.fd_name, item.fd_id);
       roots.push(node);
     }
-    // 部门（type=2）的父节点可以是机构或另一个部门
+    // 部门（type=2）的父节点是 fd_parentorgid（可以是机构或另一个部门）
     else if (item.fd_org_type === 2) {
-      const parentId = item.fd_parentorgid || item.fd_parentid;
+      const parentId = item.fd_parentorgid;
       if (parentId && map.has(parentId)) {
         const parent = map.get(parentId);
         parent.children.push(node);
+        console.log('[buildTree] 添加子节点（部门）:', item.fd_name, '-> 父节点:', parent.name);
       } else {
         // 如果没有找到父节点，作为根节点
+        console.warn('[buildTree] 部门未找到父节点，作为根节点:', item.fd_name, 'parentId:', parentId);
+        roots.push(node);
+      }
+    }
+    // 岗位（type=3）的父节点是 fd_parentid（上级部门）
+    else if (item.fd_org_type === 3) {
+      const parentId = item.fd_parentid;
+      if (parentId && map.has(parentId)) {
+        const parent = map.get(parentId);
+        parent.children.push(node);
+        console.log('[buildTree] 添加子节点（岗位）:', item.fd_name, '-> 父节点:', parent.name);
+      } else {
+        // 如果没有找到父节点，作为根节点
+        console.warn('[buildTree] 岗位未找到父节点，作为根节点:', item.fd_name, 'parentId:', parentId);
         roots.push(node);
       }
     }
