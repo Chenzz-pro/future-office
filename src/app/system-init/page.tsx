@@ -149,6 +149,7 @@ export default function SystemInitPage() {
 
   // 保存并连接数据库
   const handleConnectDb = async () => {
+    console.log('[handleConnectDb] 开始连接数据库...');
     setDbError('');
     setDbMessage('');
     setDbLoading(true);
@@ -164,14 +165,18 @@ export default function SystemInitPage() {
         }),
       });
 
+      console.log('[handleConnectDb] 响应状态:', response.status, response.ok);
+
       // 检查 HTTP 状态码
       if (!response.ok) {
         let errorMessage = '数据库连接失败，请检查配置信息';
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
+          console.log('[handleConnectDb] 错误信息:', errorMessage);
         } catch (e) {
           // JSON 解析失败，使用默认错误信息
+          console.log('[handleConnectDb] JSON 解析失败');
         }
         setDbError(errorMessage);
         setDbStep('connect'); // 保持在 connect 状态，允许重新尝试
