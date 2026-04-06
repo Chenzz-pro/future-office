@@ -53,6 +53,7 @@ export default function AgentsManagement() {
     skills: [] as string[],
   });
   const [saving, setSaving] = useState(false);
+  const [initializing, setInitializing] = useState(false);
 
   // 加载Agent列表
   const loadAgents = async () => {
@@ -77,6 +78,30 @@ export default function AgentsManagement() {
       }
     } catch (error) {
       console.error('加载技能列表失败:', error);
+    }
+  };
+
+  // 初始化Agent和技能数据
+  const handleInitializeAgents = async () => {
+    setInitializing(true);
+    try {
+      const response = await fetch('/api/database/init/agents', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`初始化成功！\n创建了 ${data.data.agentsCount} 个智能体\n创建了 ${data.data.skillsCount} 个技能`);
+        await loadAgents();
+        await loadSkills();
+      } else {
+        alert(data.error || '初始化失败');
+      }
+    } catch (error) {
+      console.error('初始化Agent失败:', error);
+      alert('初始化失败，请检查数据库连接');
+    } finally {
+      setInitializing(false);
     }
   };
 
@@ -212,7 +237,20 @@ export default function AgentsManagement() {
             <CardContent className="py-12 text-center">
               <Bot className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">暂无智能体</h3>
-              <p className="text-gray-600">请先配置数据库连接</p>
+              <p className="text-gray-600 mb-4">请先配置数据库连接并初始化智能体</p>
+              <Button
+                onClick={handleInitializeAgents}
+                disabled={initializing}
+              >
+                {initializing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    初始化中...
+                  </>
+                ) : (
+                  '初始化智能体'
+                )}
+              </Button>
             </CardContent>
           </Card>
         ) : (
