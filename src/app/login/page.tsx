@@ -95,7 +95,7 @@ export default function LoginPage() {
         // 保存用户 ID（用于 API 请求）
         localStorage.setItem('current-user-id', data.data.userId);
 
-        // 跳转到首页
+        // 跳转到首页（会根据角色自动判断跳转到管理员页面或普通用户页面）
         router.push('/');
       } else {
         setError(data.error || '登录失败');

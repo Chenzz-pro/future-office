@@ -102,7 +102,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: { id: string; code: string; name: string; isAdmin: boolean }; email: string } | null>(null);
 
   useEffect(() => {
     // 检查用户登录状态和角色
@@ -113,7 +113,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     }
 
     const user = JSON.parse(userStr);
-    if (user.role !== 'admin') {
+
+    // 判断是否为管理员角色
+    const isAdmin = user.role?.isAdmin === true;
+
+    if (!isAdmin) {
       router.push('/');
       return;
     }

@@ -9,6 +9,12 @@ import {
   verifyPassword,
   needPasswordUpdate,
 } from '@/lib/password/password-utils';
+import {
+  isAdminRole,
+  getRoleCode,
+  getRoleName,
+  ROLE_IDS,
+} from '@/lib/constants/roles';
 
 /**
  * POST /api/auth/login
@@ -48,15 +54,22 @@ export async function POST(request: NextRequest) {
       }
 
       const userId = person.fd_id as string;
+      const roleId = (person.fd_role || ROLE_IDS.USER) as string;
 
       // 检查是否需要更新密码（从 base64 迁移到 bcrypt）
       const needUpdate = needPasswordUpdate(person.fd_password as string);
+
+      // 判断是否为管理员角色
+      const isAdmin = isAdminRole(roleId);
 
       console.log('[API:Auth] 登录成功', {
         userId,
         username: person.fd_login_name,
         personName: person.fd_name,
-        needPasswordUpdate: needUpdate,
+        roleId,
+        roleName: getRoleName(roleId),
+        isAdmin,
+        needPasswordUpdate,
       });
 
       return NextResponse.json({
@@ -69,7 +82,12 @@ export async function POST(request: NextRequest) {
           mobile: person.fd_mobile as string | null,
           deptId: person.fd_dept_id as string | null,
           rtxAccount: person.fd_rtx_account as string | null,
-          role: (person.fd_role || 'user') as string,
+          role: {
+            id: roleId,
+            code: getRoleCode(roleId),
+            name: getRoleName(roleId),
+            isAdmin,
+          },
           needPasswordUpdate, // 提示前端是否需要更新密码
         },
       });

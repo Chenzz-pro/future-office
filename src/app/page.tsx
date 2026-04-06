@@ -28,8 +28,11 @@ export default function Home() {
 
     const user = JSON.parse(userStr);
 
+    // 判断是否为管理员角色
+    const isAdmin = user.role?.isAdmin === true;
+
     // 如果是管理员，跳转到管理员页面
-    if (user.role === 'admin') {
+    if (isAdmin) {
       router.push('/admin/overview');
       return;
     }
