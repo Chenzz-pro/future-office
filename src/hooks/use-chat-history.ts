@@ -161,8 +161,8 @@ export function useChatHistory() {
             title: s.title as string,
             preview: '', // 需要加载消息后更新
             messages: [],
-            createdAt: s.createdAt as string,
-            updatedAt: s.updatedAt as string,
+            createdAt: (s.createdAt as Date).toISOString(), // 转换为 ISO 字符串
+            updatedAt: (s.updatedAt as Date).toISOString(), // 转换为 ISO 字符串
             model: 'default',
             provider: 'default',
             agentId: s.agentId as string | undefined,
@@ -178,7 +178,7 @@ export function useChatHistory() {
                     id: m.id as string,
                     role: m.role as 'user' | 'assistant' | 'system',
                     content: m.content as string,
-                    timestamp: new Date(m.createdAt as string),
+                    timestamp: new Date((m.createdAt as Date).toISOString()), // 转换为 Date 对象
                   }));
 
                   // 更新预览
@@ -458,7 +458,7 @@ export function useChatHistory() {
               id: m.id as string,
               role: m.role as 'user' | 'assistant' | 'system',
               content: m.content as string,
-              timestamp: new Date(m.createdAt as string),
+              timestamp: new Date((m.createdAt as Date).toISOString()), // 转换为 Date 对象
             }));
 
             await updateSession(sessionId, { messages });

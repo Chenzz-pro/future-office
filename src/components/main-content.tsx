@@ -16,7 +16,8 @@ export function MainContent({ activeTab, setActiveTab, onNewChat, selectedSessio
   const renderContent = () => {
     switch (activeTab) {
       case 'new-chat':
-        return <NewChatPage key={selectedSessionId || 'new'} />;
+        // 移除 key，避免组件重新创建导致状态丢失
+        return <NewChatPage />;
       case 'task-center':
         return <TaskCenterPage />;
       case 'agents':
