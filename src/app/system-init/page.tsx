@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Database, CheckCircle, AlertCircle, Lock, User, Mail, RefreshCw, Play } from 'lucide-react';
+import { Database, CheckCircle, AlertCircle, Lock, User, Mail, RefreshCw, Play, LogIn, ArrowRight } from 'lucide-react';
 
 interface SystemStatus {
   database: {
@@ -50,6 +50,10 @@ export default function SystemInitPage() {
   const [dbError, setDbError] = useState('');
   const [dbMessage, setDbMessage] = useState('');
 
+  // 登录引导状态
+  const [showLoginGuide, setShowLoginGuide] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+
   // 检查系统状态
   const checkStatus = async () => {
     try {
@@ -58,9 +62,9 @@ export default function SystemInitPage() {
       if (data.success) {
         setStatus(data.data);
 
-        // 如果已初始化，跳转到登录页
-        if (data.data.initialized.status) {
-          window.location.href = '/login';
+        // 如果已初始化且数据库已连接，显示登录引导
+        if (data.data.initialized.status && data.data.database.connected) {
+          setShowLoginGuide(true);
         }
       }
     } catch (err) {
@@ -69,6 +73,23 @@ export default function SystemInitPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 自动跳转到登录页
+  useEffect(() => {
+    if (showLoginGuide && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (showLoginGuide && countdown === 0) {
+      window.location.href = '/login';
+    }
+  }, [showLoginGuide, countdown]);
+
+  // 立即跳转到登录页
+  const handleGoToLogin = () => {
+    window.location.href = '/login';
   };
 
   // 测试数据库连接
@@ -433,6 +454,59 @@ export default function SystemInitPage() {
                 {initLoading ? '正在创建...' : '创建管理员账号'}
               </Button>
             </form>
+          )}
+
+          {/* 如果数据库已连接且已初始化，显示登录引导 */}
+          {showLoginGuide && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <Alert className="bg-green-50 border-green-200">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertTitle className="text-green-800">系统初始化完成！</AlertTitle>
+                <AlertDescription className="text-green-700">
+                  数据库连接成功，系统已就绪，可以登录使用了。
+                </AlertDescription>
+              </Alert>
+
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                    <LogIn className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">前往登录页面</h3>
+                    <p className="text-sm text-gray-600">系统已准备好，请使用管理员账号登录</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">用户名</span>
+                    <span className="font-mono font-medium text-gray-900">admin</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">密码</span>
+                    <span className="font-mono font-medium text-gray-900">admin123</span>
+                  </div>
+                  <p className="text-xs text-orange-600 mt-2 pt-2 border-t">
+                    🔒 首次登录后，建议立即修改密码
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleGoToLogin}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                >
+                  立即跳转
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+
+                {countdown > 0 && (
+                  <p className="text-xs text-center text-gray-500">
+                    {countdown} 秒后自动跳转...
+                  </p>
+                )}
+              </div>
+            </div>
           )}
 
           {/* 版本信息 */}

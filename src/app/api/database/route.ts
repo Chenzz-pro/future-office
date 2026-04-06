@@ -407,7 +407,7 @@ export async function POST(request: NextRequest) {
 
       // 检查 database_configs 表是否存在，如果不存在则创建
       try {
-        const checkResult = await dbManager.query<any>(
+        const checkResult = await dbManager.query<{ count: number }>(
           'SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
           ['database_configs']
         );
