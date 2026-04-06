@@ -327,8 +327,28 @@ async function getOrgList(type: string, parentId: string, keyword: string) {
     }
 
     if (parentId) {
-      query += ' AND fd_dept_id = ?';
-      params.push(parentId);
+      // 需要判断 parentId 是机构还是部门
+      // 先查询 sys_org_element 表，判断 parentId 对应的 fd_org_type
+      const parentQuery = 'SELECT fd_org_type FROM sys_org_element WHERE fd_id = ?';
+      const parentResult = await dbManager.query<any>(parentQuery, [parentId]);
+
+      if (parentResult.rows.length > 0) {
+        const parentOrgType = parentResult.rows[0].fd_org_type;
+
+        if (parentOrgType === 1) {
+          // 如果父节点是机构，查询该机构下所有部门的人员
+          query += ' AND fd_dept_id IN (SELECT fd_id FROM sys_org_element WHERE fd_parentid = ? AND fd_org_type = 2)';
+          params.push(parentId);
+        } else if (parentOrgType === 2) {
+          // 如果父节点是部门，直接查询该部门的人员
+          query += ' AND fd_dept_id = ?';
+          params.push(parentId);
+        } else {
+          // 其他情况（type=3 岗位），查询该岗位的人员（通过 sys_org_post_person 关联表）
+          query += ' AND fd_id IN (SELECT fd_person_id FROM sys_org_post_person WHERE fd_post_id = ?)';
+          params.push(parentId);
+        }
+      }
     }
   } else {
     const orgType = type === 'organization' ? 1 : type === 'department' ? 2 : 3;

@@ -12,8 +12,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Building2, Briefcase, Users } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Building2, Briefcase, Users, Shield } from 'lucide-react';
 import type { OrgElement, OrgPerson } from '@/types/org-structure';
+
+interface Role {
+  fd_id: string;
+  fd_name: string;
+  fd_code: string;
+}
+
+interface OrgElementSimple {
+  fd_id: string;
+  fd_name: string;
+  fd_org_type: number;
+}
 
 interface OrgElementDialogProps {
   open: boolean;
@@ -37,11 +56,90 @@ export function OrgElementDialog({
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(false);
 
+  // 角色相关
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+
+  // 机构和部门相关
+  const [organizations, setOrganizations] = useState<OrgElementSimple[]>([]);
+  const [departments, setDepartments] = useState<OrgElementSimple[]>([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+
+  // 加载角色列表
+  useEffect(() => {
+    if (viewType === 'person' && open) {
+      loadRoles();
+    }
+  }, [viewType, open]);
+
+  const loadRoles = async () => {
+    try {
+      setLoadingRoles(true);
+      const response = await fetch('/api/organization/role');
+      const data = await response.json();
+      if (data.success) {
+        setRoles(data.data || []);
+      }
+    } catch (error) {
+      console.error('加载角色列表失败:', error);
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
+  // 加载机构列表
+  useEffect(() => {
+    if (viewType === 'person' && open) {
+      loadOrganizations();
+    }
+  }, [viewType, open]);
+
+  const loadOrganizations = async () => {
+    try {
+      setLoadingOrgs(true);
+      const response = await fetch('/api/organization?action=list&type=organization');
+      const data = await response.json();
+      if (data.success) {
+        setOrganizations(data.data || []);
+      }
+    } catch (error) {
+      console.error('加载机构列表失败:', error);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  };
+
+  // 加载部门列表（根据选中的机构）
+  useEffect(() => {
+    if (selectedOrgId && open) {
+      loadDepartments(selectedOrgId);
+    } else {
+      setDepartments([]);
+    }
+  }, [selectedOrgId, open]);
+
+  const loadDepartments = async (orgId: string) => {
+    try {
+      setLoadingOrgs(true);
+      const response = await fetch(`/api/organization?action=list&type=department&parentId=${orgId}`);
+      const data = await response.json();
+      if (data.success) {
+        setDepartments(data.data || []);
+      }
+    } catch (error) {
+      console.error('加载部门列表失败:', error);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  };
+
   // 初始化表单数据
   useEffect(() => {
     if (open) {
       if (initialData && mode === 'edit') {
-        setFormData(initialData as unknown as Record<string, unknown>);
+        const data = initialData as unknown as Record<string, unknown>;
+        setFormData(data);
       } else {
         setFormData({
           fd_name: '',
@@ -51,10 +149,13 @@ export function OrgElementDialog({
           fd_memo: '',
           fd_login_name: '',
           fd_mobile: '',
+          fd_dept_id: '',
+          fd_role: '',
         });
+        setSelectedOrgId('');
       }
     }
-  }, [open, initialData, mode]);
+  }, [open, initialData, mode, viewType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,6 +288,100 @@ export function OrgElementDialog({
             {/* 邮箱 */}
             {viewType === 'person' ? (
               <>
+                {/* 机构选择 */}
+                <div>
+                  <Label htmlFor="fd_org_id">
+                    关联机构 <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={String(formData.fd_org_id || selectedOrgId || '')}
+                    onValueChange={(value) => {
+                      setSelectedOrgId(value);
+                      setFormData({ ...formData, fd_org_id: value, fd_dept_id: '' });
+                    }}
+                  >
+                    <SelectTrigger id="fd_org_id">
+                      <SelectValue placeholder="请选择机构" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingOrgs ? (
+                        <div className="p-2 text-sm text-gray-500">加载中...</div>
+                      ) : organizations.length === 0 ? (
+                        <div className="p-2 text-sm text-gray-500">暂无机构</div>
+                      ) : (
+                        organizations.map((org) => (
+                          <SelectItem key={org.fd_id} value={org.fd_id}>
+                            {org.fd_name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* 部门选择 */}
+                <div>
+                  <Label htmlFor="fd_dept_id">
+                    关联部门 <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={String(formData.fd_dept_id || '')}
+                    onValueChange={(value) => setFormData({ ...formData, fd_dept_id: value })}
+                    disabled={!selectedOrgId && !formData.fd_org_id}
+                  >
+                    <SelectTrigger id="fd_dept_id">
+                      <SelectValue placeholder={selectedOrgId || formData.fd_org_id ? '请选择部门' : '请先选择机构'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingOrgs ? (
+                        <div className="p-2 text-sm text-gray-500">加载中...</div>
+                      ) : departments.length === 0 ? (
+                        <div className="p-2 text-sm text-gray-500">
+                          {selectedOrgId || formData.fd_org_id ? '暂无部门' : '请先选择机构'}
+                        </div>
+                      ) : (
+                        departments.map((dept) => (
+                          <SelectItem key={dept.fd_id} value={dept.fd_id}>
+                            {dept.fd_name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* 角色选择 */}
+                <div className="col-span-2">
+                  <Label htmlFor="fd_role">
+                    关联角色 <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={String(formData.fd_role || '')}
+                    onValueChange={(value) => setFormData({ ...formData, fd_role: value })}
+                  >
+                    <SelectTrigger id="fd_role">
+                      <SelectValue placeholder="请选择角色" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingRoles ? (
+                        <div className="p-2 text-sm text-gray-500">加载中...</div>
+                      ) : roles.length === 0 ? (
+                        <div className="p-2 text-sm text-gray-500">暂无角色，请先创建角色</div>
+                      ) : (
+                        roles.map((role) => (
+                          <SelectItem key={role.fd_id} value={role.fd_id}>
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-4 h-4 text-orange-600" />
+                              {role.fd_name}
+                              <span className="text-xs text-gray-500">({role.fd_code})</span>
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div>
                   <Label htmlFor="fd_email">邮箱</Label>
                   <Input
@@ -222,7 +417,7 @@ export function OrgElementDialog({
                   <Label htmlFor="fd_password">
                     登录密码 <span className="text-gray-500 text-xs font-normal ml-1">
                       (留空则自动生成12位随机密码)
-                    </span>
+                    </Label>
                   </Label>
                   <Input
                     id="fd_password"

@@ -1,260 +1,84 @@
+/**
+ * 执行数据库迁移脚本
+ * 用于创建角色表并修改 sys_org_person 表
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  userRepository,
-  apiKeyRepository,
-  chatSessionRepository,
-  customSkillRepository,
-  ekpConfigRepository,
-} from '@/lib/database';
 import { dbManager } from '@/lib/database/manager';
 
-/**
- * 数据迁移结果
- */
-interface MigrationResult {
-  success: boolean;
-  message: string;
-  details: {
-    users: { migrated: number; skipped: number };
-    apiKeys: { migrated: number; skipped: number };
-    chatSessions: { migrated: number; skipped: number };
-    customSkills: { migrated: number; skipped: number };
-    ekpConfigs: { migrated: number; skipped: number };
-  };
-}
-
-/**
- * POST /api/database/migrate
- * 将 localStorage 数据迁移到 MySQL
- */
 export async function POST(request: NextRequest) {
   try {
-    // 检查数据库连接
+    const body = await request.json();
+    const { sql } = body;
+
+    if (!sql) {
+      return NextResponse.json({ success: false, error: '缺少SQL脚本' }, { status: 400 });
+    }
+
     if (!dbManager.isConnected()) {
       return NextResponse.json(
-        { success: false, error: '数据库未连接，请先配置并连接数据库' },
+        { success: false, error: '数据库未连接，请先配置数据库' },
         { status: 400 }
       );
     }
 
-    const result: MigrationResult = {
-      success: true,
-      message: '数据迁移成功',
-      details: {
-        users: { migrated: 0, skipped: 0 },
-        apiKeys: { migrated: 0, skipped: 0 },
-        chatSessions: { migrated: 0, skipped: 0 },
-        customSkills: { migrated: 0, skipped: 0 },
-        ekpConfigs: { migrated: 0, skipped: 0 },
-      },
-    };
+    console.log('[API:Migration] 开始执行数据库迁移...');
 
-    // 迁移用户数据
-    const usersData = localStorage.getItem('users');
-    if (usersData) {
-      try {
-        const users = JSON.parse(usersData);
-        for (const user of users) {
-          try {
-            // 检查是否已存在
-            const existing = await userRepository.findByUsername(user.username);
-            if (!existing) {
-              await userRepository.create({
-                username: user.username,
-                password: user.password,
-                email: user.email || `${user.username}@example.com`,
-                role: user.role || 'user',
-                avatarUrl: user.avatarUrl,
-                status: user.status || 'active',
-                lastLoginAt: user.lastLoginAt ? new Date(user.lastLoginAt) : undefined,
-              });
-              result.details.users.migrated++;
-            } else {
-              result.details.users.skipped++;
-            }
-          } catch (err) {
-            console.error('迁移用户失败:', user, err);
-            result.details.users.skipped++;
-          }
-        }
-      } catch (err) {
-        console.error('解析用户数据失败:', err);
+    // 分割SQL语句
+    const statements: string[] = [];
+    const lines = sql.split('\n');
+    let currentStatement = '';
+
+    for (const line of lines) {
+      // 跳过空行和注释行
+      const trimmedLine = line.trim();
+      if (trimmedLine.startsWith('--') || trimmedLine === '') {
+        continue;
+      }
+
+      currentStatement += line + '\n';
+
+      // 如果行以分号结尾，说明语句结束
+      if (trimmedLine.endsWith(';')) {
+        statements.push(currentStatement.trim());
+        currentStatement = '';
       }
     }
 
-    // 迁移 API Keys
-    const apiKeysData = localStorage.getItem('ai-api-keys');
-    if (apiKeysData) {
+    console.log(`[API:Migration] 解析出 ${statements.length} 条 SQL 语句`);
+
+    const failedStatements: { sql: string; error: string }[] = [];
+    const successCount: { sql: string }[] = [];
+
+    // 逐条执行SQL语句
+    for (const statement of statements) {
+      if (!statement) continue;
       try {
-        const apiKeys = JSON.parse(apiKeysData);
-        // apiKeys 可能是对象格式 { provider: key }
-        const userId = '1'; // 默认管理员用户ID
-        for (const [provider, key] of Object.entries(apiKeys)) {
-          if (typeof key === 'string') {
-            try {
-              await apiKeyRepository.create({
-                userId,
-                name: `${provider} API Key`,
-                provider: provider as 'openai' | 'claude' | 'deepseek' | 'doubao' | 'custom',
-                apiKey: key,
-                isActive: true,
-              });
-              result.details.apiKeys.migrated++;
-            } catch (err) {
-              console.error('迁移 API Key 失败:', provider, err);
-              result.details.apiKeys.skipped++;
-            }
-          }
-        }
+        await dbManager.query(statement);
+        successCount.push({ sql: statement.substring(0, 60) });
+        console.log(`[API:Migration] SQL 执行成功: ${statement.substring(0, 60)}...`);
       } catch (err) {
-        console.error('解析 API Keys 数据失败:', err);
+        const error = err instanceof Error ? err.message : String(err);
+        console.warn('[API:Migration] 执行SQL失败:', error);
+        console.warn('[API:Migration] SQL:', statement.substring(0, 100));
+        failedStatements.push({ sql: statement, error });
       }
     }
 
-    // 迁移对话会话
-    const chatSessionsData = localStorage.getItem('chat-sessions');
-    if (chatSessionsData) {
-      try {
-        const sessions = JSON.parse(chatSessionsData);
-        const userId = '1'; // 默认管理员用户ID
-        for (const session of sessions) {
-          try {
-            // 检查会话是否已存在
-            const existing = await chatSessionRepository.findById(session.id);
-            if (!existing) {
-              const sessionId = await chatSessionRepository.create({
-                id: session.id,
-                userId,
-                title: session.title || '未命名会话',
-                agentId: session.agentId,
-              });
-
-              // 迁移消息
-              if (session.messages && Array.isArray(session.messages)) {
-                for (const msg of session.messages) {
-                  try {
-                    await chatSessionRepository.addMessage({
-                      sessionId,
-                      role: msg.role,
-                      content: msg.content,
-                      metadata: msg.metadata,
-                    });
-                  } catch (err) {
-                    console.error('迁移消息失败:', msg, err);
-                  }
-                }
-              }
-              result.details.chatSessions.migrated++;
-            } else {
-              result.details.chatSessions.skipped++;
-            }
-          } catch (err) {
-            console.error('迁移会话失败:', session, err);
-            result.details.chatSessions.skipped++;
-          }
-        }
-      } catch (err) {
-        console.error('解析对话数据失败:', err);
-      }
-    }
-
-    // 迁移自定义技能
-    const customSkillsData = localStorage.getItem('custom-skills');
-    if (customSkillsData) {
-      try {
-        const skills = JSON.parse(customSkillsData);
-        const userId = '1'; // 默认管理员用户ID
-        for (const skill of skills) {
-          try {
-            await customSkillRepository.create({
-              id: skill.id,
-              userId,
-              name: skill.name,
-              description: skill.description,
-              icon: skill.icon,
-              category: skill.category,
-              enabled: skill.enabled !== false,
-              apiConfig: skill.apiConfig,
-              authConfig: skill.authConfig,
-              requestParams: skill.requestParams,
-              bodyTemplate: skill.bodyTemplate,
-              responseParsing: skill.responseParsing,
-            });
-            result.details.customSkills.migrated++;
-          } catch (err) {
-            console.error('迁移技能失败:', skill, err);
-            result.details.customSkills.skipped++;
-          }
-        }
-      } catch (err) {
-        console.error('解析技能数据失败:', err);
-      }
-    }
-
-    // 迁移 EKP 配置
-    const ekpConfigData = localStorage.getItem('ekp_config');
-    if (ekpConfigData) {
-      try {
-        const ekpConfig = JSON.parse(ekpConfigData);
-        const userId = '1'; // 默认管理员用户ID
-        try {
-          await ekpConfigRepository.create({
-            id: crypto.randomUUID(),
-            userId,
-            ekpAddress: ekpConfig.ekpAddress,
-            username: ekpConfig.username,
-            password: ekpConfig.password,
-            authType: ekpConfig.authType || 'basic',
-            config: ekpConfig,
-          });
-          result.details.ekpConfigs.migrated++;
-        } catch (err) {
-          console.error('迁移 EKP 配置失败:', err);
-          result.details.ekpConfigs.skipped++;
-        }
-      } catch (err) {
-        console.error('解析 EKP 配置数据失败:', err);
-      }
-    }
-
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error('数据迁移失败:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : '未知错误',
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * GET /api/database/migrate
- * 获取迁移预览信息
- */
-export async function GET() {
-  try {
-    const preview = {
-      users: localStorage.getItem('users') ? JSON.parse(localStorage.getItem('users')!).length : 0,
-      apiKeys: localStorage.getItem('ai-api-keys') ? Object.keys(JSON.parse(localStorage.getItem('ai-api-keys')!)).length : 0,
-      chatSessions: localStorage.getItem('chat-sessions') ? JSON.parse(localStorage.getItem('chat-sessions')!).length : 0,
-      customSkills: localStorage.getItem('custom-skills') ? JSON.parse(localStorage.getItem('custom-skills')!).length : 0,
-      ekpConfigs: localStorage.getItem('ekp_config') ? 1 : 0,
-    };
+    console.log(`[API:Migration] SQL 执行完成: 成功 ${successCount.length} 条, 失败 ${failedStatements.length} 条`);
 
     return NextResponse.json({
       success: true,
-      data: preview,
+      message: `数据库迁移完成: 成功 ${successCount.length} 条, 失败 ${failedStatements.length} 条`,
+      successCount: successCount.length,
+      failedCount: failedStatements.length,
+      failedStatements: failedStatements.slice(0, 5), // 只返回前5个失败的语句
     });
-  } catch (error) {
-    console.error('获取迁移预览失败:', error);
+  } catch (error: unknown) {
+    console.error('[API:Migration] 迁移失败:', error);
+    const errorMessage = error instanceof Error ? error.message : '服务器错误';
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : '未知错误',
-      },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
