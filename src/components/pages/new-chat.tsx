@@ -238,15 +238,27 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     console.log('[sendMessage] 对话历史长度:', conversationHistory.length);
     console.log('[sendMessage] 对话历史内容:', conversationHistory.map(m => `${m.role}: ${m.content.substring(0, 30)}...`));
 
-    // 先添加用户消息到界面（给用户即时反馈）
-    addMessage(session.id, userMessage);
+    // 先添加用户消息到会话中（等待完成）
+    console.log('[sendMessage] 开始添加用户消息到会话');
+    await addMessage(session.id, userMessage);
+    console.log('[sendMessage] 用户消息已添加到会话');
+
+    // 清空输入框和错误信息（在消息添加成功后）
     setInputValue('');
     setError(null);
 
     try {
+      // 添加超时机制，防止 API 调用卡住
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error('[sendMessage] API 调用超时');
+      }, 30000); // 30秒超时
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           message: userMessage.content,
           userId,
@@ -255,6 +267,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           conversationHistory,
         }),
       });
+
+      clearTimeout(timeoutId);
 
       console.log('[sendMessage] API 响应:', { status: response.status, ok: response.ok });
 
@@ -288,7 +302,23 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       }
     } catch (err) {
       console.error('[sendMessage] Chat error:', err);
-      setError(err instanceof Error ? err.message : '请求失败，请重试');
+
+      // 区分不同类型的错误
+      let errorMessage = '请求失败，请重试';
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = '请求超时，请检查网络连接后重试';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
+      console.error('[sendMessage] 错误详情:', {
+        message: errorMessage,
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
       console.log('[sendMessage] 发送消息流程结束');

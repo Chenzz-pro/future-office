@@ -300,16 +300,34 @@ export function useChatHistory() {
     }
   }, [sessions, currentSession, isOnline]);
 
-  // 添加消息到当前会话
+  // 添加消息到指定会话
   const addMessage = useCallback(async (sessionId: string, message: Message) => {
-    const session = sessions.find(s => s.id === sessionId);
-    if (!session) {
-      console.warn('[addMessage] 会话不存在:', sessionId);
-      return;
+    console.log('[addMessage] 开始添加消息到会话:', sessionId, {
+      role: message.role,
+      content: message.content.substring(0, 50),
+    });
+
+    // 先从 sessions 中查找会话
+    let session = sessions.find(s => s.id === sessionId);
+
+    // 如果在 sessions 中找不到，尝试从 currentSession 中查找
+    if (!session && currentSession?.id === sessionId) {
+      console.log('[addMessage] 在 sessions 中未找到，使用 currentSession');
+      session = currentSession;
     }
 
+    if (!session) {
+      console.error('[addMessage] 会话不存在:', sessionId);
+      throw new Error(`会话不存在: ${sessionId}`);
+    }
+
+    console.log('[addMessage] 找到会话:', session.id, '当前消息数:', session.messages.length);
+
     const updatedMessages = [...session.messages, message];
+    console.log('[addMessage] 更新后的消息数:', updatedMessages.length);
+
     await updateSession(sessionId, { messages: updatedMessages });
+    console.log('[addMessage] 会话已更新');
 
     // 尝试保存消息到数据库（不管 isOnline 状态如何，都尝试保存）
     try {
