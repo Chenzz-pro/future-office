@@ -228,12 +228,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     console.log('[sendMessage] 添加用户消息:', userMessage.content);
 
-    // 先添加用户消息到界面
-    addMessage(session.id, userMessage);
-    setInputValue('');
-    setError(null);
-
-    // 构建对话历史
+    // 构建对话历史（使用添加用户消息之前的历史）
     const conversationHistory = session.messages.map(m => ({
       role: m.role,
       content: m.content,
@@ -241,6 +236,12 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     console.log('[sendMessage] 调用新的统一聊天API');
     console.log('[sendMessage] 对话历史长度:', conversationHistory.length);
+    console.log('[sendMessage] 对话历史内容:', conversationHistory.map(m => `${m.role}: ${m.content.substring(0, 30)}...`));
+
+    // 先添加用户消息到界面（给用户即时反馈）
+    addMessage(session.id, userMessage);
+    setInputValue('');
+    setError(null);
 
     try {
       const response = await fetch('/api/chat', {

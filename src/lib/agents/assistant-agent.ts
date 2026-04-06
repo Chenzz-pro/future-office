@@ -269,28 +269,39 @@ export class AssistantAgent {
       });
 
       // 构建消息列表
-      const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         {
           role: 'system' as const,
           content: '你是企业OA系统的个人助理，负责回答用户的各种问题。请用友好、专业的语气回答。',
-        },
-        {
-          role: 'user' as const,
-          content: context.message,
         },
       ];
 
       // 如果有对话历史，添加到消息列表中
       if (context.conversationHistory && context.conversationHistory.length > 0) {
-        // 类型断言：将 role: string 转换为 role: 'system' | 'user'
-        const historyMessages = context.conversationHistory.map(
-          (msg): { role: 'system' | 'user'; content: string } => ({
-            role: msg.role as 'system' | 'user',
+        const historyMessages = context.conversationHistory.map((msg) => {
+          // 确保角色类型正确，只允许 'system'、'user' 或 'assistant'
+          let role: 'system' | 'user' | 'assistant' = 'user';
+          if (msg.role === 'assistant') {
+            role = 'assistant';
+          } else if (msg.role === 'system') {
+            role = 'system';
+          } else {
+            role = 'user';
+          }
+
+          return {
+            role,
             content: msg.content,
-          })
-        );
-        messages.splice(1, 0, ...historyMessages);
+          };
+        });
+        messages.push(...historyMessages);
       }
+
+      // 添加当前用户消息
+      messages.push({
+        role: 'user' as const,
+        content: context.message,
+      });
 
       // 调用 oneAPI
       const response = await client.chat(messages, {
