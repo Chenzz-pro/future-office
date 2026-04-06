@@ -214,7 +214,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     // 检查数据库连接和API配置
     if (!dbConnected) {
       console.log('[sendMessage] 数据库未连接');
-      setError('数据库未连接，消息已显示但无法保存到历史记录。请稍后重试或联系管理员检查数据库配置。');
+      setError('⚠️ 数据库未连接，消息已显示但无法保存到历史记录。');
+      console.warn('[sendMessage] 💡 建议解决方案：');
+      console.warn('[sendMessage]    1. 访问 /system-init 重新配置数据库');
+      console.warn('[sendMessage]    2. 使用环境变量配置数据库（.env 文件）');
+      console.warn('[sendMessage]    3. 刷新页面，系统会尝试自动重连');
       setIsLoading(false);
       return;
     }

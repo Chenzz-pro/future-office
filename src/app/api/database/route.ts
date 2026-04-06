@@ -507,7 +507,11 @@ export async function POST(request: NextRequest) {
         saveConfigToFile(config);
         console.log('[API:Database:Connect] ✅ 数据库配置已保存到文件');
       } catch (err) {
-        console.log('[API:Database:Connect] ℹ️ 配置文件保存失败（可能是只读文件系统）:', err instanceof Error ? err.message : String(err));
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[API:Database:Connect] ❌ 保存配置文件失败:', errorMsg);
+        console.warn('[API:Database:Connect] ⚠️  文件系统可能是只读的，应用重启后需要重新配置数据库');
+        console.warn('[API:Database:Connect] 💡 建议使用环境变量配置数据库，避免重启后丢失配置');
+        console.warn('[API:Database:Connect] 💡 环境变量示例：.env.example');
       }
 
       console.log('[API:Database:Connect] ✅ 数据库连接流程完成');

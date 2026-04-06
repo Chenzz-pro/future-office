@@ -118,6 +118,11 @@ async function tryAutoReconnect(): Promise<boolean> {
   }
 
   console.log('[System:Status] 无法自动重连（没有配置文件或环境变量）');
+  console.warn('[System:Status] ⚠️  应用重启后数据库连接丢失');
+  console.warn('[System:Status] 💡 建议解决方案：');
+  console.warn('[System:Status]    1. 使用环境变量配置数据库（.env 文件）');
+  console.warn('[System:Status]    2. 访问 /system-init 重新配置数据库');
+  console.warn('[System:Status]    3. 环境变量示例：DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD');
   return false;
 }
 
