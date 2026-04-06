@@ -32,6 +32,47 @@ function loadConfigFromFile(): any | null {
 }
 
 /**
+ * 从环境变量加载配置
+ */
+function loadConfigFromEnv(): any | null {
+  const envDbConfig = {
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT ?? '3306'),
+    username: process.env.DB_USER,
+    password: process.env.DB_PASSWORD || '',
+    databaseName: process.env.DB_NAME,
+  };
+
+  if (envDbConfig.host && envDbConfig.databaseName && envDbConfig.username) {
+    console.log('[System:Status] 从环境变量读取配置:', {
+      host: envDbConfig.host,
+      port: envDbConfig.port,
+      databaseName: envDbConfig.databaseName,
+      username: envDbConfig.username,
+      password: envDbConfig.password ? '已设置' : '未设置',
+    });
+
+    return {
+      id: 'env-config',
+      name: '环境变量配置',
+      type: 'mysql',
+      host: envDbConfig.host,
+      port: envDbConfig.port,
+      username: envDbConfig.username,
+      password: envDbConfig.password,
+      databaseName: envDbConfig.databaseName,
+      isActive: true,
+      isDefault: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  }
+
+  console.log('[System:Status] 环境变量未配置或配置不完整');
+  return null;
+}
+
+/**
  * 尝试自动重连
  */
 async function tryAutoReconnect(): Promise<boolean> {
@@ -66,40 +107,18 @@ async function tryAutoReconnect(): Promise<boolean> {
   }
 
   // 优先级2：环境变量
-  const envDbConfig = {
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT ?? '3306'),
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD || '',
-    databaseName: process.env.DB_NAME,
-  };
-
-  if (envDbConfig.host && envDbConfig.databaseName && envDbConfig.username) {
+  const envConfig = loadConfigFromEnv();
+  if (envConfig) {
     console.log('[System:Status] 检测到环境变量配置，尝试自动重新连接...');
 
     try {
-      const config = {
-        id: 'env-config',
-        name: '环境变量配置',
-        type: 'mysql' as const,
-        host: envDbConfig.host,
-        port: envDbConfig.port,
-        username: envDbConfig.username,
-        password: envDbConfig.password,
-        databaseName: envDbConfig.databaseName,
-        isActive: true,
-        isDefault: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
       // 测试连接
       const testPool = mysql.createPool({
-        host: config.host,
-        port: config.port,
-        user: config.username,
-        password: config.password,
-        database: config.databaseName,
+        host: envConfig.host,
+        port: envConfig.port,
+        user: envConfig.username,
+        password: envConfig.password,
+        database: envConfig.databaseName,
         waitForConnections: true,
         connectionLimit: 1,
       });
@@ -108,7 +127,7 @@ async function tryAutoReconnect(): Promise<boolean> {
       await testPool.end();
 
       // 连接成功，使用 dbManager 连接
-      await dbManager.connect(config);
+      await dbManager.connect(envConfig);
 
       console.log('[System:Status] ✅ 通过环境变量自动重新连接成功');
       return true;
