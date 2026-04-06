@@ -79,7 +79,8 @@ export class RootAgent {
     });
 
     // 验证意图是否有效
-    const validAgentTypes = Object.keys(AGENT_MAP);
+    // 注意：只允许 dispatch 方法中处理的 agentType，不包括 'root'
+    const validAgentTypes = ['approval', 'meeting', 'data', 'assistant'];
     if (!validAgentTypes.includes(response.agentType)) {
       console.warn('[RootAgent] 无效的agentType，使用默认值', response.agentType);
       response.agentType = 'assistant';

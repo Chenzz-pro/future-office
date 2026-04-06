@@ -44,11 +44,10 @@ export class LLMClient {
   private async llmBasedIntent(request: IntentRequest): Promise<IntentResponse> {
     try {
       const systemPrompt = `你是企业OA系统的意图识别助手。请根据用户的消息识别用户意图，并返回以下Agent类型之一：
-- root: 统筹智能体（负责意图识别、任务分发、结果汇总）
 - approval: 审批智能体（负责待办审批、流程发起、审批查询）
 - meeting: 会议智能体（负责会议查询、会议预定、会议通知）
 - data: 数据智能体（负责表单查询、统计分析、报表生成）
-- assistant: 个人助理智能体（负责日程管理、提醒通知、个人事务）
+- assistant: 个人助理智能体（负责日程管理、提醒通知、个人事务、通用对话）
 
 请以JSON格式返回，格式如下：
 {
