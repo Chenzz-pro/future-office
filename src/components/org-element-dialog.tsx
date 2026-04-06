@@ -170,9 +170,13 @@ export function OrgElementDialog({
 
       // 如果提供了 onSave prop，使用旧的方式
       if (onSave) {
+        // 根据类型选择正确的父ID字段
+        // 机构和部门使用 fd_parentorgid，岗位使用 fd_parentid
+        const parentField = (viewType === 'position') ? 'fd_parentid' : 'fd_parentorgid';
+
         await onSave({
           ...formData,
-          ...(parentId && { fd_parentid: parentId }),
+          ...(parentId && { [parentField]: parentId }),
           ...(mode === 'create' && {
             fd_org_type: viewType === 'organization' ? 1 : viewType === 'department' ? 2 : 3,
           }),
@@ -183,15 +187,22 @@ export function OrgElementDialog({
       }
 
       // 否则，直接调用 API（新方式）
+      // 根据类型选择正确的父ID字段
+      // 机构和部门使用 fd_parentorgid，岗位使用 fd_parentid
+      const parentField = (viewType === 'position') ? 'fd_parentid' : 'fd_parentorgid';
+
+      const requestData = {
+        action: mode === 'create' ? 'create' : 'update',
+        type: viewType === 'person' ? 'person' : viewType,
+        ...(mode === 'create' ? { data: { ...formData, ...(parentId && { [parentField]: parentId }) } } : { id: initialData?.fd_id, data: formData }),
+      };
+
+      console.log('[OrgElementDialog] 发送请求', requestData);
+
       const response = await fetch('/api/organization', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: mode === 'create' ? 'create' : 'update',
-          type: viewType === 'person' ? 'person' : viewType,
-          ...(mode === 'create' ? { data: formData } : { id: initialData?.fd_id, data: formData }),
-          ...(parentId && { parentId }),
-        }),
+        body: JSON.stringify(requestData),
       });
 
       const result = await response.json();
