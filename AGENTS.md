@@ -170,8 +170,23 @@ interface CustomSkill {
 - **管理员账号**：`admin` / `admin123` - 拥有所有权限
 - **普通用户账号**：`user` / `user123` - 可以访问基本功能
 
-### 默认组织架构
-系统初始化后会自动创建完整的组织架构，包括海峡人力及其下属部门。
+### 自动创建的表结构
+系统初始化时会自动创建以下表结构：
+
+#### 组织架构表（来自 database-schema-org-structure.sql）
+- `sys_org_element` - 组织机构树（机构、部门、岗位）
+- `sys_org_person` - 人员表（也是系统用户表）
+- `sys_org_post_person` - 岗位人员关联表
+- `sys_org_staffing_level` - 人员级别表
+
+#### 系统核心表（自动创建）
+- `database_configs` - 数据库配置表
+- `api_keys` - API Keys 配置表
+- `chat_sessions` - 对话会话表
+- `chat_messages` - 对话消息表
+- `custom_skills` - 自定义技能表
+- `ekp_configs` - EKP 配置表
+- `organizations` - 组织架构表（为管理后台预留）
 
 ### API 接口
 - `GET /api/system/status` - 获取系统状态（数据库连接、初始化状态）
