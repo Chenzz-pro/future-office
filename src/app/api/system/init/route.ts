@@ -29,39 +29,67 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 检查是否存在管理员账号
-    // 支持两种查询方式：新的角色ID方式和旧的字符串方式（向后兼容）
-    let count = 0;
+    // 检查是否存在有效的admin账户
+    // 优化：检查登录名为'admin'且启用了登录的账户
+    let adminExists = false;
+    let adminCount = 0;
+    let allAdminCount = 0;
 
     try {
-      // 尝试使用新的角色ID方式查询
-      const result = await dbManager.query<{ count: number }>(
+      // 1. 检查是否存在名为'admin'且启用的账户
+      const adminResult = await dbManager.query<{ count: number }>(
+        `SELECT COUNT(*) as count
+         FROM sys_org_person
+         WHERE fd_login_name = 'admin'
+         AND fd_is_login_enabled = 1`
+      );
+      adminExists = (adminResult.rows[0] as { count: number } | undefined)?.count === 1;
+      adminCount = (adminResult.rows[0] as { count: number } | undefined)?.count || 0;
+
+      // 2. 检查所有管理员角色的账户数量
+      const allAdminResult = await dbManager.query<{ count: number }>(
         `SELECT COUNT(*) as count
          FROM sys_org_person
          WHERE fd_role = ? OR fd_role = ?`,
         [ADMIN_ROLE_ID, MANAGER_ROLE_ID]
       );
-      count = (result.rows[0] as { count: number } | undefined)?.count || 0;
+      allAdminCount = (allAdminResult.rows[0] as { count: number } | undefined)?.count || 0;
     } catch (error) {
-      // 如果查询失败（可能是数据库结构未更新），尝试使用旧的字符串方式
+      console.error('[API:System:Init] 查询管理员账号失败:', error);
+      // 如果查询失败，尝试使用旧的字符串方式
       try {
         const fallbackResult = await dbManager.query<{ count: number }>(
           `SELECT COUNT(*) as count
            FROM sys_org_person
-           WHERE fd_role = ? OR fd_role = ?`,
-          ['admin', 'manager']
+           WHERE fd_login_name = 'admin'
+           AND fd_is_login_enabled = 1`
         );
-        count = (fallbackResult.rows[0] as { count: number } | undefined)?.count || 0;
+        adminExists = (fallbackResult.rows[0] as { count: number } | undefined)?.count === 1;
+        adminCount = (fallbackResult.rows[0] as { count: number } | undefined)?.count || 0;
+
+        const allFallbackResult = await dbManager.query<{ count: number }>(
+          `SELECT COUNT(*) as count
+           FROM sys_org_person
+           WHERE fd_role = 'admin' OR fd_role = 'manager'`
+        );
+        allAdminCount = (allFallbackResult.rows[0] as { count: number } | undefined)?.count || 0;
       } catch (fallbackError) {
         console.error('[API:System:Init] 查询管理员账号失败:', fallbackError);
       }
     }
 
+    // 系统初始化的判断标准：必须存在一个名为'admin'且启用的账户
+    const initialized = adminExists;
+
     return NextResponse.json({
       success: true,
-      initialized: count > 0,
-      adminCount: count,
-      message: count > 0 ? '系统已初始化' : '系统未初始化',
+      initialized,
+      adminCount,
+      allAdminCount,
+      adminExists,
+      message: initialized
+        ? '系统已初始化'
+        : '系统未初始化，请创建管理员账号',
     });
   } catch (error: unknown) {
     console.error('[API:System:Init] 检查初始化状态失败:', error);
@@ -106,14 +134,62 @@ export async function POST(request: NextRequest) {
 
     // 检查管理员账号是否已存在
     const checkResult = await dbManager.query(
-      'SELECT fd_id FROM sys_org_person WHERE fd_login_name = ?',
+      'SELECT fd_id, fd_is_login_enabled FROM sys_org_person WHERE fd_login_name = ?',
       [adminUsername]
     );
 
     if (checkResult.rows.length > 0) {
+      const existingUser = checkResult.rows[0] as {
+        fd_id: string;
+        fd_is_login_enabled: number;
+      };
+
+      // 如果admin账户存在但被禁用，启用它
+      if (existingUser.fd_is_login_enabled === 0) {
+        const hashedPassword = await hashPassword(adminPassword);
+
+        await dbManager.query(
+          `UPDATE sys_org_person
+           SET fd_password = ?,
+               fd_email = ?,
+               fd_name = ?,
+               fd_role = ?,
+               fd_is_login_enabled = 1,
+               fd_alter_time = NOW()
+           WHERE fd_id = ?`,
+          [
+            hashedPassword,
+            adminEmail,
+            adminPersonName,
+            ADMIN_ROLE_ID,
+            existingUser.fd_id,
+          ]
+        );
+
+        console.log('[API:System:Init] 管理员账号已重新启用', {
+          adminId: existingUser.fd_id,
+          username: adminUsername,
+          email: adminEmail,
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: '管理员账号已重新启用',
+          data: {
+            adminId: existingUser.fd_id,
+            username: adminUsername,
+            email: adminEmail,
+            personName: adminPersonName,
+            reactivated: true,
+          },
+        });
+      }
+
+      // 如果admin账户存在且启用，返回错误
       return NextResponse.json({
         success: false,
-        error: '管理员账号已存在',
+        error: '管理员账号已存在且已启用，无需重复创建',
+        hint: '您可以直接使用该账号登录，或联系管理员重置密码',
       });
     }
 

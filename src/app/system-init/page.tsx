@@ -17,6 +17,8 @@ interface SystemStatus {
     status: boolean;
     message: string;
     adminCount: number;
+    allAdminCount?: number;
+    adminExists?: boolean;
   };
   version: string;
 }
@@ -399,9 +401,34 @@ export default function SystemInitPage() {
               <AlertTitle>初始化状态</AlertTitle>
               <AlertDescription>
                 {status?.initialized.message}
-                {status?.initialized.adminCount && status.initialized.adminCount > 0 && ` (管理员数量: ${status.initialized.adminCount})`}
+                {status?.initialized.allAdminCount && status.initialized.allAdminCount > 0 && ` (管理员角色账户: ${status.initialized.allAdminCount})`}
               </AlertDescription>
             </Alert>
+
+            {/* 诊断信息 */}
+            {status && status.initialized.allAdminCount !== undefined && status.initialized.allAdminCount > 0 && !status.initialized.adminExists && (
+              <Alert>
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <AlertTitle className="text-orange-600">诊断信息</AlertTitle>
+                <AlertDescription className="space-y-2">
+                  <p>检测到系统中存在管理员角色的账户（{status.initialized.allAdminCount}个），但没有名为"admin"的账户。</p>
+                  <p className="text-sm text-gray-600">
+                    可能的原因：
+                  </p>
+                  <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside ml-2">
+                    <li>admin账户已被删除</li>
+                    <li>admin账户被禁用了（fd_is_login_enabled = 0）</li>
+                  </ul>
+                  <p className="text-sm text-orange-700 font-medium">
+                    建议解决方案：
+                  </p>
+                  <ul className="text-sm text-orange-700 space-y-1 list-disc list-inside ml-2">
+                    <li>在下方创建新的admin账户</li>
+                    <li>如果admin账户被禁用，系统会自动重新启用它</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           {/* 如果数据库未连接，显示数据库配置表单 */}
