@@ -328,6 +328,20 @@ interface CustomSkill {
 - **自动迁移**: 数据库初始化时会自动调用迁移 API，无需手动操作
 - **向后兼容**: 支持从旧的 ENUM 类型迁移到新的外键关联
 
+### 角色表手动初始化
+如果系统已经部署但没有角色表，可以手动初始化：
+- **检查状态**: `GET /api/database/init/role`
+- **执行初始化**: `POST /api/database/init/role`
+  - 创建 sys_role 表
+  - 插入默认角色数据（超级管理员、管理员、普通用户）
+- **手动 SQL**: 执行 `database-schema-role-only.sql` 脚本
+
+### 角色选择问题解决
+如果在新建人员时角色选择框为空，说明 `sys_role` 表不存在或没有数据：
+1. **方式 1（推荐）**: 点击角色选择框中的"初始化角色表"按钮
+2. **方式 2**: 访问 `/system-init` 页面重新初始化数据库
+3. **方式 3**: 手动执行 SQL 脚本 `database-schema-role-only.sql`
+
 ### 初始化方法
 1. **自动初始化**：访问 `/system-init` 页面，填写数据库配置后系统自动执行初始化
 2. **手动初始化**：执行 `mysql -u root -p future_office < database-schema-org-structure.sql`

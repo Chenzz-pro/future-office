@@ -364,7 +364,36 @@ export function OrgElementDialog({
                       {loadingRoles ? (
                         <div className="p-2 text-sm text-gray-500">加载中...</div>
                       ) : roles.length === 0 ? (
-                        <div className="p-2 text-sm text-gray-500">暂无角色，请先创建角色</div>
+                        <div className="p-3">
+                          <div className="text-sm text-gray-500 mb-2">
+                            暂无角色数据
+                          </div>
+                          <div className="text-xs text-gray-400 mb-2">
+                            请先在角色管理页面创建角色，或初始化角色表
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const response = await fetch('/api/database/init/role', {
+                                  method: 'POST',
+                                });
+                                const data = await response.json();
+                                if (data.success) {
+                                  alert('角色表初始化成功！请重新打开对话框。');
+                                  await loadRoles();
+                                } else {
+                                  alert('角色表初始化失败：' + data.error);
+                                }
+                              } catch (error) {
+                                alert('角色表初始化失败：' + (error as Error).message);
+                              }
+                            }}
+                            className="w-full px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                          >
+                            初始化角色表
+                          </button>
+                        </div>
                       ) : (
                         roles.map((role) => (
                           <SelectItem key={role.fd_id} value={role.fd_id}>
