@@ -328,24 +328,50 @@ export class AssistantAgent {
       console.error('[AssistantAgent] oneAPI 调用失败', error);
       console.error('[AssistantAgent] 错误详情:', {
         message: error instanceof Error ? error.message : '未知错误',
+        name: error instanceof Error ? error.name : 'Unknown',
         stack: error instanceof Error ? error.stack : undefined,
       });
 
+      // 区分不同类型的错误
+      let shouldFallback = true;
+      let errorMessage = 'oneAPI调用失败';
+
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'oneAPI请求超时（超过20秒）';
+        } else if (error.message.includes('oneAPI请求失败')) {
+          errorMessage = `oneAPI服务错误: ${error.message}`;
+        } else {
+          errorMessage = `oneAPI调用异常: ${error.message}`;
+        }
+      }
+
+      console.log('[AssistantAgent] 错误类型:', errorMessage);
       console.log('[AssistantAgent] 降级到固定响应');
+
       // 降级到固定响应
-      return this.getFixedResponse(context.message);
+      return this.getFixedResponse(context.message, errorMessage);
     }
   }
 
   /**
-   * 返回固定响应
+   * 返回固定响应（降级方案）
+   * @param message 用户消息
+   * @param error 错误信息
    */
-  private getFixedResponse(message: string): AgentResult {
+  private getFixedResponse(message: string, error?: string): AgentResult {
+    const content = `我收到了您的消息："${message}"，正在为您处理...`;
+    console.log('[AssistantAgent] 固定响应:', { content, error });
+
     return {
       success: true,
       data: {
         type: 'general',
-        content: `我收到了您的消息："${message}"，正在为您处理...`,
+        content,
+        metadata: {
+          isFallback: true,
+          error: error || 'oneAPI不可用',
+        },
       },
       agentType: 'assistant',
     };

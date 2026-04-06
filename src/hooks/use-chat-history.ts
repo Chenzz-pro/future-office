@@ -37,18 +37,24 @@ const STORAGE_KEY_PENDING = 'chat-sessions-pending';
 function getCurrentUserId(): string | null {
   const userId = localStorage.getItem('current-user-id');
 
+  console.log('[getCurrentUserId] localStorage 读取:', {
+    currentUserId: userId,
+    localStorageKeys: Object.keys(localStorage),
+  });
+
   if (!userId) {
-    console.warn('[useChatHistory] 未找到 current-user-id，用户未登录');
+    console.error('[getCurrentUserId] 未找到 current-user-id，用户未登录');
     return null; // 返回 null 表示未登录
   }
 
   // 验证 userId 格式（应该是 UUID 格式）
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(userId)) {
-    console.error('[useChatHistory] current-user-id 格式无效:', userId);
+    console.error('[getCurrentUserId] current-user-id 格式无效:', userId);
     return null;
   }
 
+  console.log('[getCurrentUserId] 用户 ID 有效:', userId);
   return userId;
 }
 

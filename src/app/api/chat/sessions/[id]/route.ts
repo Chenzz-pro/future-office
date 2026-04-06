@@ -50,18 +50,22 @@ export async function PUT(
     const { id } = await params;
     const userId = request.headers.get('X-User-ID');
 
-    console.log('[API:ChatSession:PUT] 权限检查:', {
+    console.log('[API:ChatSession:PUT] ========== 开始处理请求 ==========');
+    console.log('[API:ChatSession:PUT] 请求详情:', {
       sessionId: id,
       requestUserId: userId,
+      headers: Object.fromEntries(request.headers.entries()),
     });
 
     if (!userId) {
+      console.error('[API:ChatSession:PUT] 错误: 缺少用户 ID');
       return NextResponse.json({ success: false, error: '缺少用户 ID' }, { status: 400 });
     }
 
     const session = await chatSessionRepository.findById(id);
 
     if (!session) {
+      console.error('[API:ChatSession:PUT] 错误: 会话不存在', { sessionId: id });
       return NextResponse.json({ success: false, error: '会话不存在' }, { status: 404 });
     }
 
@@ -79,7 +83,18 @@ export async function PUT(
         requestUserId: userId,
         sessionId: id,
       });
-      return NextResponse.json({ success: false, error: '无权更新该会话' }, { status: 403 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: '无权更新该会话',
+          debug: {
+            sessionUserId: session.userId,
+            requestUserId: userId,
+            sessionId: id,
+          },
+        },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();

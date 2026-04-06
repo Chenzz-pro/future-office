@@ -52,52 +52,67 @@ export class OneAPIClient {
     });
 
     try {
-      // 处理 baseUrl，确保不会重复 /v1 路径
-      let apiUrl = this.config.baseUrl;
-      // 如果 baseUrl 以 /V1 或 /v1 结尾，去掉它
-      if (apiUrl.endsWith('/V1') || apiUrl.endsWith('/v1')) {
-        apiUrl = apiUrl.slice(0, -3);
-      }
-      // 确保 baseUrl 不以 / 结尾
-      if (apiUrl.endsWith('/')) {
-        apiUrl = apiUrl.slice(0, -1);
-      }
+      // 添加超时控制（20秒）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error('[OneAPIClient] 请求超时（20秒）');
+      }, 20000);
 
-      const fullUrl = `${apiUrl}/v1/chat/completions`;
-      console.log('[OneAPIClient] 完整 URL:', fullUrl);
+      try {
+        // 处理 baseUrl，确保不会重复 /v1 路径
+        let apiUrl = this.config.baseUrl;
+        // 如果 baseUrl 以 /V1 或 /v1 结尾，去掉它
+        if (apiUrl.endsWith('/V1') || apiUrl.endsWith('/v1')) {
+          apiUrl = apiUrl.slice(0, -3);
+        }
+        // 确保 baseUrl 不以 / 结尾
+        if (apiUrl.endsWith('/')) {
+          apiUrl = apiUrl.slice(0, -1);
+        }
 
-      const response = await fetch(fullUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
+        const fullUrl = `${apiUrl}/v1/chat/completions`;
+        console.log('[OneAPIClient] 完整 URL:', fullUrl);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[OneAPIClient] 请求失败:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText,
+        const response = await fetch(fullUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.config.apiKey}`,
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
         });
-        throw new Error(`oneAPI请求失败: ${response.status} ${response.statusText}`);
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[OneAPIClient] 请求失败:', {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText,
+          });
+          throw new Error(`oneAPI请求失败: ${response.status} ${response.statusText}`);
+        }
+
+        const data: OneAPIResponse = await response.json();
+
+        if (!data.choices || data.choices.length === 0) {
+          throw new Error('oneAPI返回的响应为空');
+        }
+
+        const content = data.choices[0].message.content;
+        console.log('[OneAPIClient] 请求成功:', {
+          tokens: data.usage.total_tokens,
+          contentLength: content.length,
+        });
+
+        return content;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
       }
-
-      const data: OneAPIResponse = await response.json();
-
-      if (!data.choices || data.choices.length === 0) {
-        throw new Error('oneAPI返回的响应为空');
-      }
-
-      const content = data.choices[0].message.content;
-      console.log('[OneAPIClient] 请求成功:', {
-        tokens: data.usage.total_tokens,
-        contentLength: content.length,
-      });
-
-      return content;
     } catch (error) {
       console.error('[OneAPIClient] 调用失败:', error);
       throw error;
