@@ -192,16 +192,33 @@ export async function POST(request: NextRequest) {
       configId = id;
       console.log('[API:OneAPI:Post] 更新配置成功');
     } else {
-      // 创建新配置
-      configId = await repository.create({
-        name,
-        description,
-        base_url: baseUrl,
-        api_key: apiKey,
-        model,
-        enabled,
-      });
-      console.log('[API:OneAPI:Post] 创建配置成功');
+      // 检查名称是否已存在
+      const existingConfig = await repository.findByName(name);
+      if (existingConfig) {
+        console.log('[API:OneAPI:Post] 检测到同名配置，自动更新');
+        // 自动更新现有配置
+        await repository.update(existingConfig.id, {
+          name,
+          description,
+          base_url: baseUrl,
+          api_key: apiKey,
+          model,
+          enabled,
+        });
+        configId = existingConfig.id;
+        console.log('[API:OneAPI:Post] 更新同名配置成功');
+      } else {
+        // 创建新配置
+        configId = await repository.create({
+          name,
+          description,
+          base_url: baseUrl,
+          api_key: apiKey,
+          model,
+          enabled,
+        });
+        console.log('[API:OneAPI:Post] 创建新配置成功');
+      }
     }
 
     // 更新oneAPI管理器配置
@@ -234,6 +251,19 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('[API:OneAPI:Post] 保存配置失败:', error);
     const errorMessage = error instanceof Error ? error.message : '服务器错误';
+
+    // 处理唯一键冲突错误
+    if (error instanceof Error && error.message.includes('Duplicate entry') && error.message.includes('uk_name')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '配置名称已存在，请使用其他名称或更新现有配置',
+          errorCode: 'DUPLICATE_NAME',
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       {
         success: false,

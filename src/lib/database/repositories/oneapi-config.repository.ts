@@ -76,6 +76,53 @@ export class OneAPIConfigRepository {
   }
 
   /**
+   * Upsert oneAPI配置（如果名称存在则更新，否则创建）
+   */
+  async upsert(params: CreateOneAPIConfigParams & { id?: string }): Promise<string> {
+    const {
+      name,
+      description,
+      base_url,
+      api_key,
+      model,
+      enabled = true,
+      id,
+    } = params;
+
+    // 如果提供了ID，使用ID更新
+    if (id) {
+      await this.update(id, {
+        name,
+        description,
+        base_url,
+        api_key,
+        model,
+        enabled,
+      });
+      return id;
+    }
+
+    // 检查名称是否已存在
+    const existing = await this.findByName(name);
+
+    if (existing) {
+      // 更新现有配置
+      await this.update(existing.id, {
+        name,
+        description,
+        base_url,
+        api_key,
+        model,
+        enabled,
+      });
+      return existing.id;
+    }
+
+    // 创建新配置
+    return await this.create(params);
+  }
+
+  /**
    * 根据ID获取oneAPI配置
    */
   async findById(id: string): Promise<OneAPIConfig | null> {

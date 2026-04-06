@@ -9,7 +9,7 @@ import { dbManager } from '@/lib/database';
 
 export async function GET(request: NextRequest) {
   try {
-    const status = {
+    const status: any = {
       oneAPIManager: {
         isEnabled: oneAPIManager.isEnabled(),
         config: oneAPIManager.getConfig(),
