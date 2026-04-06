@@ -116,7 +116,25 @@ CREATE TABLE IF NOT EXISTS custom_skills (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='自定义技能表';
 
 -- ============================================================
--- 7. EKP 配置表
+-- 7. oneAPI配置表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS oneapi_configs (
+    id VARCHAR(36) PRIMARY KEY COMMENT '配置ID（UUID）',
+    name VARCHAR(100) NOT NULL COMMENT '配置名称',
+    description VARCHAR(500) COMMENT '配置描述',
+    base_url VARCHAR(500) NOT NULL COMMENT 'oneAPI服务地址',
+    api_key VARCHAR(500) NOT NULL COMMENT 'API密钥',
+    model VARCHAR(100) NOT NULL COMMENT '模型名称',
+    enabled BOOLEAN DEFAULT TRUE COMMENT '是否启用',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_name (name),
+    KEY idx_enabled (enabled),
+    KEY idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='oneAPI配置表';
+
+-- ============================================================
+-- 8. EKP 配置表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ekp_configs (
     id VARCHAR(36) PRIMARY KEY,
@@ -132,7 +150,7 @@ CREATE TABLE IF NOT EXISTS ekp_configs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='EKP配置表';
 
 -- ============================================================
--- 8. 组织架构表（为管理后台预留）
+-- 9. 组织架构表（为管理后台预留）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS organizations (
     id VARCHAR(36) PRIMARY KEY,
@@ -147,7 +165,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='组织架构表';
 
 -- ============================================================
--- 9. 预置数据
+-- 10. 预置数据
 -- ============================================================
 
 -- 插入系统用户（用于管理员后台 API Key 等系统级配置）

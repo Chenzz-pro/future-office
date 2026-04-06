@@ -3,12 +3,16 @@
 import mysql from 'mysql2/promise';
 import type { DatabaseConfig, DatabaseConnectionOptions, QueryResult } from './types';
 import { oneAPIManager } from '@/lib/oneapi';
+import { OneAPIConfigRepository } from './repositories/oneapi-config.repository';
 
 export class DatabaseManager {
   private static instance: DatabaseManager;
   private pool: mysql.Pool | null = null;
   private config: DatabaseConfig | null = null;
   private keepAliveTimer: NodeJS.Timeout | null = null;
+
+  // OneAPI配置Repository
+  public oneAPIConfigRepository: OneAPIConfigRepository | null = null;
 
   private constructor() {}
 
@@ -471,11 +475,13 @@ export class DatabaseManager {
       // 初始化Agent和技能数据
       await this.initAgentAndSkillData();
 
-      // 迁移数据库配置表：添加oneAPI相关字段
-      await this.migrateDatabaseConfigsTable();
-
       // 修复组织架构数据：将子部门的 fd_parentid 迁移到 fd_parentorgid
       await this.fixOrgElementParentId();
+
+      // 初始化OneAPI Repository
+      if (this.pool) {
+        this.oneAPIConfigRepository = new OneAPIConfigRepository(this.pool);
+      }
     } catch (error) {
       console.error('[AutoInit] 组织架构表初始化失败:', error);
       // 不抛出错误，避免影响应用启动
@@ -680,6 +686,25 @@ export class DatabaseManager {
       `);
       console.log('[AutoInit] skills 表创建成功');
 
+      // 12. 创建oneAPI配置表
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS oneapi_configs (
+          id VARCHAR(36) PRIMARY KEY COMMENT '配置ID（UUID）',
+          name VARCHAR(100) NOT NULL COMMENT '配置名称',
+          description VARCHAR(500) COMMENT '配置描述',
+          base_url VARCHAR(500) NOT NULL COMMENT 'oneAPI服务地址',
+          api_key VARCHAR(500) NOT NULL COMMENT 'API密钥',
+          model VARCHAR(100) NOT NULL COMMENT '模型名称',
+          enabled BOOLEAN DEFAULT TRUE COMMENT '是否启用',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+          UNIQUE KEY uk_name (name),
+          KEY idx_enabled (enabled),
+          KEY idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='oneAPI配置表'
+      `);
+      console.log('[AutoInit] oneapi_configs 表创建成功');
+
       console.log('[AutoInit] ✅ 系统核心表初始化完成');
     } catch (error) {
       console.error('[AutoInit] 系统核心表初始化失败:', error);
@@ -744,91 +769,42 @@ export class DatabaseManager {
   }
 
   /**
-   * 迁移database_configs表：添加oneAPI相关字段
-   */
-  private async migrateDatabaseConfigsTable(): Promise<void> {
-    try {
-      console.log('[Migration] 检查database_configs表是否需要迁移...');
-
-      // 检查字段是否存在
-      const columnCheckResult = await this.query<{ count: number }>(
-        `SELECT COUNT(*) as count
-         FROM information_schema.columns
-         WHERE table_schema = DATABASE()
-         AND table_name = 'database_configs'
-         AND column_name = 'base_url'`
-      );
-
-      const hasBaseURL = (columnCheckResult.rows[0]?.count || 0) > 0;
-
-      if (hasBaseURL) {
-        console.log('[Migration] database_configs表已迁移，跳过');
-        return;
-      }
-
-      console.log('[Migration] 开始迁移database_configs表...');
-
-      // 添加oneAPI相关字段
-      await this.query(`
-        ALTER TABLE database_configs
-        ADD COLUMN base_url VARCHAR(500) COMMENT 'oneAPI服务地址（仅oneAPI配置使用）',
-        ADD COLUMN api_key VARCHAR(500) COMMENT 'API密钥（oneAPI配置使用）',
-        ADD COLUMN model VARCHAR(100) COMMENT '模型名称（oneAPI配置使用）',
-        ADD COLUMN enabled BOOLEAN DEFAULT TRUE COMMENT '是否启用（oneAPI配置使用）'
-      `);
-
-      console.log('[Migration] ✅ database_configs表迁移完成');
-    } catch (error) {
-      // 迁移失败不影响正常使用，只记录日志
-      console.error('[Migration] database_configs表迁移失败:', error);
-    }
-  }
-
-  /**
    * 加载oneAPI配置
-   * 从数据库中加载oneAPI配置并初始化oneAPI管理器
+   * 从oneapi_configs表中加载配置并初始化oneAPI管理器
    */
   private async loadOneAPIConfig(): Promise<void> {
     try {
-      // 查询oneAPI配置
-      const result = await this.query(
-        `SELECT
-          id,
-          name,
-          base_url as baseUrl,
-          api_key as apiKey,
-          model,
-          enabled,
-          created_at as createdAt,
-          updated_at as updatedAt
-         FROM database_configs
-         WHERE name = 'oneapi'
-         AND enabled = TRUE
-         LIMIT 1`
-      );
-
-      if (result.rows.length === 0) {
-        console.log('[OneAPI:Init] 未找到oneAPI配置，将使用规则引擎');
+      if (!this.oneAPIConfigRepository) {
+        console.log('[OneAPI:Init] OneAPI Repository未初始化');
         return;
       }
 
-      const config = result.rows[0] as {
-        id: string;
-        name: string;
-        baseUrl: string;
-        apiKey: string;
-        model: string;
-        enabled: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-      };
+      // 查询启用的oneAPI配置
+      const configs = await this.oneAPIConfigRepository.findEnabled();
+
+      if (configs.length === 0) {
+        console.log('[OneAPI:Init] 未找到启用的oneAPI配置，将使用规则引擎');
+        return;
+      }
+
+      // 使用第一个启用的配置
+      const config = configs[0];
 
       // 初始化oneAPI管理器
-      oneAPIManager.initialize(config);
+      oneAPIManager.initialize({
+        id: config.id,
+        name: config.name,
+        baseUrl: config.base_url,
+        apiKey: config.api_key,
+        model: config.model,
+        enabled: config.enabled,
+        createdAt: config.created_at,
+        updatedAt: config.updated_at,
+      });
 
       console.log('[OneAPI:Init] oneAPI配置加载成功:', {
         name: config.name,
-        baseUrl: config.baseUrl,
+        baseUrl: config.base_url,
         model: config.model,
       });
     } catch (error) {
@@ -1075,3 +1051,8 @@ export class DatabaseManager {
 
 // 导出单例
 export const dbManager = DatabaseManager.getInstance();
+
+// 导出OneAPI配置Repository访问方法
+export function getOneAPIConfigRepository(): OneAPIConfigRepository | null {
+  return dbManager['oneAPIConfigRepository'];
+}

@@ -4,67 +4,75 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { dbManager } from '@/lib/database/manager';
+import { getOneAPIConfigRepository } from '@/lib/database/manager';
 import { oneAPIManager } from '@/lib/oneapi';
 
 /**
  * GET /api/integration/oneapi
- * 获取oneAPI配置
+ * 获取oneAPI配置列表
  */
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
+
     // 检查数据库是否已连接
-    const isConnected = await dbManager.isConnected();
+    const repository = getOneAPIConfigRepository();
 
-    if (!isConnected) {
+    if (!repository) {
+      return NextResponse.json({
+        success: false,
+        error: '数据库未连接，请先配置数据库连接',
+      });
+    }
+
+    // 检查表是否存在
+    const tableExists = await repository.tableExists();
+
+    if (!tableExists) {
       return NextResponse.json({
         success: true,
         configured: false,
         data: null,
-        message: '数据库未连接',
+        message: 'oneAPI配置表不存在',
       });
     }
 
-    // 查询oneAPI配置
-    const result = await dbManager.query(
-      `SELECT
-        id,
-        name,
-        base_url as baseUrl,
-        api_key as apiKey,
-        model,
-        enabled,
-        created_at as createdAt,
-        updated_at as updatedAt
-       FROM database_configs
-       WHERE name = 'oneapi'
-       LIMIT 1`
-    );
+    // 如果action=list，返回所有配置
+    if (action === 'list') {
+      const configs = await repository.findAll();
 
-    if (result.rows.length === 0) {
+      // 隐藏API密钥
+      const maskedConfigs = configs.map((config) => ({
+        ...config,
+        api_key: config.api_key ? '******' : '',
+      }));
+
+      return NextResponse.json({
+        success: true,
+        data: maskedConfigs,
+        message: '获取配置列表成功',
+      });
+    }
+
+    // 默认返回第一个启用的配置
+    const configs = await repository.findEnabled();
+
+    if (configs.length === 0) {
       return NextResponse.json({
         success: true,
         configured: false,
         data: null,
-        message: '未找到oneAPI配置',
+        message: '未找到启用的oneAPI配置',
       });
     }
 
-    const config = result.rows[0] as {
-      id: string;
-      name: string;
-      baseUrl: string;
-      apiKey: string;
-      model: string;
-      enabled: boolean;
-      createdAt: Date;
-      updatedAt: Date;
-    };
+    const config = configs[0];
 
     // 隐藏API密钥
     const maskedConfig = {
       ...config,
-      apiKey: config.apiKey ? '******' : '',
+      api_key: config.api_key ? '******' : '',
     };
 
     return NextResponse.json({
@@ -93,9 +101,72 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, baseUrl, apiKey, model, enabled } = body;
+    const { action, id, name, description, baseUrl, apiKey, model, enabled } = body;
 
-    // 参数校验
+    // 检查数据库是否已连接
+    const repository = getOneAPIConfigRepository();
+
+    if (!repository) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '数据库未连接，请先配置数据库连接',
+        },
+        { status: 400 }
+      );
+    }
+
+    // 检查表是否存在，不存在则创建
+    const tableExists = await repository.tableExists();
+
+    if (!tableExists) {
+      await repository.createTable();
+      console.log('[API:OneAPI:Post] oneAPI配置表创建成功');
+    }
+
+    // 删除配置
+    if (action === 'delete') {
+      if (!id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: '缺少配置ID',
+          },
+          { status: 400 }
+        );
+      }
+
+      await repository.delete(id);
+      console.log('[API:OneAPI:Post] 删除配置成功');
+
+      return NextResponse.json({
+        success: true,
+        message: '删除配置成功',
+      });
+    }
+
+    // 切换启用状态
+    if (action === 'toggle') {
+      if (!id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: '缺少配置ID',
+          },
+          { status: 400 }
+        );
+      }
+
+      await repository.toggleEnabled(id);
+      console.log('[API:OneAPI:Post] 切换启用状态成功');
+
+      return NextResponse.json({
+        success: true,
+        message: '切换启用状态成功',
+      });
+    }
+
+    // 参数校验（保存或更新）
     if (!name || !baseUrl || !apiKey || !model) {
       return NextResponse.json(
         {
@@ -106,80 +177,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 检查数据库是否已连接
-    const isConnected = await dbManager.isConnected();
-
-    if (!isConnected) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: '数据库未连接，请先配置数据库连接',
-        },
-        { status: 400 }
-      );
-    }
-
-    // 检查配置是否已存在
-    const checkResult = await dbManager.query(
-      `SELECT id FROM database_configs WHERE name = 'oneapi' LIMIT 1`
-    );
-
-    const now = new Date();
     let configId: string;
 
-    if (checkResult.rows.length > 0) {
+    if (id) {
       // 更新现有配置
-      configId = (checkResult.rows[0] as { id: string }).id;
-      await dbManager.query(
-        `UPDATE database_configs
-         SET name = ?,
-             type = 'mysql',
-             base_url = ?,
-             api_key = ?,
-             model = ?,
-             enabled = ?,
-             updated_at = ?
-         WHERE id = ?`,
-        [name, baseUrl, apiKey, model, enabled, now, configId]
-      );
+      await repository.update(id, {
+        name,
+        description,
+        base_url: baseUrl,
+        api_key: apiKey,
+        model,
+        enabled,
+      });
+      configId = id;
       console.log('[API:OneAPI:Post] 更新配置成功');
     } else {
       // 创建新配置
-      configId = crypto.randomUUID();
-      await dbManager.query(
-        `INSERT INTO database_configs (
-          id,
-          name,
-          type,
-          base_url,
-          api_key,
-          model,
-          enabled,
-          is_active,
-          is_default,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, 'mysql', ?, ?, ?, ?, TRUE, FALSE, ?, ?)`,
-        [configId, name, baseUrl, apiKey, model, enabled, now, now]
-      );
+      configId = await repository.create({
+        name,
+        description,
+        base_url: baseUrl,
+        api_key: apiKey,
+        model,
+        enabled,
+      });
       console.log('[API:OneAPI:Post] 创建配置成功');
     }
 
     // 更新oneAPI管理器配置
-    oneAPIManager.initialize({
-      id: configId,
-      name,
-      baseUrl,
-      apiKey,
-      model,
-      enabled,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const config = await repository.findById(configId);
+
+    if (config) {
+      oneAPIManager.initialize({
+        id: config.id,
+        name: config.name,
+        baseUrl: config.base_url,
+        apiKey: config.api_key,
+        model: config.model,
+        enabled: config.enabled,
+        createdAt: config.created_at,
+        updatedAt: config.updated_at,
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      message: '保存配置成功',
+      message: id ? '更新配置成功' : '保存配置成功',
       data: {
         id: configId,
         name,
@@ -203,14 +246,17 @@ export async function POST(request: NextRequest) {
 
 /**
  * DELETE /api/integration/oneapi
- * 删除oneAPI配置
+ * 删除oneAPI配置（已废弃，请使用POST action=delete）
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // 检查数据库是否已连接
-    const isConnected = await dbManager.isConnected();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
 
-    if (!isConnected) {
+    // 检查数据库是否已连接
+    const repository = getOneAPIConfigRepository();
+
+    if (!repository) {
       return NextResponse.json(
         {
           success: false,
@@ -220,8 +266,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    if (!id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '缺少配置ID',
+        },
+        { status: 400 }
+      );
+    }
+
     // 删除配置
-    await dbManager.query(`DELETE FROM database_configs WHERE name = 'oneapi'`);
+    await repository.delete(id);
 
     // 重置oneAPI管理器
     oneAPIManager.reset();
