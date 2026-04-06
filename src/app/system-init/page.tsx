@@ -12,6 +12,10 @@ interface SystemStatus {
   database: {
     connected: boolean;
     message: string;
+    error?: string;
+    errorType?: 'auth_failed' | 'connection_refused' | 'database_not_found' | 'config_not_found' | 'unknown';
+    configExists?: boolean;
+    configSource?: 'file' | 'env' | 'none';
   };
   initialized: {
     status: boolean;
@@ -446,21 +450,74 @@ export default function SystemInitPage() {
                     <li>如果数据库是全新的，需要您手动创建管理员账号</li>
                     <li>如果数据库已有管理员账号，系统会自动跳转到登录页</li>
                   </ul>
-                  {dbError && dbError.includes('数据库连接失败') && (
+                  {dbError && (
                     <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-800">
-                      <p className="font-medium">⚠️ 检测到数据库连接问题</p>
-                      <p className="mt-1">可能原因：</p>
-                      <ul className="mt-1 space-y-1 list-disc list-inside">
-                        <li>数据库密码已更改，但配置文件未更新</li>
-                        <li>数据库服务器未启动或无法访问</li>
-                        <li>网络连接问题</li>
-                      </ul>
-                      <p className="mt-1 font-medium">建议：</p>
-                      <ul className="mt-1 space-y-1 list-disc list-inside">
-                        <li>检查数据库服务器是否正常运行</li>
-                        <li>确认数据库用户名和密码正确</li>
-                        <li>如果密码已更改，请重新配置连接信息</li>
-                      </ul>
+                      <p className="font-medium">⚠️ 数据库连接失败</p>
+                      <p className="mt-1 font-medium">{dbError}</p>
+
+                      {/* 根据错误类型显示不同的解决方案 */}
+                      {status?.database.errorType === 'auth_failed' && (
+                        <div className="mt-2">
+                          <p className="font-medium">💡 认证失败（用户名或密码错误）</p>
+                          <ul className="mt-1 space-y-1 list-disc list-inside">
+                            <li>请确认数据库密码是否正确</li>
+                            <li>如果密码已更改，请在上方输入新的密码</li>
+                            <li>点击"测试连接"验证连接</li>
+                          </ul>
+                        </div>
+                      )}
+
+                      {status?.database.errorType === 'connection_refused' && (
+                        <div className="mt-2">
+                          <p className="font-medium">💡 连接被拒绝</p>
+                          <ul className="mt-1 space-y-1 list-disc list-inside">
+                            <li>请确认数据库服务器是否正在运行</li>
+                            <li>请确认主机地址和端口是否正确</li>
+                            <li>检查防火墙是否阻止了连接</li>
+                          </ul>
+                        </div>
+                      )}
+
+                      {status?.database.errorType === 'database_not_found' && (
+                        <div className="mt-2">
+                          <p className="font-medium">💡 数据库不存在</p>
+                          <ul className="mt-1 space-y-1 list-disc list-inside">
+                            <li>请确认数据库名称是否正确</li>
+                            <li>您可能需要先创建数据库</li>
+                            <li>或者联系数据库管理员</li>
+                          </ul>
+                        </div>
+                      )}
+
+                      {status?.database.errorType === 'config_not_found' && (
+                        <div className="mt-2">
+                          <p className="font-medium">💡 未找到数据库配置</p>
+                          <ul className="mt-1 space-y-1 list-disc list-inside">
+                            <li>请填写数据库连接信息</li>
+                            <li>测试连接成功后，点击"保存并连接"</li>
+                          </ul>
+                        </div>
+                      )}
+
+                      {(!status?.database.errorType || status.database.errorType === 'unknown') && (
+                        <div className="mt-2">
+                          <p className="font-medium">💡 通用解决方案</p>
+                          <ul className="mt-1 space-y-1 list-disc list-inside">
+                            <li>检查数据库服务器是否正常运行</li>
+                            <li>确认数据库用户名和密码正确</li>
+                            <li>确认主机地址、端口和数据库名称正确</li>
+                            <li>检查网络连接</li>
+                          </ul>
+                        </div>
+                      )}
+
+                      {status?.database.configExists && status.database.configSource === 'file' && (
+                        <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                          <p className="font-medium text-blue-800">ℹ️ 配置来源：配置文件</p>
+                          <p className="text-blue-700">系统从配置文件读取数据库配置，但连接失败。</p>
+                          <p className="text-blue-700 mt-1">请在上方更新数据库密码，重新配置连接。</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </AlertDescription>

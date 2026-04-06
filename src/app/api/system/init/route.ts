@@ -23,9 +23,11 @@ export async function GET(request: NextRequest) {
 
     if (!isConnected) {
       return NextResponse.json({
-        success: false,
+        success: true,
         initialized: false,
+        databaseConnected: false,
         message: '数据库未连接',
+        reason: '数据库连接失败或未配置',
       });
     }
 
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       initialized,
+      databaseConnected: true,
       adminCount,
       allAdminCount,
       adminExists,
@@ -96,8 +99,10 @@ export async function GET(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : '服务器错误';
     return NextResponse.json(
       {
-        success: false,
+        success: true,
         initialized: false,
+        databaseConnected: false,
+        message: '检查初始化状态失败',
         error: errorMessage,
       },
       { status: 500 }

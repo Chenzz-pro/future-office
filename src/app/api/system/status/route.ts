@@ -178,6 +178,10 @@ export async function GET(request: NextRequest) {
       database: {
         connected: boolean;
         message: string;
+        error?: string;
+        errorType?: string;
+        configExists?: boolean;
+        configSource?: string;
       };
       initialized: {
         status: boolean;
@@ -210,6 +214,59 @@ export async function GET(request: NextRequest) {
 
       status.database.connected = isConnected;
       status.database.message = isConnected ? '数据库已连接' : '数据库未连接';
+
+      if (!isConnected) {
+        // 检查配置文件和环境变量
+        const fileConfig = loadConfigFromFile();
+        const envConfig = loadConfigFromEnv();
+
+        status.database.configExists = !!(fileConfig || envConfig);
+        status.database.configSource = fileConfig ? 'file' : (envConfig ? 'env' : 'none');
+
+        // 测试连接，获取详细错误信息
+        const testConfig = fileConfig || envConfig;
+        if (testConfig) {
+          try {
+            const testPool = mysql.createPool({
+              host: testConfig.host,
+              port: testConfig.port,
+              user: testConfig.username,
+              password: testConfig.password,
+              database: testConfig.databaseName,
+              waitForConnections: true,
+              connectionLimit: 1,
+            });
+
+            await testPool.getConnection();
+            await testPool.end();
+          } catch (testError: any) {
+            console.error('[System:Status] 数据库连接测试失败:', testError);
+
+            // 根据错误类型判断原因
+            if (testError.code === 'ER_ACCESS_DENIED_ERROR') {
+              status.database.errorType = 'auth_failed';
+              status.database.error = '数据库认证失败：用户名或密码错误';
+              status.database.message = '数据库认证失败，请检查密码是否正确';
+            } else if (testError.code === 'ECONNREFUSED') {
+              status.database.errorType = 'connection_refused';
+              status.database.error = '无法连接到数据库服务器';
+              status.database.message = '无法连接到数据库服务器，请检查主机地址和端口';
+            } else if (testError.code === 'ER_BAD_DB_ERROR') {
+              status.database.errorType = 'database_not_found';
+              status.database.error = '数据库不存在';
+              status.database.message = '数据库不存在，请检查数据库名称';
+            } else {
+              status.database.errorType = 'unknown';
+              status.database.error = testError.message;
+              status.database.message = `数据库连接失败: ${testError.message}`;
+            }
+          }
+        } else {
+          status.database.errorType = 'config_not_found';
+          status.database.error = '未找到数据库配置';
+          status.database.message = '未找到数据库配置，请先配置数据库';
+        }
+      }
 
       if (isConnected) {
         // 检查管理员账号数量
