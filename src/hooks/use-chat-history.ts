@@ -113,7 +113,7 @@ export function useChatHistory() {
     async function loadSessions() {
       try {
         const result = await fetchWithAuth('/api/chat/sessions');
-        
+
         if (result.success) {
           // 转换数据库格式为前端格式
           const dbSessions: ChatSession[] = result.data.map((s: Record<string, unknown>) => ({
@@ -144,7 +144,7 @@ export function useChatHistory() {
                   // 更新预览
                   const lastMessage = messages[messages.length - 1];
                   const preview = lastMessage?.content?.slice(0, 50) || '';
-                  
+
                   // 如果有消息，更新标题（使用第一条用户消息）
                   const firstUserMessage = messages.find(m => m.role === 'user');
                   const title = firstUserMessage
@@ -158,14 +158,26 @@ export function useChatHistory() {
                     title,
                   };
                 }
-                return session;
-              } catch {
-                return session;
+                // 如果没有消息，返回 null，稍后过滤掉
+                console.log('[useChatHistory] 会话没有消息，将被过滤:', session.id);
+                return null;
+              } catch (error) {
+                console.error('[useChatHistory] 加载会话消息失败:', session.id, error);
+                return null;
               }
             })
           );
 
-          setSessions(sessionsWithMessages);
+          // 过滤掉没有消息的会话
+          const validSessions = sessionsWithMessages.filter((s): s is ChatSession => s !== null);
+
+          console.log('[useChatHistory] 加载完成:', {
+            total: dbSessions.length,
+            valid: validSessions.length,
+            filtered: dbSessions.length - validSessions.length,
+          });
+
+          setSessions(validSessions);
           setIsOnline(true);
         }
       } catch (error) {
@@ -291,24 +303,44 @@ export function useChatHistory() {
   // 添加消息到当前会话
   const addMessage = useCallback(async (sessionId: string, message: Message) => {
     const session = sessions.find(s => s.id === sessionId);
-    if (!session) return;
+    if (!session) {
+      console.warn('[addMessage] 会话不存在:', sessionId);
+      return;
+    }
 
     const updatedMessages = [...session.messages, message];
     await updateSession(sessionId, { messages: updatedMessages });
 
-    // 尝试保存消息到数据库
+    // 尝试保存消息到数据库（不管 isOnline 状态如何，都尝试保存）
     try {
-      if (isOnline) {
-        await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({
-            role: message.role,
-            content: message.content,
-          }),
-        });
+      console.log('[addMessage] 保存消息到数据库:', {
+        sessionId,
+        role: message.role,
+        content: message.content.substring(0, 50),
+        isOnline,
+      });
+
+      const response = await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          role: message.role,
+          content: message.content,
+        }),
+      });
+
+      if (response.success) {
+        console.log('[addMessage] 消息保存成功');
+        // 如果之前是离线状态，现在保存成功了，设置为在线
+        if (!isOnline) {
+          console.log('[addMessage] 消息保存成功，设置在线状态');
+          setIsOnline(true);
+        }
+      } else {
+        console.error('[addMessage] 消息保存失败:', response);
+        setIsOnline(false);
       }
     } catch (error) {
-      console.error('[useChatHistory] 添加消息失败，标记为待同步:', error);
+      console.error('[addMessage] 添加消息失败，标记为待同步:', error);
       setIsOnline(false);
     }
   }, [sessions, updateSession, isOnline]);

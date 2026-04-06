@@ -226,16 +226,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       return;
     }
 
-    // 添加用户消息
     if (!session) {
       setError('无法创建会话');
       setIsLoading(false);
       return;
     }
-    addMessage(session.id, userMessage);
-    setInputValue('');
-    setIsLoading(true);
-    setError(null);
 
     // 构建消息历史
     const chatMessages = [
