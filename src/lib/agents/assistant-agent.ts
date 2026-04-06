@@ -269,7 +269,7 @@ export class AssistantAgent {
       });
 
       // 构建消息列表
-      const messages = [
+      const messages: Array<{ role: 'system' | 'user'; content: string }> = [
         {
           role: 'system' as const,
           content: '你是企业OA系统的个人助理，负责回答用户的各种问题。请用友好、专业的语气回答。',
@@ -282,7 +282,14 @@ export class AssistantAgent {
 
       // 如果有对话历史，添加到消息列表中
       if (context.conversationHistory && context.conversationHistory.length > 0) {
-        messages.splice(1, 0, ...context.conversationHistory);
+        // 类型断言：将 role: string 转换为 role: 'system' | 'user'
+        const historyMessages = context.conversationHistory.map(
+          (msg): { role: 'system' | 'user'; content: string } => ({
+            role: msg.role as 'system' | 'user',
+            content: msg.content,
+          })
+        );
+        messages.splice(1, 0, ...historyMessages);
       }
 
       // 调用 oneAPI
