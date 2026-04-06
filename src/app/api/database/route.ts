@@ -411,7 +411,9 @@ export async function POST(request: NextRequest) {
       }
 
       // 先连接数据库
+      console.log('[API:Database:Connect] 开始连接数据库...');
       await dbManager.connect(config);
+      console.log('[API:Database:Connect] 数据库连接成功');
 
       // 验证连接是否真的成功
       if (!dbManager.isConnected()) {
@@ -429,6 +431,7 @@ export async function POST(request: NextRequest) {
 
       // 检查 database_configs 表是否存在，如果不存在则创建
       try {
+        console.log('[API:Database:Connect] 检查 database_configs 表是否存在...');
         const checkResult = await dbManager.query<{ count: number }>(
           'SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
           ['database_configs']
@@ -453,7 +456,9 @@ export async function POST(request: NextRequest) {
               updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
           `);
-          console.log('[API:Database:Connect] database_configs 表创建成功');
+          console.log('[API:Database:Connect] ✅ database_configs 表创建成功');
+        } else {
+          console.log('[API:Database:Connect] database_configs 表已存在，跳过创建');
         }
       } catch (err) {
         console.warn('[API:Database:Connect] 检查或创建 database_configs 表失败:', err);
@@ -461,6 +466,7 @@ export async function POST(request: NextRequest) {
 
       // 尝试保存配置到数据库
       try {
+        console.log('[API:Database:Connect] 保存数据库配置...');
         const existingConfig = await databaseConfigRepository.findById(config.id);
         const configData: Omit<import('@/lib/database').DatabaseConfig, 'id' | 'createdAt' | 'updatedAt'> = {
           name: config.name,
@@ -476,12 +482,15 @@ export async function POST(request: NextRequest) {
 
         if (!existingConfig) {
           await databaseConfigRepository.create(configData, config.id);
+          console.log('[API:Database:Connect] ✅ 数据库配置创建成功');
         } else {
           await databaseConfigRepository.update(config.id, configData);
+          console.log('[API:Database:Connect] ✅ 数据库配置更新成功');
         }
 
         // 设置为激活状态
         await databaseConfigRepository.setActive(config.id);
+        console.log('[API:Database:Connect] ✅ 数据库配置已设置为激活状态');
       } catch (err) {
         console.warn('[API:Database:Connect] 保存配置失败:', err);
         // 保存失败不影响连接成功
@@ -490,9 +499,25 @@ export async function POST(request: NextRequest) {
       // 缓存配置，用于页面刷新后自动重新连接
       lastActiveConfig = config;
 
+      console.log('[API:Database:Connect] ✅ 数据库连接流程完成');
+
+      // 检查系统是否已初始化（检查是否有 admin 用户）
+      let initialized = false;
+      try {
+        const checkResult = await dbManager.query<{ count: number }>(
+          'SELECT COUNT(*) as count FROM sys_org_person WHERE fd_login_name = ?',
+          ['admin']
+        );
+        initialized = (checkResult.rows[0]?.count || 0) > 0;
+        console.log('[API:Database:Connect] 系统初始化状态:', initialized);
+      } catch (err) {
+        console.warn('[API:Database:Connect] 检查系统初始化状态失败:', err);
+      }
+
       return NextResponse.json({
         success: true,
-        message: '数据库连接成功',
+        message: '数据库连接成功，系统初始化完成',
+        initialized: initialized,
       });
     }
 

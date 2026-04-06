@@ -201,7 +201,7 @@ export default function SystemInitPage() {
     }
 
     setDbError('');
-    setDbMessage('');
+    setDbMessage('正在连接数据库...');
     setDbLoading(true);
 
     try {
@@ -236,10 +236,37 @@ export default function SystemInitPage() {
       const data = await response.json();
 
       if (data.success) {
-        // 先显示正在验证的消息
-        setDbMessage('数据库连接成功，正在验证...');
-        // 刷新状态以验证连接是否真正成功
-        await checkStatus();
+        // 连接成功，显示详细进度
+        setDbMessage('✅ 数据库连接成功，系统初始化完成');
+
+        // 如果系统已初始化，直接跳转到登录页
+        if (data.initialized) {
+          console.log('[handleConnectDb] 系统已初始化，跳转到登录页');
+          setDbMessage('✅ 系统初始化完成，即将跳转到登录页...');
+          // 2秒后跳转到登录页
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 2000);
+        } else {
+          console.log('[handleConnectDb] 系统未初始化，检查状态...');
+          // 刷新状态以验证连接是否真正成功
+          await checkStatus();
+
+          // 再次检查状态，如果已初始化则直接跳转到登录页
+          const statusResponse = await fetch('/api/system/status');
+          const statusData = await statusResponse.json();
+          if (statusData.success && statusData.data.initialized.status) {
+            console.log('[handleConnectDb] 系统已初始化，跳转到登录页');
+            setDbMessage('✅ 系统初始化完成，即将跳转到登录页...');
+            // 2秒后跳转到登录页
+            setTimeout(() => {
+              window.location.href = '/login';
+            }, 2000);
+          } else {
+            console.log('[handleConnectDb] 系统未初始化，等待用户操作');
+            setDbMessage('✅ 数据库连接成功，系统初始化完成，请刷新页面或等待自动跳转');
+          }
+        }
       } else {
         // 连接失败，显示错误信息
         setDbError(data.error || '数据库连接失败，请检查配置信息');
