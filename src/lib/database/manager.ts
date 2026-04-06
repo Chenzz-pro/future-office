@@ -186,6 +186,50 @@ export class DatabaseManager {
   }
 
   /**
+   * 测试数据库连接（使用临时连接池）
+   * 用于在正式连接前验证配置是否正确
+   */
+  public async testConnection(config: DatabaseConfig): Promise<{
+    success: boolean;
+    error?: string;
+    errorCode?: string;
+  }> {
+    console.log('[DBManager:testConnection] 开始测试连接...', {
+      host: config.host,
+      port: config.port,
+      databaseName: config.databaseName,
+      username: config.username,
+    });
+
+    const testPool = mysql.createPool({
+      host: config.host,
+      port: config.port,
+      user: config.username,
+      password: config.password,
+      database: config.databaseName,
+      waitForConnections: true,
+      connectionLimit: 1,
+    });
+
+    try {
+      await testPool.getConnection();
+      console.log('[DBManager:testConnection] ✅ 连接测试成功');
+      return { success: true };
+    } catch (error: unknown) {
+      console.error('[DBManager:testConnection] ❌ 连接测试失败:', error);
+      const err = error as { code?: string; message?: string };
+      return {
+        success: false,
+        error: err.message || 'Unknown error',
+        errorCode: err.code,
+      };
+    } finally {
+      await testPool.end();
+      console.log('[DBManager:testConnection] 临时连接池已关闭');
+    }
+  }
+
+  /**
    * 自动迁移：修复旧的 system user ID
    * 将所有 user_id = 'system' 的记录更新为正确的 UUID
    */

@@ -12,6 +12,26 @@ const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
 let lastActiveConfig: import('@/lib/database').DatabaseConfig | null = null;
 
 /**
+ * 创建临时连接池（不指定数据库）
+ * 用于初始化数据库时创建数据库
+ */
+async function createTempPoolWithoutDatabase(
+  host: string,
+  port: number,
+  user: string,
+  password: string
+): Promise<mysql.Pool> {
+  return mysql.createPool({
+    host,
+    port,
+    user,
+    password,
+    waitForConnections: true,
+    connectionLimit: 1,
+  });
+}
+
+/**
  * POST /api/database?action=init
  * 初始化数据库表结构
  */
@@ -38,14 +58,12 @@ export async function POST(request: NextRequest) {
       );
 
       // 创建临时连接（不指定数据库）
-      const tempPool = mysql.createPool({
+      const tempPool = await createTempPoolWithoutDatabase(
         host,
-        port: port ?? 3306,
-        user: username,
-        password,
-        waitForConnections: true,
-        connectionLimit: 1,
-      });
+        port ?? 3306,
+        username,
+        password
+      );
 
       // 创建数据库（如果不存在）
       await tempPool.query(
@@ -207,14 +225,12 @@ export async function POST(request: NextRequest) {
       }
 
       // 创建临时连接（不指定数据库）
-      const tempPool = mysql.createPool({
+      const tempPool = await createTempPoolWithoutDatabase(
         host,
-        port: port ?? 3306,
-        user: username,
-        password,
-        waitForConnections: true,
-        connectionLimit: 1,
-      });
+        port ?? 3306,
+        username,
+        password
+      );
 
       // 删除数据库（如果存在）
       await tempPool.query(`DROP DATABASE IF EXISTS \`${databaseName}\``);
@@ -824,19 +840,12 @@ export async function GET() {
         console.log('[GET] 数据库未连接，尝试从配置文件自动重新连接...');
 
         try {
-          // 使用临时连接池测试连接
-          const testPool = mysql.createPool({
-            host: fileConfig.host,
-            port: fileConfig.port,
-            user: fileConfig.username,
-            password: fileConfig.password,
-            database: fileConfig.databaseName,
-            waitForConnections: true,
-            connectionLimit: 1,
-          });
-
-          await testPool.getConnection();
-          await testPool.end();
+          // 使用 dbManager 测试连接
+          const testResult = await dbManager.testConnection(fileConfig);
+          if (!testResult.success) {
+            console.error('[GET] 配置文件测试连接失败:', testResult.error);
+            throw new Error(testResult.error);
+          }
 
           // 连接成功，使用 dbManager 连接
           await dbManager.connect(fileConfig);
@@ -869,19 +878,12 @@ export async function GET() {
         console.log('[GET] 数据库未连接，尝试使用内存缓存的配置自动重新连接...');
 
         try {
-          // 使用临时连接池测试连接
-          const testPool = mysql.createPool({
-            host: lastActiveConfig.host,
-            port: lastActiveConfig.port,
-            user: lastActiveConfig.username,
-            password: lastActiveConfig.password,
-            database: lastActiveConfig.databaseName,
-            waitForConnections: true,
-            connectionLimit: 1,
-          });
-
-          await testPool.getConnection();
-          await testPool.end();
+          // 使用 dbManager 测试连接
+          const testResult = await dbManager.testConnection(lastActiveConfig);
+          if (!testResult.success) {
+            console.error('[GET] 内存缓存配置测试连接失败:', testResult.error);
+            throw new Error(testResult.error);
+          }
 
           // 连接成功，使用 dbManager 连接
           await dbManager.connect(lastActiveConfig);
@@ -948,18 +950,11 @@ export async function GET() {
           };
 
           // 测试连接
-          const testPool = mysql.createPool({
-            host: config.host,
-            port: config.port,
-            user: config.username,
-            password: config.password,
-            database: config.databaseName,
-            waitForConnections: true,
-            connectionLimit: 1,
-          });
-
-          await testPool.getConnection();
-          await testPool.end();
+          const testResult = await dbManager.testConnection(config);
+          if (!testResult.success) {
+            console.error('[GET] 环境变量测试连接失败:', testResult.error);
+            throw new Error(testResult.error);
+          }
 
           // 连接成功
           await dbManager.connect(config);

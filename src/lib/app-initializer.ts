@@ -7,7 +7,6 @@
  */
 
 import { dbManager, databaseConfigRepository } from '@/lib/database';
-import mysql from 'mysql2/promise';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseConfig } from '@/lib/database';
@@ -58,18 +57,11 @@ export async function initializeApp() {
 
       try {
         // 测试连接
-        const testPool = mysql.createPool({
-          host: config.host,
-          port: config.port,
-          user: config.username,
-          password: config.password,
-          database: config.databaseName,
-          waitForConnections: true,
-          connectionLimit: 1,
-        });
-
-        await testPool.getConnection();
-        await testPool.end();
+        const testResult = await dbManager.testConnection(config);
+        if (!testResult.success) {
+          console.error('[Initialize] ❌ 环境变量数据库连接失败:', testResult.error);
+          throw new Error(testResult.error);
+        }
 
         // 连接成功
         await dbManager.connect(config);
@@ -106,18 +98,11 @@ export async function initializeApp() {
 
       try {
         // 测试连接
-        const testPool = mysql.createPool({
-          host: fileConfig.host,
-          port: fileConfig.port,
-          user: fileConfig.username,
-          password: fileConfig.password,
-          database: fileConfig.databaseName,
-          waitForConnections: true,
-          connectionLimit: 1,
-        });
-
-        await testPool.getConnection();
-        await testPool.end();
+        const testResult = await dbManager.testConnection(fileConfig);
+        if (!testResult.success) {
+          console.error('[Initialize] ❌ 配置文件数据库连接失败:', testResult.error);
+          throw new Error(testResult.error);
+        }
 
         // 连接成功
         await dbManager.connect(fileConfig);

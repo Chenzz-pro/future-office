@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
 import * as fs from 'fs';
 import * as path from 'path';
-import mysql from 'mysql2/promise';
 
 // 配置文件路径
 const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
@@ -95,19 +94,12 @@ async function tryAutoReconnect(): Promise<boolean> {
     console.log('[System:Status] [1/3] 尝试从配置文件读取配置...');
 
     try {
-      // 使用临时连接池测试连接
-      const testPool = mysql.createPool({
-        host: fileConfig.host,
-        port: fileConfig.port,
-        user: fileConfig.username,
-        password: fileConfig.password,
-        database: fileConfig.databaseName,
-        waitForConnections: true,
-        connectionLimit: 1,
-      });
-
-      await testPool.getConnection();
-      await testPool.end();
+      // 使用 dbManager 测试连接
+      const testResult = await dbManager.testConnection(fileConfig);
+      if (!testResult.success) {
+        console.error('[System:Status] 配置文件自动重新连接失败:', testResult.error);
+        throw new Error(testResult.error);
+      }
 
       // 连接成功，使用 dbManager 连接
       await dbManager.connect(fileConfig);
@@ -126,18 +118,11 @@ async function tryAutoReconnect(): Promise<boolean> {
 
     try {
       // 测试连接
-      const testPool = mysql.createPool({
-        host: envConfig.host,
-        port: envConfig.port,
-        user: envConfig.username,
-        password: envConfig.password,
-        database: envConfig.databaseName,
-        waitForConnections: true,
-        connectionLimit: 1,
-      });
-
-      await testPool.getConnection();
-      await testPool.end();
+      const testResult = await dbManager.testConnection(envConfig);
+      if (!testResult.success) {
+        console.error('[System:Status] 环境变量自动重新连接失败:', testResult.error);
+        throw new Error(testResult.error);
+      }
 
       // 连接成功，使用 dbManager 连接
       await dbManager.connect(envConfig);
@@ -227,39 +212,34 @@ export async function GET(request: NextRequest) {
         const testConfig = fileConfig || envConfig;
         if (testConfig) {
           try {
-            const testPool = mysql.createPool({
-              host: testConfig.host,
-              port: testConfig.port,
-              user: testConfig.username,
-              password: testConfig.password,
-              database: testConfig.databaseName,
-              waitForConnections: true,
-              connectionLimit: 1,
-            });
+            const testResult = await dbManager.testConnection(testConfig);
+            if (!testResult.success) {
+              console.error('[System:Status] 数据库连接测试失败:', testResult.error);
 
-            await testPool.getConnection();
-            await testPool.end();
-          } catch (testError: any) {
-            console.error('[System:Status] 数据库连接测试失败:', testError);
-
-            // 根据错误类型判断原因
-            if (testError.code === 'ER_ACCESS_DENIED_ERROR') {
-              status.database.errorType = 'auth_failed';
-              status.database.error = '数据库认证失败：用户名或密码错误';
-              status.database.message = '数据库认证失败，请检查密码是否正确';
-            } else if (testError.code === 'ECONNREFUSED') {
-              status.database.errorType = 'connection_refused';
-              status.database.error = '无法连接到数据库服务器';
-              status.database.message = '无法连接到数据库服务器，请检查主机地址和端口';
-            } else if (testError.code === 'ER_BAD_DB_ERROR') {
-              status.database.errorType = 'database_not_found';
-              status.database.error = '数据库不存在';
-              status.database.message = '数据库不存在，请检查数据库名称';
-            } else {
-              status.database.errorType = 'unknown';
-              status.database.error = testError.message;
-              status.database.message = `数据库连接失败: ${testError.message}`;
+              // 根据错误代码判断原因
+              if (testResult.errorCode === 'ER_ACCESS_DENIED_ERROR') {
+                status.database.errorType = 'auth_failed';
+                status.database.error = '数据库认证失败：用户名或密码错误';
+                status.database.message = '数据库认证失败，请检查密码是否正确';
+              } else if (testResult.errorCode === 'ECONNREFUSED') {
+                status.database.errorType = 'connection_refused';
+                status.database.error = '无法连接到数据库服务器';
+                status.database.message = '无法连接到数据库服务器，请检查主机地址和端口';
+              } else if (testResult.errorCode === 'ER_BAD_DB_ERROR') {
+                status.database.errorType = 'database_not_found';
+                status.database.error = '数据库不存在';
+                status.database.message = '数据库不存在，请检查数据库名称';
+              } else {
+                status.database.errorType = 'unknown';
+                status.database.error = testResult.error;
+                status.database.message = `数据库连接失败: ${testResult.error}`;
+              }
             }
+          } catch (testError: any) {
+            console.error('[System:Status] 数据库连接测试异常:', testError);
+            status.database.errorType = 'unknown';
+            status.database.error = testError.message || '未知错误';
+            status.database.message = `数据库连接测试异常: ${testError.message}`;
           }
         } else {
           status.database.errorType = 'config_not_found';

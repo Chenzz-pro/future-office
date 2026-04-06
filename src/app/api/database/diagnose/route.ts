@@ -4,6 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { dbManager } from '@/lib/database/manager';
+import mysql from 'mysql2/promise';
 
 /**
  * GET /api/database/diagnose
@@ -118,10 +120,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const mysql = require('mysql2/promise');
-
     try {
-      // 创建测试连接池
+      // 创建测试连接池（需要保持连接以执行后续查询）
       const testPool = mysql.createPool({
         host,
         port,
@@ -130,7 +130,6 @@ export async function POST(request: NextRequest) {
         database: databaseName,
         waitForConnections: true,
         connectionLimit: 1,
-        connectTimeout: 10000,
       });
 
       // 测试连接
