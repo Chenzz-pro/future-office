@@ -55,7 +55,7 @@ export default function APIManagement() {
         setFormData({
           name: data.data.name,
           baseUrl: data.data.baseUrl,
-          apiKey: '', // 不显示API密钥
+          apiKey: '******', // 显示掩码，表示已有API密钥
           model: data.data.model,
           enabled: data.data.enabled,
         });
@@ -125,8 +125,8 @@ export default function APIManagement() {
       enabled: formData.enabled,
     };
 
-    // 只有当 API 密钥不为空时，才更新 API 密钥
-    if (formData.apiKey && formData.apiKey.trim() !== '') {
+    // 只有当 API 密钥不为空且不是掩码时，才更新 API 密钥
+    if (formData.apiKey && formData.apiKey.trim() !== '' && formData.apiKey !== '******') {
       requestBody.apiKey = formData.apiKey;
     }
 
@@ -296,7 +296,7 @@ export default function APIManagement() {
                   className="mt-2"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  oneAPI服务的API密钥，用于身份验证
+                  oneAPI服务的API密钥，用于身份验证。如果显示为 ******，表示已有密钥，无需修改。
                 </p>
               </div>
 
