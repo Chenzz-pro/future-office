@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       allAdminCount = (allAdminResult.rows[0] as { count: number } | undefined)?.count || 0;
     } catch (error) {
       console.error('[API:System:Init] 查询管理员账号失败:', error);
-      // 如果查询失败，尝试使用旧的字符串方式
+      // 如果查询失败，尝试使用旧的字符串方式（向后兼容）
       try {
         const fallbackResult = await dbManager.query<{ count: number }>(
           `SELECT COUNT(*) as count
@@ -69,12 +69,8 @@ export async function GET(request: NextRequest) {
         adminExists = (fallbackResult.rows[0] as { count: number } | undefined)?.count === 1;
         adminCount = (fallbackResult.rows[0] as { count: number } | undefined)?.count || 0;
 
-        const allFallbackResult = await dbManager.query<{ count: number }>(
-          `SELECT COUNT(*) as count
-           FROM sys_org_person
-           WHERE fd_role = 'admin' OR fd_role = 'manager'`
-        );
-        allAdminCount = (allFallbackResult.rows[0] as { count: number } | undefined)?.count || 0;
+        // fallback时不再查询所有管理员，因为可能fd_role字段类型不一致
+        allAdminCount = adminCount;
       } catch (fallbackError) {
         console.error('[API:System:Init] 查询管理员账号失败:', fallbackError);
       }
