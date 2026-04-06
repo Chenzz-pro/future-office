@@ -16,6 +16,11 @@ export default function Home() {
   const router = useRouter();
   const { loadSession, setCurrentSession } = useChatHistory();
 
+  // 设置已挂载状态
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // 检查用户登录状态
   useEffect(() => {
     const checkAuthStatus = () => {
@@ -58,18 +63,15 @@ export default function Home() {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'current-user-id' && e.newValue) {
         console.log('[Home] 检测到用户登录，重新检查认证状态');
-        checkAuthStatus();
-      }
-    };
+        // 重新检查认证状态
+        const userId = localStorage.getItem('current-user-id');
+        const currentUser = localStorage.getItem('currentUser');
 
-    const checkAuthStatus = () => {
-      const userId = localStorage.getItem('current-user-id');
-      const currentUser = localStorage.getItem('currentUser');
-
-      if (userId && currentUser) {
-        const user = JSON.parse(currentUser);
-        if (!user.role?.isAdmin) {
-          setAuthenticated(true);
+        if (userId && currentUser) {
+          const user = JSON.parse(currentUser);
+          if (!user.role?.isAdmin) {
+            setAuthenticated(true);
+          }
         }
       }
     };
