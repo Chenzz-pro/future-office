@@ -246,7 +246,8 @@ VALUES
 ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
 
 -- 插入人力资源部下的子部门
-INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+-- 注意：部门使用 fd_parentorgid 指向父部门，而不是 fd_parentid
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentorgid)
 VALUES
 -- 人力一组
 (UUID(), 2, '人力一组', 1, 'DEPT003001', 1, 1, '人力一组', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '人力资源部' LIMIT 1)),
@@ -257,7 +258,7 @@ VALUES
 ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
 
 -- 插入财务资金部下的子部门
-INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentorgid)
 VALUES
 -- 资金部
 (UUID(), 2, '资金部', 1, 'DEPT004001', 1, 1, '资金部', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '财务资金部' LIMIT 1)),
@@ -266,7 +267,7 @@ VALUES
 ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
 
 -- 插入省外区域中心下的子部门
-INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentorgid)
 VALUES
 -- 广东运营中心
 (UUID(), 2, '广东运营中心', 1, 'DEPT005001', 1, 1, '广东运营中心', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '省外区域中心' LIMIT 1)),
@@ -275,7 +276,7 @@ VALUES
 ON DUPLICATE KEY UPDATE fd_name = VALUES(fd_name);
 
 -- 插入陕西运营中心下的子部门
-INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentid)
+INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo, fd_create_time, fd_parentorgid)
 VALUES
 -- 分公司1
 (UUID(), 2, '分公司1', 1, 'DEPT005002001', 1, 1, '分公司1', NOW(), (SELECT fd_id FROM sys_org_element WHERE fd_name = '陕西运营中心' LIMIT 1)),

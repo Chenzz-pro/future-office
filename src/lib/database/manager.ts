@@ -463,6 +463,9 @@ export class DatabaseManager {
 
       // 初始化系统核心表
       await this.initSystemTables();
+
+      // 修复组织架构数据：将子部门的 fd_parentid 迁移到 fd_parentorgid
+      await this.fixOrgElementParentId();
     } catch (error) {
       console.error('[AutoInit] 组织架构表初始化失败:', error);
       // 不抛出错误，避免影响应用启动
@@ -609,6 +612,62 @@ export class DatabaseManager {
     } catch (error) {
       console.error('[AutoInit] 系统核心表初始化失败:', error);
       // 不抛出错误，避免影响应用启动
+    }
+  }
+
+  /**
+   * 修复组织架构数据
+   * 将子部门的 fd_parentid 字段迁移到 fd_parentorgid 字段
+   */
+  private async fixOrgElementParentId(): Promise<void> {
+    try {
+      console.log('[FixOrgData] 检查组织架构数据是否需要修复...');
+
+      // 查询所有使用了 fd_parentid 字段的部门
+      const result = await this.query(
+        `SELECT fd_id, fd_org_type, fd_name, fd_parentid, fd_parentorgid
+         FROM sys_org_element
+         WHERE fd_org_type = 2
+           AND fd_parentid IS NOT NULL
+           AND fd_parentid != ''`
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = result.rows as Array<{
+        fd_id: string;
+        fd_org_type: number;
+        fd_name: string;
+        fd_parentid: string | null;
+        fd_parentorgid: string | null;
+      }>;
+
+      if (rows.length === 0) {
+        console.log('[FixOrgData] 没有需要修复的数据');
+        return;
+      }
+
+      console.log(`[FixOrgData] 找到 ${rows.length} 个需要修复的部门`);
+
+      // 修复数据：将 fd_parentid 迁移到 fd_parentorgid
+      let fixedCount = 0;
+      for (const row of rows) {
+        if (row.fd_parentid) {
+          await this.query(
+            `UPDATE sys_org_element
+             SET fd_parentorgid = ?
+             WHERE fd_id = ?`,
+            [row.fd_parentid, row.fd_id]
+          );
+
+          console.log(`[FixOrgData] 修复部门: ${row.fd_name}，将 fd_parentid (${row.fd_parentid}) 迁移到 fd_parentorgid`);
+          fixedCount++;
+        }
+      }
+
+      console.log(`[FixOrgData] ✅ 数据修复完成，共修复 ${fixedCount} 个部门`);
+    } catch (error) {
+      // 修复失败不影响正常使用，只记录日志
+      console.error('[FixOrgData] 数据修复失败:', error);
     }
   }
 }
