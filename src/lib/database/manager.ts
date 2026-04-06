@@ -2,6 +2,7 @@
 
 import mysql from 'mysql2/promise';
 import type { DatabaseConfig, DatabaseConnectionOptions, QueryResult } from './types';
+import { oneAPIManager } from '@/lib/oneapi';
 
 export class DatabaseManager {
   private static instance: DatabaseManager;
@@ -51,6 +52,9 @@ export class DatabaseManager {
 
       // 自动初始化组织架构表
       await this.autoInitTables();
+
+      // 加载oneAPI配置
+      await this.loadOneAPIConfig();
 
       // 启动心跳保活机制（每5分钟检查一次）
       this.startKeepAlive();
@@ -467,6 +471,9 @@ export class DatabaseManager {
       // 初始化Agent和技能数据
       await this.initAgentAndSkillData();
 
+      // 迁移数据库配置表：添加oneAPI相关字段
+      await this.migrateDatabaseConfigsTable();
+
       // 修复组织架构数据：将子部门的 fd_parentid 迁移到 fd_parentorgid
       await this.fixOrgElementParentId();
     } catch (error) {
@@ -733,6 +740,99 @@ export class DatabaseManager {
     } catch (error) {
       // 修复失败不影响正常使用，只记录日志
       console.error('[FixOrgData] 数据修复失败:', error);
+    }
+  }
+
+  /**
+   * 迁移database_configs表：添加oneAPI相关字段
+   */
+  private async migrateDatabaseConfigsTable(): Promise<void> {
+    try {
+      console.log('[Migration] 检查database_configs表是否需要迁移...');
+
+      // 检查字段是否存在
+      const columnCheckResult = await this.query<{ count: number }>(
+        `SELECT COUNT(*) as count
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+         AND table_name = 'database_configs'
+         AND column_name = 'base_url'`
+      );
+
+      const hasBaseURL = (columnCheckResult.rows[0]?.count || 0) > 0;
+
+      if (hasBaseURL) {
+        console.log('[Migration] database_configs表已迁移，跳过');
+        return;
+      }
+
+      console.log('[Migration] 开始迁移database_configs表...');
+
+      // 添加oneAPI相关字段
+      await this.query(`
+        ALTER TABLE database_configs
+        ADD COLUMN base_url VARCHAR(500) COMMENT 'oneAPI服务地址（仅oneAPI配置使用）',
+        ADD COLUMN api_key VARCHAR(500) COMMENT 'API密钥（oneAPI配置使用）',
+        ADD COLUMN model VARCHAR(100) COMMENT '模型名称（oneAPI配置使用）',
+        ADD COLUMN enabled BOOLEAN DEFAULT TRUE COMMENT '是否启用（oneAPI配置使用）'
+      `);
+
+      console.log('[Migration] ✅ database_configs表迁移完成');
+    } catch (error) {
+      // 迁移失败不影响正常使用，只记录日志
+      console.error('[Migration] database_configs表迁移失败:', error);
+    }
+  }
+
+  /**
+   * 加载oneAPI配置
+   * 从数据库中加载oneAPI配置并初始化oneAPI管理器
+   */
+  private async loadOneAPIConfig(): Promise<void> {
+    try {
+      // 查询oneAPI配置
+      const result = await this.query(
+        `SELECT
+          id,
+          name,
+          base_url as baseUrl,
+          api_key as apiKey,
+          model,
+          enabled,
+          created_at as createdAt,
+          updated_at as updatedAt
+         FROM database_configs
+         WHERE name = 'oneapi'
+         AND enabled = TRUE
+         LIMIT 1`
+      );
+
+      if (result.rows.length === 0) {
+        console.log('[OneAPI:Init] 未找到oneAPI配置，将使用规则引擎');
+        return;
+      }
+
+      const config = result.rows[0] as {
+        id: string;
+        name: string;
+        baseUrl: string;
+        apiKey: string;
+        model: string;
+        enabled: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      };
+
+      // 初始化oneAPI管理器
+      oneAPIManager.initialize(config);
+
+      console.log('[OneAPI:Init] oneAPI配置加载成功:', {
+        name: config.name,
+        baseUrl: config.baseUrl,
+        model: config.model,
+      });
+    } catch (error) {
+      console.error('[OneAPI:Init] 加载oneAPI配置失败:', error);
     }
   }
 
