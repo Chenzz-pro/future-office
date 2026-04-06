@@ -74,7 +74,8 @@ export default function OrganizationStructurePage() {
   const loadTreeData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/organization?action=tree&type=1');
+      // type=2：显示机构和部门（不显示人员和岗位）
+      const response = await fetch('/api/organization?action=tree&type=2');
       const data = await response.json();
       if (data.success) {
         setTreeData(data.data || []);
