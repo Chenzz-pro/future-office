@@ -405,6 +405,20 @@ export async function POST(request: NextRequest) {
       // 先连接数据库
       await dbManager.connect(config);
 
+      // 验证连接是否真的成功
+      if (!dbManager.isConnected()) {
+        throw new Error('数据库连接失败：连接池未正确创建');
+      }
+
+      // 执行一个简单查询，验证连接是否可用
+      try {
+        await dbManager.query('SELECT 1');
+      } catch (error) {
+        throw new Error('数据库连接失败：无法执行查询');
+      }
+
+      console.log('[API:Database:Connect] ✅ 数据库连接验证成功');
+
       // 检查 database_configs 表是否存在，如果不存在则创建
       try {
         const checkResult = await dbManager.query<{ count: number }>(

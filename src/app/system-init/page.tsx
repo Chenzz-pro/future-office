@@ -76,8 +76,16 @@ export default function SystemInitPage() {
           }
         } else {
           // 数据库未连接
+          // 清除成功消息，显示连接未就绪状态
+          if (dbMessage) {
+            setDbMessage('');
+          }
           if (dbStep === 'connected') {
             // 之前显示连接成功，但现在连接失败，显示错误
+            setDbError('数据库连接失败，请检查配置信息');
+            setDbStep('connect');
+          } else if (dbMessage === '数据库连接成功，正在验证...') {
+            // 正在验证时发现连接失败，显示错误
             setDbError('数据库连接失败，请检查配置信息');
             setDbMessage('');
             setDbStep('connect');

@@ -172,7 +172,9 @@ export class DatabaseManager {
    * 检查连接状态
    */
   public isConnected(): boolean {
-    return this.pool !== null;
+    const connected = this.pool !== null;
+    console.log(`[isConnected] pool=${!!this.pool}, connected=${connected}`);
+    return connected;
   }
 
   /**
@@ -343,6 +345,7 @@ export class DatabaseManager {
           fd_double_validation TINYINT(1) DEFAULT 0 COMMENT '双因子验证',
           fd_is_business_related TINYINT(1) DEFAULT 1 COMMENT '是否业务相关',
           fd_is_login_enabled TINYINT(1) DEFAULT 1 COMMENT '是否登录系统',
+          fd_role ENUM('admin', 'user') DEFAULT 'user' COMMENT '用户角色：admin=管理员，user=普通用户',
           fd_memo TEXT COMMENT '备注',
           fd_create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
           fd_alter_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
@@ -354,6 +357,7 @@ export class DatabaseManager {
           INDEX idx_dept_id (fd_dept_id),
           INDEX idx_post_id (fd_post_id),
           INDEX idx_login_name (fd_login_name),
+          INDEX idx_role (fd_role),
           INDEX fd_name (fd_name)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `);
@@ -361,12 +365,32 @@ export class DatabaseManager {
 
       // 插入初始化数据
       // 插入根机构
+      const orgId = crypto.randomUUID();
       await this.query(
         `
         INSERT IGNORE INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_order, fd_no, fd_is_available, fd_is_business, fd_memo)
         VALUES (?, 1, ?, 0, ?, 1, 1, ?)
         `,
-        [crypto.randomUUID(), '未来办公集团', 'ORG001', '根机构']
+        [orgId, '未来办公集团', 'ORG001', '根机构']
+      );
+
+      // 插入默认管理员账号
+      await this.query(
+        `
+        INSERT IGNORE INTO sys_org_person (
+          fd_id, fd_name, fd_login_name, fd_password, fd_email, fd_role,
+          fd_is_login_enabled, fd_is_business_related, fd_user_type
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 1, 1, 'internal')
+        `,
+        [
+          crypto.randomUUID(),
+          '系统管理员',
+          'admin',
+          '$2b$10$DId8bUro45mx1.fpSIJJV.MXHImaJM4kdb9V34feSKiU7dmRxeOTq', // admin123
+          'admin@example.com',
+          'admin'
+        ]
       );
       console.log('[AutoInit] 初始化数据成功');
 
