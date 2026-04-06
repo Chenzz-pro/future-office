@@ -230,29 +230,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 参数校验（保存或更新）
-    if (!name || !baseUrl || !apiKey || !model) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: '缺少必要参数（name、baseUrl、apiKey、model）',
-        },
-        { status: 400 }
-      );
-    }
-
     let configId: string;
 
     if (id) {
       // 更新现有配置
-      await repository.update(id, {
+      // 只有当 apiKey 不为空且不是掩码时，才更新 api_key 字段
+      const updateParams: any = {
         name,
         description,
         base_url: baseUrl,
-        api_key: apiKey,
         model,
         enabled,
-      });
+      };
+
+      // 如果 apiKey 不为空且不是掩码，则更新 api_key
+      if (apiKey && apiKey !== '******' && apiKey.trim() !== '') {
+        updateParams.api_key = apiKey;
+      }
+
+      await repository.update(id, updateParams);
       configId = id;
       console.log('[API:OneAPI:Post] 更新配置成功');
     } else {
@@ -261,18 +257,34 @@ export async function POST(request: NextRequest) {
       if (existingConfig) {
         console.log('[API:OneAPI:Post] 检测到同名配置，自动更新');
         // 自动更新现有配置
-        await repository.update(existingConfig.id, {
+        const updateParams: any = {
           name,
           description,
           base_url: baseUrl,
-          api_key: apiKey,
           model,
           enabled,
-        });
+        };
+
+        // 如果 apiKey 不为空且不是掩码，则更新 api_key
+        if (apiKey && apiKey !== '******' && apiKey.trim() !== '') {
+          updateParams.api_key = apiKey;
+        }
+
+        await repository.update(existingConfig.id, updateParams);
         configId = existingConfig.id;
         console.log('[API:OneAPI:Post] 更新同名配置成功');
       } else {
-        // 创建新配置
+        // 创建新配置，apiKey 必须存在
+        if (!apiKey || apiKey.trim() === '') {
+          return NextResponse.json(
+            {
+              success: false,
+              error: '创建配置时 API 密钥不能为空',
+            },
+            { status: 400 }
+          );
+        }
+
         configId = await repository.create({
           name,
           description,

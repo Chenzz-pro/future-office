@@ -112,9 +112,22 @@ export default function APIManagement() {
 
   // 保存配置
   const handleSave = async () => {
-    if (!formData.baseUrl || !formData.apiKey || !formData.model) {
+    if (!formData.baseUrl || !formData.model) {
       alert('请填写完整的配置信息');
       return;
+    }
+
+    // 如果 API 密钥为空，说明用户没有修改，不需要更新 API 密钥字段
+    const requestBody: any = {
+      name: formData.name,
+      baseUrl: formData.baseUrl,
+      model: formData.model,
+      enabled: formData.enabled,
+    };
+
+    // 只有当 API 密钥不为空时，才更新 API 密钥
+    if (formData.apiKey && formData.apiKey.trim() !== '') {
+      requestBody.apiKey = formData.apiKey;
     }
 
     setSaving(true);
@@ -122,7 +135,7 @@ export default function APIManagement() {
       const response = await fetch('/api/integration/oneapi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
