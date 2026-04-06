@@ -446,6 +446,23 @@ export default function SystemInitPage() {
                     <li>如果数据库是全新的，需要您手动创建管理员账号</li>
                     <li>如果数据库已有管理员账号，系统会自动跳转到登录页</li>
                   </ul>
+                  {dbError && dbError.includes('数据库连接失败') && (
+                    <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-800">
+                      <p className="font-medium">⚠️ 检测到数据库连接问题</p>
+                      <p className="mt-1">可能原因：</p>
+                      <ul className="mt-1 space-y-1 list-disc list-inside">
+                        <li>数据库密码已更改，但配置文件未更新</li>
+                        <li>数据库服务器未启动或无法访问</li>
+                        <li>网络连接问题</li>
+                      </ul>
+                      <p className="mt-1 font-medium">建议：</p>
+                      <ul className="mt-1 space-y-1 list-disc list-inside">
+                        <li>检查数据库服务器是否正常运行</li>
+                        <li>确认数据库用户名和密码正确</li>
+                        <li>如果密码已更改，请重新配置连接信息</li>
+                      </ul>
+                    </div>
+                  )}
                 </AlertDescription>
               </Alert>
 
