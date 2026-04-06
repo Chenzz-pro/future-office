@@ -184,6 +184,18 @@ export class DatabaseManager {
       const OLD_USER_ID = 'system';
       const NEW_USER_ID = '00000000-0000-0000-0000-000000000000';
 
+      // 检查 api_keys 表是否存在
+      const tableCheckResult = await this.query(
+        `SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?`,
+        ['api_keys']
+      );
+      const apiKeysExists = (tableCheckResult.rows[0] as { count: number })?.count > 0;
+
+      if (!apiKeysExists) {
+        console.log('[Migration] api_keys 表不存在，跳过迁移');
+        return;
+      }
+
       // 检查是否需要迁移
       const checkResult = await this.query(
         `SELECT COUNT(*) as count FROM api_keys WHERE user_id = ?`,
@@ -204,11 +216,15 @@ export class DatabaseManager {
         console.log('[Migration] api_keys 表迁移完成');
 
         // 更新 ekp_configs 表
-        await this.query(
-          `UPDATE ekp_configs SET user_id = ? WHERE user_id = ?`,
-          [NEW_USER_ID, OLD_USER_ID]
-        );
-        console.log('[Migration] ekp_configs 表迁移完成');
+        try {
+          await this.query(
+            `UPDATE ekp_configs SET user_id = ? WHERE user_id = ?`,
+            [NEW_USER_ID, OLD_USER_ID]
+          );
+          console.log('[Migration] ekp_configs 表迁移完成');
+        } catch (error) {
+          console.log('[Migration] ekp_configs 表不存在或迁移失败，跳过');
+        }
 
         // 更新其他表（如果有）
         try {
