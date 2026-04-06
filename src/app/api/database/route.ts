@@ -401,7 +401,7 @@ export async function POST(request: NextRequest) {
           port: config.port,
           databaseName: config.databaseName,
           username: config.username,
-          password: config.password ? '******' : '空',
+          password: config.password ? `长度: ${config.password.length}, 前3位: ${config.password.substring(0, 3)}, 后3位: ${config.password.substring(Math.max(0, config.password.length - 3))}` : '空',
         });
       } else {
         return NextResponse.json(

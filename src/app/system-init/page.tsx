@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Database, CheckCircle, AlertCircle, Lock, User, Mail, RefreshCw, Play, LogIn, ArrowRight } from 'lucide-react';
+import { Database, CheckCircle, AlertCircle, Lock, User, Mail, RefreshCw, Play, LogIn, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 interface SystemStatus {
   database: {
@@ -49,6 +49,7 @@ export default function SystemInitPage() {
   const [dbLoading, setDbLoading] = useState(false);
   const [dbError, setDbError] = useState('');
   const [dbMessage, setDbMessage] = useState('');
+  const [showDbPassword, setShowDbPassword] = useState(false);
 
   // 登录引导状态
   const [showLoginGuide, setShowLoginGuide] = useState(false);
@@ -116,6 +117,37 @@ export default function SystemInitPage() {
   // 立即跳转到登录页
   const handleGoToLogin = () => {
     window.location.href = '/login';
+  };
+
+  // 验证数据库密码
+  const handleVerifyPassword = async () => {
+    console.log('[handleVerifyPassword] 开始验证密码...');
+    setDbError('');
+
+    if (!dbConfig.password) {
+      setDbError('请先输入密码');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/database?action=test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dbConfig),
+      });
+
+      const data = await response.json();
+      console.log('[handleVerifyPassword] 验证结果:', data);
+
+      if (data.success) {
+        setDbMessage('✅ 密码验证成功！请点击"测试连接"按钮继续');
+      } else {
+        setDbError(`❌ 密码验证失败: ${data.message}`);
+      }
+    } catch (err) {
+      console.error('验证密码失败:', err);
+      setDbError('密码验证失败');
+    }
   };
 
   // 测试数据库连接
@@ -393,14 +425,41 @@ export default function SystemInitPage() {
                     onChange={(e) => setDbConfig({ ...dbConfig, username: e.target.value })}
                     disabled={dbStep !== 'test'}
                   />
-                  <Input
-                    type="password"
-                    placeholder="密码"
-                    value={dbConfig.password}
-                    onChange={(e) => setDbConfig({ ...dbConfig, password: e.target.value })}
-                    disabled={dbStep !== 'test'}
-                    autoComplete="new-password"
-                  />
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      type={showDbPassword ? "text" : "password"}
+                      placeholder="密码"
+                      value={dbConfig.password}
+                      onChange={(e) => setDbConfig({ ...dbConfig, password: e.target.value })}
+                      disabled={dbStep !== 'test'}
+                      autoComplete="new-password"
+                      className="pl-9 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDbPassword(!showDbPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      tabIndex={-1}
+                    >
+                      {showDbPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  {dbStep === 'test' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleVerifyPassword}
+                      className="w-full"
+                    >
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      验证密码
+                    </Button>
+                  )}
                 </div>
 
                 {dbError && (
@@ -485,7 +544,14 @@ export default function SystemInitPage() {
                           <li>数据库服务是否正在运行</li>
                           <li>网络连接是否正常</li>
                           <li><strong>请勿依赖浏览器自动填充，建议重新输入密码</strong></li>
+                          <li><strong>点击密码框右侧的眼睛图标查看密码</strong></li>
+                          <li><strong>点击"验证密码"按钮确认密码是否正确</strong></li>
                         </ul>
+                        {dbStep === 'test' && (
+                          <p className="text-xs text-blue-600 mt-2">
+                            💡 <strong>提示</strong>：正确的密码长度应该是 9 位，包含大小写字母和数字
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
