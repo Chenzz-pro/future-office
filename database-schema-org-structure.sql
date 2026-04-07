@@ -300,7 +300,7 @@ ON DUPLICATE KEY UPDATE fd_level = VALUES(fd_level);
 -- 包含：Agent配置、技能配置、Agent技能关联、Agent子Bot关联
 -- ============================================
 
--- 6. Agent配置表
+-- 6. Agent配置表（新架构）
 CREATE TABLE IF NOT EXISTS agents (
   id VARCHAR(36) PRIMARY KEY COMMENT 'Agent ID',
   type VARCHAR(50) NOT NULL UNIQUE COMMENT 'Agent类型（root、approval、meeting、data、assistant）',
@@ -309,11 +309,18 @@ CREATE TABLE IF NOT EXISTS agents (
   avatar VARCHAR(100) DEFAULT '🤖' COMMENT 'Agent头像',
   system_prompt TEXT COMMENT '系统提示词（角色）',
   enabled BOOLEAN DEFAULT TRUE COMMENT '是否启用',
+  -- 新架构字段
+  agent_type ENUM('root', 'business') DEFAULT 'business' COMMENT 'Agent类型（root=根智能体，business=业务智能体）',
+  skills_config JSON COMMENT '技能绑定配置（定义Agent可调用的技能白名单）',
+  permission_rules JSON COMMENT '权限规则配置（条件+校验逻辑+拦截动作）',
+  business_rules JSON COMMENT '业务流程规则（流程步骤+校验逻辑+异常处理）',
+  version INT DEFAULT 1 COMMENT '配置版本号',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   INDEX idx_type (type),
-  INDEX idx_enabled (enabled)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent配置表';
+  INDEX idx_enabled (enabled),
+  INDEX idx_agent_type (agent_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent配置表（新架构）';
 
 -- 7. Agent技能关联表
 CREATE TABLE IF NOT EXISTS agents_skills (

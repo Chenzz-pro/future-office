@@ -207,6 +207,26 @@ export async function POST(request: NextRequest) {
         console.warn('[init] 角色表迁移失败，但不影响初始化流程:', migrateError);
       }
 
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[init] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[init] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[init] Agent架构迁移失败，但不影响初始化流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[init] Agent架构迁移失败，但不影响初始化流程:', agentMigrateError);
+      }
+
       return NextResponse.json({
         success: true,
         message: '数据库初始化成功',
@@ -394,6 +414,26 @@ export async function POST(request: NextRequest) {
         console.warn('[recreate] 角色表迁移失败，但不影响初始化流程:', migrateError);
       }
 
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[recreate] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[recreate] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[recreate] Agent架构迁移失败，但不影响初始化流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[recreate] Agent架构迁移失败，但不影响初始化流程:', agentMigrateError);
+      }
+
       return NextResponse.json({
         success: true,
         message: '数据库重新创建成功',
@@ -571,6 +611,26 @@ export async function POST(request: NextRequest) {
         console.warn('[API:Database:Connect] 💡 环境变量示例：.env.example');
       }
 
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[API:Database:Connect] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[API:Database:Connect] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[API:Database:Connect] Agent架构迁移失败，但不影响连接流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[API:Database:Connect] Agent架构迁移失败，但不影响连接流程:', agentMigrateError);
+      }
+
       console.log('[API:Database:Connect] ✅ 数据库连接流程完成');
 
       // 检查系统是否已初始化（检查是否有 admin 用户）
@@ -731,6 +791,26 @@ export async function POST(request: NextRequest) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.error('[API:Database:Add] ❌ 保存配置文件失败:', errorMsg);
         console.warn('[API:Database:Add] ⚠️  文件系统可能是只读的，应用重启后需要重新配置数据库');
+      }
+
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[API:Database:Add] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[API:Database:Add] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[API:Database:Add] Agent架构迁移失败，但不影响添加流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[API:Database:Add] Agent架构迁移失败，但不影响添加流程:', agentMigrateError);
       }
 
       return NextResponse.json({
