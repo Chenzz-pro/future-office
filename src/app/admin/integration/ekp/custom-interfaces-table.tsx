@@ -94,15 +94,18 @@ const CustomInterfacesTable = forwardRef<CustomInterfacesTableRef, CustomInterfa
 
   const handleSave = async (formData: any) => {
     const url = editingInterface
-      ? `/api/admin/ekp-interfaces/${editingInterface.id}?source=custom`
-      : '/api/admin/ekp-interfaces?source=custom';
+      ? `/api/admin/ekp-interfaces/${editingInterface.id}`
+      : '/api/admin/ekp-interfaces';
 
     const method = editingInterface ? 'PUT' : 'POST';
 
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
+      body: JSON.stringify({
+        source: 'custom',
+        ...formData,
+      }),
     });
 
     const data = await res.json();
