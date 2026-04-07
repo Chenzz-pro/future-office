@@ -1,6 +1,7 @@
 /**
  * RootAgent（根智能体）
- * 新架构：唯一使用LLM的Agent，负责意图识别、权限拦截、话术润色
+ * 新架构：唯一使用LLM的Agent，负责意图识别、权限拦截、响应格式化（不使用LLM）
+ * 数据安全：LLM只接触用户输入，完全不接触业务数据
  */
 
 import { oneAPIManager } from '@/lib/oneapi';
@@ -237,12 +238,12 @@ export class RootAgent {
   }
 
   /**
-   * 话术润色
+   * 格式化响应（内网代码，不使用LLM）
    * @param businessResponse 业务Agent返回的结果
-   * @returns 润色后的文本
+   * @returns 格式化后的文本
    */
-  async polishResponse(businessResponse: AgentResponse): Promise<string> {
-    console.log('[RootAgent] 开始话术润色:', {
+  formatResponse(businessResponse: AgentResponse): string {
+    console.log('[RootAgent] 开始格式化响应:', {
       code: businessResponse.code,
       msg: businessResponse.msg,
     });
@@ -250,47 +251,100 @@ export class RootAgent {
     try {
       // 如果业务Agent返回错误，直接返回错误消息
       if (businessResponse.code !== '200') {
-        return businessResponse.msg;
+        return `❌ ${businessResponse.msg}`;
       }
 
       // 如果业务Agent返回的data已经是文本，直接返回
       if (typeof businessResponse.data === 'string') {
-        return businessResponse.data;
+        return `✅ ${businessResponse.data}`;
       }
 
-      // 如果业务Agent返回的是结构化数据，使用LLM润色
-      if (typeof businessResponse.data === 'object') {
-        if (!oneAPIManager.isEnabled()) {
-          // 如果oneAPI未配置，直接返回JSON字符串
-          return JSON.stringify(businessResponse.data, null, 2);
-        }
-
-        const messages = [
-          {
-            role: 'system' as const,
-            content: '你是一个友好的助手，负责将结构化数据转换为友好的自然语言文本。要求：简洁、清晰、易懂。',
-          },
-          {
-            role: 'user' as const,
-            content: `请将以下数据转换为友好的自然语言文本：\n\`\`\`json\n${JSON.stringify(businessResponse.data, null, 2)}\n\`\`\``,
-          },
-        ];
-
-        const polished = await oneAPIManager.chat(messages, {
-          temperature: 0.7,
-          maxTokens: 300,
-        });
-
-        return polished;
+      // 如果业务Agent返回的是结构化数据，使用内网代码格式化
+      if (typeof businessResponse.data === 'object' && businessResponse.data !== null) {
+        return this.formatStructuredData(businessResponse.data, businessResponse.msg);
       }
 
-      // 其他情况，返回msg
-      return businessResponse.msg;
+      // 其他情况，返回消息
+      return `✅ ${businessResponse.msg}`;
     } catch (error) {
-      console.error('[RootAgent] 话术润色失败:', error);
-      // 润色失败，返回原始消息
+      console.error('[RootAgent] 格式化响应失败:', error);
+      // 格式化失败，返回原始消息
       return businessResponse.msg;
     }
+  }
+
+  /**
+   * 格式化结构化数据（内网代码，不使用LLM）
+   * @param data 结构化数据
+   * @param defaultMessage 默认消息
+   * @returns 格式化后的文本
+   */
+  private formatStructuredData(data: any, defaultMessage: string): string {
+    // 检查是否是数组
+    if (Array.isArray(data)) {
+      if (data.length === 0) {
+        return `✅ ${defaultMessage || '查询成功，暂无数据'}`;
+      }
+      return this.formatArrayData(data);
+    }
+
+    // 检查是否是对象
+    if (typeof data === 'object') {
+      return this.formatObjectData(data);
+    }
+
+    // 其他情况，返回默认消息
+    return `✅ ${defaultMessage || '操作成功'}`;
+  }
+
+  /**
+   * 格式化数组数据
+   * @param data 数组数据
+   * @returns 格式化后的文本
+   */
+  private formatArrayData(data: any[]): string {
+    const items = data.slice(0, 10); // 最多显示10条
+    const lines = [`✅ 查询成功，共 ${data.length} 条记录：\n`];
+
+    items.forEach((item, index) => {
+      if (typeof item === 'object' && item !== null) {
+        // 提取关键字段
+        const title = item.title || item.name || item.subject || `记录${index + 1}`;
+        const id = item.id || index + 1;
+        const status = item.status ? ` [${item.status}]` : '';
+        const time = item.createTime || item.time || item.date || '';
+
+        lines.push(`${index + 1}. ${title}${status}`);
+        if (time) {
+          lines.push(`   时间：${time}`);
+        }
+      }
+    });
+
+    if (data.length > 10) {
+      lines.push(`...还有 ${data.length - 10} 条记录`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * 格式化对象数据
+   * @param data 对象数据
+   * @returns 格式化后的文本
+   */
+  private formatObjectData(data: any): string {
+    const lines = [`✅ 操作成功：\n`];
+
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== null && value !== undefined) {
+        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+        lines.push(`${label}：${displayValue}`);
+      }
+    }
+
+    return lines.join('\n');
   }
 
   /**
@@ -305,7 +359,7 @@ export class RootAgent {
     message?: string;
   }> {
     try {
-      // 1. 意图识别
+      // 1. 意图识别（LLM：只传递用户信息，不传业务数据）
       const intent = await this.recognizeIntent(userInput, userContext);
 
       // 2. 权限检查

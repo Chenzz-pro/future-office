@@ -1,8 +1,8 @@
 /**
  * RootAgent API - 统一对话入口
  * POST /api/agents/root
- * 
- * 新架构：唯一使用LLM的API，负责意图识别、权限拦截、话术润色
+ *
+ * 新架构：唯一使用LLM的API，负责意图识别、权限拦截、响应格式化（不使用LLM）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -159,13 +159,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
 
     console.log('[RootAgent:API] 业务Agent执行完成:', businessResult);
 
-    // 12. 话术润色
-    let finalMessage: string;
-    if (businessResult.code === '200') {
-      finalMessage = await rootAgent.polishResponse(businessResult);
-    } else {
-      finalMessage = businessResult.msg;
-    }
+    // 12. 响应格式化（内网代码，不使用LLM）
+    const finalMessage = rootAgent.formatResponse(businessResult);
 
     // 13. 返回最终结果
     return NextResponse.json({
