@@ -193,17 +193,31 @@ export function useChatHistory() {
 
         if (result.success) {
           // 转换数据库格式为前端格式
-          const dbSessions: ChatSession[] = result.data.map((s: Record<string, unknown>) => ({
-            id: s.id as string,
-            title: s.title as string,
-            preview: '', // 需要加载消息后更新
-            messages: [],
-            createdAt: (s.createdAt as Date).toISOString(), // 转换为 ISO 字符串
-            updatedAt: (s.updatedAt as Date).toISOString(), // 转换为 ISO 字符串
-            model: 'default',
-            provider: 'default',
-            agentId: s.agentId as string | undefined,
-          }));
+          const dbSessions: ChatSession[] = result.data.map((s: Record<string, unknown>) => {
+            // 处理 createdAt 和 updatedAt（可能是字符串或 Date 对象）
+            const createdAtValue = s.createdAt;
+            const updatedAtValue = s.updatedAt;
+
+            // 转换为 ISO 字符串
+            const createdAt = typeof createdAtValue === 'string'
+              ? createdAtValue
+              : (createdAtValue as Date).toISOString();
+            const updatedAt = typeof updatedAtValue === 'string'
+              ? updatedAtValue
+              : (updatedAtValue as Date).toISOString();
+
+            return {
+              id: s.id as string,
+              title: s.title as string,
+              preview: '', // 需要加载消息后更新
+              messages: [],
+              createdAt,
+              updatedAt,
+              model: 'default',
+              provider: 'default',
+              agentId: s.agentId as string | undefined,
+            };
+          });
 
           // 并行加载每个会话的消息
           const sessionsWithMessages = await Promise.all(
@@ -211,12 +225,20 @@ export function useChatHistory() {
               try {
                 const messagesResult = await fetchWithAuth(`/api/chat/sessions/${session.id}/messages`);
                 if (messagesResult.success && messagesResult.data.length > 0) {
-                  const messages: Message[] = messagesResult.data.map((m: Record<string, unknown>) => ({
-                    id: m.id as string,
-                    role: m.role as 'user' | 'assistant' | 'system',
-                    content: m.content as string,
-                    timestamp: new Date((m.createdAt as Date).toISOString()), // 转换为 Date 对象
-                  }));
+                  const messages: Message[] = messagesResult.data.map((m: Record<string, unknown>) => {
+                    // 处理 createdAt（可能是字符串或 Date 对象）
+                    const createdAtValue = m.createdAt;
+                    const createdAt = typeof createdAtValue === 'string'
+                      ? createdAtValue
+                      : (createdAtValue as Date).toISOString();
+
+                    return {
+                      id: m.id as string,
+                      role: m.role as 'user' | 'assistant' | 'system',
+                      content: m.content as string,
+                      timestamp: new Date(createdAt),
+                    };
+                  });
 
                   // 更新预览
                   const lastMessage = messages[messages.length - 1];
@@ -533,12 +555,20 @@ export function useChatHistory() {
         // 2. 加载消息
         const messagesResult = await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`);
         if (messagesResult.success && messagesResult.data.length > 0) {
-          const messages: Message[] = messagesResult.data.map((m: Record<string, unknown>) => ({
-            id: m.id as string,
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: m.content as string,
-            timestamp: new Date((m.createdAt as Date).toISOString()),
-          }));
+          const messages: Message[] = messagesResult.data.map((m: Record<string, unknown>) => {
+            // 处理 createdAt（可能是字符串或 Date 对象）
+            const createdAtValue = m.createdAt;
+            const createdAt = typeof createdAtValue === 'string'
+              ? createdAtValue
+              : (createdAtValue as Date).toISOString();
+
+            return {
+              id: m.id as string,
+              role: m.role as 'user' | 'assistant' | 'system',
+              content: m.content as string,
+              timestamp: new Date(createdAt),
+            };
+          });
 
           // 更新预览和标题
           const lastMessage = messages[messages.length - 1];
@@ -568,12 +598,20 @@ export function useChatHistory() {
       if (isOnline) {
         const result = await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`);
         if (result.success) {
-          const messages: Message[] = result.data.map((m: Record<string, unknown>) => ({
-            id: m.id as string,
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: m.content as string,
-            timestamp: new Date((m.createdAt as Date).toISOString()),
-          }));
+          const messages: Message[] = result.data.map((m: Record<string, unknown>) => {
+            // 处理 createdAt（可能是字符串或 Date 对象）
+            const createdAtValue = m.createdAt;
+            const createdAt = typeof createdAtValue === 'string'
+              ? createdAtValue
+              : (createdAtValue as Date).toISOString();
+
+            return {
+              id: m.id as string,
+              role: m.role as 'user' | 'assistant' | 'system',
+              content: m.content as string,
+              timestamp: new Date(createdAt),
+            };
+          });
 
           console.log('[useChatHistory] 加载消息成功:', {
             sessionId,
