@@ -24,9 +24,8 @@ export async function createEKPClient(): Promise<EKPRestClient | null> {
   try {
     // 从数据库加载 EKP 配置
     const configs = await dbManager.query(`
-      SELECT base_url, username, password, api_path
+      SELECT ekp_address, username, password, config
       FROM ekp_configs
-      WHERE enabled = TRUE
       LIMIT 1
     `);
 
@@ -35,11 +34,22 @@ export async function createEKPClient(): Promise<EKPRestClient | null> {
       return null;
     }
 
-    const config = configs.rows[0] as EKPClientConfig;
-    return new EKPRestClient({
-      ...config,
-      serviceId: config.serviceId || 'default',
-    });
+    const row = configs.rows[0] as any;
+    console.log('[EKPClient] 原始数据:', JSON.stringify(row));
+    
+    const configJson = typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {});
+    console.log('[EKPClient] 解析后的config:', JSON.stringify(configJson));
+
+    const config: EKPClientConfig = {
+      baseUrl: row.ekp_address,
+      username: row.username,
+      password: row.password,
+      apiPath: configJson.apiPath || configJson.api_path || '/api/sys-notify/sysNotifyTodoRestService',
+      serviceId: configJson.serviceId || 'default',
+    };
+
+    console.log('[EKPClient] 最终配置:', JSON.stringify(config));
+    return new EKPRestClient(config);
   } catch (error) {
     console.error('[EKPClient] 创建 EKP 客户端失败:', error);
     return null;
@@ -117,11 +127,10 @@ export async function callEKPInterface<T = unknown>(
       throw new Error('EKP 客户端未配置');
     }
 
-    // 4. 获取 EKP 配置
+    // 4. 获取 EKP 配置（用于认证）
     const configs = await dbManager.query(`
-      SELECT base_url, username, password
+      SELECT ekp_address, username, password
       FROM ekp_configs
-      WHERE enabled = TRUE
       LIMIT 1
     `);
 
@@ -129,7 +138,7 @@ export async function callEKPInterface<T = unknown>(
       throw new Error('EKP 配置未找到');
     }
 
-    const ekpConfig = configs.rows[0] as { base_url: string; username: string; password: string };
+    const ekpConfig = configs.rows[0] as { ekp_address: string; username: string; password: string };
 
     // 5. 生成 Basic Auth 头
     const credentials = typeof Buffer !== 'undefined'
@@ -137,7 +146,7 @@ export async function callEKPInterface<T = unknown>(
       : btoa(`${ekpConfig.username}:${ekpConfig.password}`);
 
     // 6. 构造请求
-    const endpoint = `${ekpConfig.base_url}${interfaceConfig.path}`;
+    const endpoint = `${ekpConfig.ekp_address}${interfaceConfig.path}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
