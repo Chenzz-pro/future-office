@@ -180,6 +180,11 @@ export default function OrgSyncPage() {
         fetch('/api/admin/sync-system?action=alerts')
       ]);
 
+      // 检查 HTTP 状态码
+      if (!statusRes.ok || !systemRes.ok || !logsRes.ok || !alertsRes.ok) {
+        throw new Error(`API请求失败: ${!statusRes.ok ? '/api/org-sync' : ''}${!systemRes.ok ? '/api/admin/sync-system' : ''}${!logsRes.ok ? '/api/org-sync/logs' : ''}${!alertsRes.ok ? '/api/admin/sync-system?action=alerts' : ''}`);
+      }
+
       const [status, system, logs, alertData] = await Promise.all([
         statusRes.json(),
         systemRes.json(),
@@ -202,6 +207,7 @@ export default function OrgSyncPage() {
       }
     } catch (error) {
       console.error('加载数据失败:', error);
+      // 这里可以添加错误提示 UI
     } finally {
       setLoading(false);
     }
