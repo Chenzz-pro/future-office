@@ -1,0 +1,205 @@
+# ============================================
+# 蓝凌EKP二开接口配置文件
+# 用于存储定制开发的接口配置
+# ============================================
+
+custom:
+  # ============================================
+  # 请假类接口
+  # ============================================
+  - code: leave.apply
+    name: 发起请假申请
+    category: 流程
+    path: /api/custom/leave/apply
+    serviceId: customLeaveService
+    method: POST
+    enabled: true
+    request:
+      templateId: "{templateId}"
+      formValues: {}
+    response:
+      successPath: success
+      dataPath: data.fdId
+    description: 二开：发起请假申请流程
+    version: 1.0
+
+  - code: leave.cancel
+    name: 取消请假申请
+    category: 流程
+    path: /api/custom/leave/cancel
+    serviceId: customLeaveService
+    method: POST
+    enabled: true
+    request:
+      processId: "{processId}"
+      reason: "{reason}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：取消已发起的请假申请
+    version: 1.0
+
+  - code: leave.history
+    name: 查询请假历史
+    category: 流程
+    path: /api/custom/leave/history
+    serviceId: customLeaveService
+    method: POST
+    enabled: true
+    request:
+      personId: "{personId}"
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询员工请假历史记录
+    version: 1.0
+
+  # ============================================
+  # 报销类接口
+  # ============================================
+  - code: expense.submit
+    name: 提交报销申请
+    category: 流程
+    path: /api/custom/expense/submit
+    serviceId: customExpenseService
+    method: POST
+    enabled: true
+    request:
+      templateId: "{templateId}"
+      amount: "{amount}"
+      expenseType: "{expenseType}"
+      items: []
+    response:
+      successPath: success
+      dataPath: data.docId
+    description: 二开：提交报销申请
+    version: 1.0
+
+  - code: expense.approve
+    name: 审批报销申请
+    category: 流程
+    path: /api/custom/expense/approve
+    serviceId: customExpenseService
+    method: POST
+    enabled: true
+    request:
+      docId: "{docId}"
+      opinion: "{opinion}"
+      action: "{action}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：审批报销申请
+    version: 1.0
+
+  - code: expense.summary
+    name: 报销统计汇总
+    category: 统计
+    path: /api/custom/expense/summary
+    serviceId: customExpenseService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      departmentId: "{departmentId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询部门报销统计
+    version: 1.0
+
+  # ============================================
+  # 采购类接口
+  # ============================================
+  - code: purchase.create
+    name: 创建采购申请
+    category: 流程
+    path: /api/custom/purchase/create
+    serviceId: customPurchaseService
+    method: POST
+    enabled: true
+    request:
+      templateId: "{templateId}"
+      items:
+        - itemId: "{itemId}"
+          quantity: "{quantity}"
+          price: "{price}"
+    response:
+      successPath: success
+      dataPath: data.docId
+    description: 二开：创建采购申请
+    version: 1.0
+
+  - code: purchase.approve
+    name: 审批采购申请
+    category: 流程
+    path: /api/custom/purchase/approve
+    serviceId: customPurchaseService
+    method: POST
+    enabled: true
+    request:
+      docId: "{docId}"
+      opinion: "{opinion}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：审批采购申请
+    version: 1.0
+
+  # ============================================
+  # 统计类接口
+  # ============================================
+  - code: stats.leaveSummary
+    name: 请假统计汇总
+    category: 统计
+    path: /api/custom/stats/leaveSummary
+    serviceId: customStatsService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      personId: "{personId}"
+      departmentId: "{departmentId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询员工请假统计
+    version: 1.0
+
+  - code: stats.attendanceSummary
+    name: 考勤统计汇总
+    category: 统计
+    path: /api/custom/stats/attendanceSummary
+    serviceId: customStatsService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      personId: "{personId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询员工考勤统计
+    version: 1.0
+
+  - code: stats.approvalEfficiency
+    name: 审批效率统计
+    category: 统计
+    path: /api/custom/stats/approvalEfficiency
+    serviceId: customStatsService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      departmentId: "{departmentId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询审批效率统计
+    version: 1.0
