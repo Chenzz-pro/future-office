@@ -8,16 +8,22 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
-  Search, Edit, Play, MoreVertical, Loader2,
+  Search, Edit, Play, Plus, MoreVertical, Loader2, Trash2,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import InterfaceFormDialog from './interface-form-dialog';
+import InterfaceTestDialog from './interface-test-dialog';
 
 export default function OfficialInterfacesTable({ onRefresh }: { onRefresh?: () => void }) {
   const [interfaces, setInterfaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [editingInterface, setEditingInterface] = useState<any>(null);
+  const [testingInterface, setTestingInterface] = useState<any>(null);
 
   useEffect(() => {
     loadInterfaces();
@@ -44,6 +50,64 @@ export default function OfficialInterfacesTable({ onRefresh }: { onRefresh?: () 
     item.code.toLowerCase().includes(searchKeyword.toLowerCase()) ||
     item.name.toLowerCase().includes(searchKeyword.toLowerCase())
   );
+
+  const handleAdd = () => {
+    setEditingInterface(null);
+    setFormDialogOpen(true);
+  };
+
+  const handleEdit = (item: any) => {
+    setEditingInterface(item);
+    setFormDialogOpen(true);
+  };
+
+  const handleTest = (item: any) => {
+    setTestingInterface(item);
+    setTestDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定要删除这个接口吗？')) return;
+
+    try {
+      const res = await fetch(`/api/admin/ekp-interfaces/${id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('删除成功');
+        loadInterfaces();
+        onRefresh?.();
+      } else {
+        alert('删除失败: ' + (data.error || '未知错误'));
+      }
+    } catch (error) {
+      alert('删除失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    }
+  };
+
+  const handleSave = async (formData: any) => {
+    const url = editingInterface
+      ? `/api/admin/ekp-interfaces/${editingInterface.id}?source=official`
+      : '/api/admin/ekp-interfaces?source=official';
+
+    const method = editingInterface ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.error || '保存失败');
+    }
+
+    alert(editingInterface ? '更新成功' : '创建成功');
+    loadInterfaces();
+    onRefresh?.();
+  };
 
   if (loading) {
     return (
@@ -123,13 +187,17 @@ export default function OfficialInterfacesTable({ onRefresh }: { onRefresh?: () 
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEdit(item)}>
                           <Edit className="w-4 h-4 mr-2" />
                           编辑
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleTest(item)}>
                           <Play className="w-4 h-4 mr-2" />
                           测试
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600">
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          删除
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -139,6 +207,26 @@ export default function OfficialInterfacesTable({ onRefresh }: { onRefresh?: () 
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {/* 添加/编辑对话框 */}
+      {formDialogOpen && (
+        <InterfaceFormDialog
+          open={formDialogOpen}
+          onClose={() => setFormDialogOpen(false)}
+          onSave={handleSave}
+          initialData={editingInterface}
+          source="official"
+        />
+      )}
+
+      {/* 测试对话框 */}
+      {testDialogOpen && (
+        <InterfaceTestDialog
+          open={testDialogOpen}
+          onClose={() => setTestDialogOpen(false)}
+          interfaceData={testingInterface}
+        />
       )}
     </div>
   );

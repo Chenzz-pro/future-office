@@ -7,15 +7,23 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Edit, Trash2, Play, MoreVertical, Loader2,
+  Edit, Trash2, Play, MoreVertical, Loader2, Plus, Search,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import InterfaceFormDialog from './interface-form-dialog';
+import InterfaceTestDialog from './interface-test-dialog';
 
 export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () => void }) {
   const [interfaces, setInterfaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [editingInterface, setEditingInterface] = useState<any>(null);
+  const [testingInterface, setTestingInterface] = useState<any>(null);
 
   useEffect(() => {
     loadInterfaces();
@@ -55,6 +63,51 @@ export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () =>
     }
   };
 
+  const handleAdd = () => {
+    setEditingInterface(null);
+    setFormDialogOpen(true);
+  };
+
+  const handleEdit = (item: any) => {
+    setEditingInterface(item);
+    setFormDialogOpen(true);
+  };
+
+  const handleTest = (item: any) => {
+    setTestingInterface(item);
+    setTestDialogOpen(true);
+  };
+
+  const handleSave = async (formData: any) => {
+    const url = editingInterface
+      ? `/api/admin/ekp-interfaces/${editingInterface.id}?source=custom`
+      : '/api/admin/ekp-interfaces?source=custom';
+
+    const method = editingInterface ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.error || '保存失败');
+    }
+
+    alert(editingInterface ? '更新成功' : '创建成功');
+    loadInterfaces();
+    onRefresh?.();
+  };
+
+  // 过滤接口
+  const filteredInterfaces = interfaces.filter((item: any) =>
+    !searchKeyword ||
+    item.code.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+    item.name.toLowerCase().includes(searchKeyword.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -72,38 +125,51 @@ export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () =>
 
   return (
     <div className="space-y-4">
+      {/* 搜索栏 */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="搜索接口代码、名称..."
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </div>
+
       {/* 统计卡片 */}
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-purple-50 dark:bg-purple-950/20 p-4 rounded-lg">
           <div className="text-sm text-purple-700 dark:text-purple-300">总接口数</div>
           <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-            {total}
+            {filteredInterfaces.length}
           </div>
         </div>
         <div className="bg-green-50 dark:bg-green-950/20 p-4 rounded-lg">
           <div className="text-sm text-green-700 dark:text-green-300">已启用</div>
           <div className="text-2xl font-bold text-green-900 dark:text-green-100">
-            {enabled}
+            {filteredInterfaces.filter((i: any) => i.enabled).length}
           </div>
         </div>
         <div className="bg-gray-50 dark:bg-gray-950/20 p-4 rounded-lg">
           <div className="text-sm text-gray-700 dark:text-gray-300">已禁用</div>
           <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {disabled}
+            {filteredInterfaces.filter((i: any) => !i.enabled).length}
           </div>
         </div>
         <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg">
           <div className="text-sm text-blue-700 dark:text-blue-300">流程类</div>
           <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-            {flowCount}
+            {filteredInterfaces.filter((i: any) => i.category === '流程').length}
           </div>
         </div>
       </div>
 
       {/* 接口列表 */}
-      {interfaces.length === 0 ? (
+      {filteredInterfaces.length === 0 ? (
         <div className="py-12 text-center text-gray-500">
-          暂无二开接口配置
+          {searchKeyword ? '未找到匹配的接口' : '暂无二开接口配置'}
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -122,7 +188,7 @@ export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () =>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {interfaces.map((item: any) => (
+              {filteredInterfaces.map((item: any) => (
                 <TableRow key={item.id || item.code}>
                   <TableCell className="font-mono text-sm">{item.code}</TableCell>
                   <TableCell>
@@ -155,11 +221,11 @@ export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () =>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEdit(item)}>
                           <Edit className="w-4 h-4 mr-2" />
                           编辑
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleTest(item)}>
                           <Play className="w-4 h-4 mr-2" />
                           测试
                         </DropdownMenuItem>
@@ -178,6 +244,26 @@ export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () =>
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {/* 添加/编辑对话框 */}
+      {formDialogOpen && (
+        <InterfaceFormDialog
+          open={formDialogOpen}
+          onClose={() => setFormDialogOpen(false)}
+          onSave={handleSave}
+          initialData={editingInterface}
+          source="custom"
+        />
+      )}
+
+      {/* 测试对话框 */}
+      {testDialogOpen && (
+        <InterfaceTestDialog
+          open={testDialogOpen}
+          onClose={() => setTestDialogOpen(false)}
+          interfaceData={testingInterface}
+        />
       )}
     </div>
   );
