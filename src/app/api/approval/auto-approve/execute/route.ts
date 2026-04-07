@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger, generateRequestId } from '@/lib/utils/logger';
 import { BusinessErrors } from '@/lib/utils/error-handler';
+import { ekpApprovalClient } from '@/lib/ekp-approval-client';
 
 /**
  * 执行EKP自动审批接口
@@ -28,28 +29,24 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // TODO: 封装 EKP 自动审批接口
-    // 这里需要调用 EKP REST 客户端执行自动审批
-    // 示例：const result = await ekpClient.autoApprove(approvalRequestId, userId);
-
-    // 模拟返回数据（实际应调用 EKP 接口）
-    const approveResult = {
-      requestId: approvalRequestId,
-      status: 'auto_approved',
-      approvedAt: new Date().toISOString(),
-    };
+    // 调用EKP审批客户端执行自动审批
+    const approveResult = await ekpApprovalClient.autoApprove(approvalRequestId, userId);
 
     logger.info({
       module: 'approval',
       action: 'execute_auto_approve_success',
       requestId,
       message: 'EKP自动审批成功',
-      data: { requestId: approvalRequestId },
+      data: { requestId: approvalRequestId, status: approveResult.status },
     });
 
     return NextResponse.json({
       success: true,
-      data: approveResult,
+      data: {
+        requestId: approvalRequestId,
+        status: approveResult.status,
+        approvedAt: new Date().toISOString(),
+      },
     });
   } catch (error: any) {
     logger.error({

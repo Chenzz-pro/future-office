@@ -4,6 +4,7 @@
  */
 
 import { executeSkill } from '@/lib/custom-skill-executor';
+import { getSkillByCode } from '@/lib/skill-query-service';
 import { AutoApproveEngine } from '@/lib/approval/auto-approve-engine';
 import { formatApprovalResponse } from '@/lib/approval/formatter';
 
@@ -103,76 +104,34 @@ export class ApprovalAgent {
   }
 
   /**
-   * 执行技能动作（封装executeSkill）
+   * 执行技能动作（使用真实的executeSkill）
    */
   private async executeSkillAction(skillCode: string, params: any) {
-    // TODO: 从数据库获取技能配置
-    // 这里需要查询 custom_skills 表获取技能配置
-    // const skill = await getSkillConfig(skillCode);
-    // return await executeSkill(skill, params);
+    try {
+      // 1. 从数据库查询技能配置
+      const skill = await getSkillByCode(skillCode);
 
-    // 暂时返回模拟数据（实际应调用 executeSkill）
-    switch (skillCode) {
-      case 'generate_approval_form':
-        return {
-          success: true,
-          data: {
-            templateId: `FORM_${params.approval_type?.toUpperCase()}`,
-            formData: { applicantId: params.userId },
-          },
-        };
+      if (!skill) {
+        throw new Error(`技能不存在或未启用: ${skillCode}`);
+      }
 
-      case 'match_approval_flow':
-        return {
-          success: true,
-          data: {
-            flowCode: `FLOW_${params.type?.toUpperCase()}`,
-            nodes: params.amount && params.amount > 2000
-              ? ['dept_manager', 'finance']
-              : ['dept_manager'],
-          },
-        };
+      // 2. 验证技能配置
+      // const validation = validateSkillConfig(skill);
+      // if (!validation.valid) {
+      //   throw new Error(`技能配置不完整: ${validation.errors.join(', ')}`);
+      // }
 
-      case 'ekp_launch_approval':
-        return {
-          success: true,
-          data: {
-            requestId: `REQ_${Date.now()}`,
-            status: 'pending',
-          },
-        };
+      // 3. 执行技能
+      const result = await executeSkill(skill, params);
 
-      case 'ekp_auto_approve':
-        return {
-          success: true,
-          data: {
-            requestId: params.requestId,
-            status: 'auto_approved',
-            approvedAt: new Date().toISOString(),
-          },
-        };
+      if (!result.success) {
+        throw new Error(`技能执行失败: ${result.message}`);
+      }
 
-      case 'track_approval_progress':
-        return {
-          success: true,
-          data: {
-            currentNode: '审批中',
-            status: 'pending',
-            timeoutNodes: [],
-          },
-        };
-
-      case 'send_approval_reminder':
-        return {
-          success: true,
-          data: { message: '已发送催办' },
-        };
-
-      default:
-        return {
-          success: true,
-          data: { message: '技能执行成功' },
-        };
+      return result;
+    } catch (error: any) {
+      console.error(`[ApprovalAgent] 执行技能失败: ${skillCode}`, error);
+      throw error;
     }
   }
 
@@ -202,7 +161,7 @@ export class ApprovalAgent {
     // 3. 发起 EKP 审批
     const launchResult = await this.executeSkillAction('ekp_launch_approval', {
       formData: form.data,
-      flowNodes: flow.data.nodes,
+      flowNodes: (flow.data as any)?.nodes || [],
       userId: this.context.userId,
     });
 
@@ -216,7 +175,7 @@ export class ApprovalAgent {
     let autoApproveResult = null;
     if (canAutoApprove) {
       autoApproveResult = await this.executeSkillAction('ekp_auto_approve', {
-        requestId: launchResult.data.requestId,
+        requestId: (launchResult.data as any)?.requestId,
         userId: this.context.userId,
       });
     }
@@ -240,14 +199,15 @@ export class ApprovalAgent {
     });
 
     // 超时自动催办
-    if (progress.data.timeoutNodes && progress.data.timeoutNodes.length > 0) {
+    const progressData = progress.data as any;
+    if (progressData?.timeoutNodes && progressData.timeoutNodes.length > 0) {
       await this.executeSkillAction('send_approval_reminder', {
-        nodes: progress.data.timeoutNodes,
+        nodes: progressData.timeoutNodes,
         userId: this.context.userId,
       });
     }
 
-    return progress.data;
+    return progressData;
   }
 
   /**

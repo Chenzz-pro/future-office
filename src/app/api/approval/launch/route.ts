@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger, generateRequestId } from '@/lib/utils/logger';
 import { BusinessErrors } from '@/lib/utils/error-handler';
+import { ekpApprovalClient, ApprovalType, ApprovalFormData, ApprovalFlowNode } from '@/lib/ekp-approval-client';
 
 /**
  * 发起EKP审批接口
@@ -28,22 +29,34 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // TODO: 封装 EKP 发起审批接口
-    // 这里需要调用 EKP REST 客户端发起审批流程
-    // 示例：const ekpResult = await ekpClient.launchApproval(formData, flowNodes, userId);
-
-    // 模拟返回数据（实际应调用 EKP 接口）
-    const launchResult = {
-      requestId: `REQ_${Date.now()}`,
-      status: 'pending',
+    // 转换数据格式
+    const approvalFormData: ApprovalFormData = {
+      templateId: formData.templateId || 'FORM_DEFAULT',
+      subject: formData.subject || '审批申请',
+      formValues: formData.formData || {},
+      applicantId: userId,
+      deptId: formData.deptId || '',
     };
+
+    const approvalFlowNodes: ApprovalFlowNode[] = flowNodes.map((node: string) => ({
+      nodeId: node,
+      nodeName: node,
+      nodeType: 'dept_manager',
+    }));
+
+    // 调用EKP审批客户端发起审批
+    const launchResult = await ekpApprovalClient.launchApproval(
+      approvalFormData,
+      approvalFlowNodes,
+      userId
+    );
 
     logger.info({
       module: 'approval',
       action: 'launch_approval_success',
       requestId,
       message: 'EKP审批发起成功',
-      data: { requestId: launchResult.requestId },
+      data: { requestId: launchResult.requestId, status: launchResult.status },
     });
 
     return NextResponse.json({

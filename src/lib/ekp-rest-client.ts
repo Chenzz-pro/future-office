@@ -18,6 +18,7 @@ export interface EKPConfig {
   password: string;
   apiPath: string;      // REST服务路径（用于测试连接）
   serviceId: string;    // 服务标识
+  enabled?: boolean;    // 是否启用
 }
 
 export interface EKPRequest {

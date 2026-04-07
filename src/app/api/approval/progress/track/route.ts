@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger, generateRequestId } from '@/lib/utils/logger';
 import { BusinessErrors } from '@/lib/utils/error-handler';
+import { ekpApprovalClient } from '@/lib/ekp-approval-client';
 
 /**
  * 跟踪审批进度接口
@@ -28,31 +29,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // TODO: 调用 EKP 查询进度接口
-    // 这里需要调用 EKP REST 客户端查询审批进度
-    // 示例：const progress = await ekpClient.getApprovalProgress(approvalRequestId, userId);
-
-    // 模拟返回数据（实际应调用 EKP 接口）
-    const progress = {
-      requestId: approvalRequestId,
-      currentNode: '审批中',
-      status: 'pending',
-      timeoutNodes: [],
-      history: [
-        {
-          node: '发起人',
-          status: 'approved',
-          time: new Date().toISOString(),
-        },
-      ],
-    };
+    // 调用EKP审批客户端查询进度
+    const progress = await ekpApprovalClient.getProgress(approvalRequestId, userId);
 
     logger.info({
       module: 'approval',
       action: 'track_progress_success',
       requestId,
       message: '审批进度查询成功',
-      data: { requestId: approvalRequestId, currentNode: progress.currentNode },
+      data: {
+        requestId: approvalRequestId,
+        currentNode: progress.currentNode.nodeName,
+        status: progress.status,
+      },
     });
 
     return NextResponse.json({
