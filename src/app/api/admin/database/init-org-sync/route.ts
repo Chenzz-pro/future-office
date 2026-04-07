@@ -65,7 +65,60 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. 创建 org_sync_tokens 表
+    // 3. 创建 org_sync_logs 表（同步日志表）
+    try {
+      await dbManager.query(`
+        CREATE TABLE IF NOT EXISTS org_sync_logs (
+          id VARCHAR(36) PRIMARY KEY COMMENT '同步日志ID',
+          sync_type ENUM('full', 'incremental') NOT NULL COMMENT '同步类型',
+          sync_mode ENUM('time', 'org', 'all') DEFAULT 'all' COMMENT '同步模式',
+          status ENUM('running', 'completed', 'failed', 'cancelled') NOT NULL COMMENT '状态',
+          start_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
+          end_time TIMESTAMP NULL COMMENT '结束时间',
+          duration_seconds INT COMMENT '耗时（秒）',
+
+          begin_time_stamp VARCHAR(50) COMMENT '开始时间戳',
+          end_time_stamp VARCHAR(50) COMMENT '结束时间戳',
+          next_time_stamp VARCHAR(50) COMMENT '下次同步时间戳',
+
+          org_scope JSON COMMENT '机构范围',
+          return_org_type JSON COMMENT '组织类型',
+
+          total_count INT DEFAULT 0 COMMENT '总处理量',
+          org_count INT DEFAULT 0 COMMENT '机构数',
+          dept_count INT DEFAULT 0 COMMENT '部门数',
+          post_count INT DEFAULT 0 COMMENT '岗位数',
+          group_count INT DEFAULT 0 COMMENT '群组数',
+          person_count INT DEFAULT 0 COMMENT '人员数',
+          insert_count INT DEFAULT 0 COMMENT '新增数',
+          update_count INT DEFAULT 0 COMMENT '更新数',
+          delete_count INT DEFAULT 0 COMMENT '删除数',
+          error_count INT DEFAULT 0 COMMENT '错误数',
+
+          error_message TEXT COMMENT '错误信息',
+          error_details JSON COMMENT '错误详情',
+
+          triggered_by VARCHAR(50) COMMENT '触发方式',
+          operator_id VARCHAR(36) COMMENT '操作人ID',
+          operator_name VARCHAR(100) COMMENT '操作人姓名',
+          remark TEXT COMMENT '备注',
+
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+          INDEX idx_sync_type (sync_type),
+          INDEX idx_status (status),
+          INDEX idx_start_time (start_time),
+          INDEX idx_triggered_by (triggered_by)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='组织架构同步日志表'
+      `);
+      console.log('[DatabaseInit] org_sync_logs 表创建成功');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errors.push(`创建 org_sync_logs 表失败: ${errorMessage}`);
+    }
+
+    // 4. 创建 org_sync_tokens 表
     try {
       await dbManager.query(`
         CREATE TABLE IF NOT EXISTS org_sync_tokens (
@@ -88,7 +141,7 @@ export async function POST(request: NextRequest) {
       errors.push(`创建 org_sync_tokens 表失败: ${errorMessage}`);
     }
 
-    // 4. 创建 sync_alerts 表
+    // 5. 创建 sync_alerts 表
     try {
       await dbManager.query(`
         CREATE TABLE IF NOT EXISTS sync_alerts (
@@ -124,7 +177,7 @@ export async function POST(request: NextRequest) {
       errors.push(`创建 sync_alerts 表失败: ${errorMessage}`);
     }
 
-    // 5. 插入默认令牌
+    // 6. 插入默认令牌
     try {
       await dbManager.query(`
         INSERT INTO org_sync_tokens (id, token_name, token_value, token_type)
