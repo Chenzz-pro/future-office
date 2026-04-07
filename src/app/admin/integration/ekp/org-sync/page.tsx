@@ -30,7 +30,6 @@ import {
   Activity,
   TrendingUp,
   Users,
-  Building,
   Settings,
   AlertTriangle,
   XCircle
@@ -113,8 +112,7 @@ export default function OrgSyncPage() {
     lastSyncTime: null as string | null
   });
   const [isOrgSelectorOpen, setIsOrgSelectorOpen] = useState(false);
-  const [orgTree, setOrgTree] = useState<any[]>([]);
-  const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>([]);
+  const [orgIdInput, setOrgIdInput] = useState(''); // 改为手动输入机构ID
   const [syncProgress, setSyncProgress] = useState<{
     percentage: number;
     processed: number;
@@ -124,23 +122,6 @@ export default function OrgSyncPage() {
     delete: number;
     error: number;
   } | null>(null);
-
-  // 加载机构树数据
-  useEffect(() => {
-    loadOrgTree();
-  }, []);
-
-  const loadOrgTree = async () => {
-    try {
-      const response = await fetch('/api/organization?action=tree&type=1');
-      const result = await response.json();
-      if (result.success) {
-        setOrgTree(result.data || []);
-      }
-    } catch (error) {
-      console.error('加载机构树失败:', error);
-    }
-  };
 
   // 轮询同步进度
   useEffect(() => {
@@ -278,6 +259,14 @@ export default function OrgSyncPage() {
     setIsOrgSelectorOpen(false);
     setSyncing(true);
     setSyncingType('full');
+
+    // 解析机构ID（支持逗号分隔的多个ID）
+    const orgIds = orgIdInput.trim()
+      ? orgIdInput.split(',').map(id => id.trim()).filter(id => id)
+      : undefined;
+
+    console.log('[OrgSync] 开始同步，机构ID范围:', orgIds || '全部');
+
     try {
       const response = await fetch('/api/org-sync', {
         method: 'POST',
@@ -288,7 +277,7 @@ export default function OrgSyncPage() {
           syncType: 'full',
           operatorId: 'admin',
           operatorName: '管理员',
-          orgIds: selectedOrgIds.length > 0 ? selectedOrgIds : undefined
+          orgIds
         })
       });
 
@@ -296,13 +285,17 @@ export default function OrgSyncPage() {
       if (result.success) {
         // 等待一段时间后刷新数据
         setTimeout(loadData, 2000);
+      } else {
+        console.error('同步失败:', result.message);
+        alert('同步失败：' + result.message);
       }
     } catch (error) {
       console.error('触发同步失败:', error);
+      alert('同步失败：网络错误');
     } finally {
       setSyncing(false);
       setSyncingType(null);
-      setSelectedOrgIds([]);
+      setOrgIdInput(''); // 清空输入
     }
   };
 
@@ -955,75 +948,52 @@ export default function OrgSyncPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 机构选择对话框 */}
+      {/* 机构范围同步对话框 */}
       <Dialog open={isOrgSelectorOpen} onOpenChange={setIsOrgSelectorOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>选择同步范围</DialogTitle>
             <DialogDescription>
-              选择要同步的机构范围，不选择则同步全部机构
+              输入蓝凌EKP系统的机构ID来限制同步范围，留空则同步全部机构
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  type="checkbox"
-                  id="select-all-org"
-                  checked={selectedOrgIds.length === orgTree.length && orgTree.length > 0}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedOrgIds(orgTree.map(org => org.id));
-                    } else {
-                      setSelectedOrgIds([]);
-                    }
-                  }}
-                />
-                <label htmlFor="select-all-org" className="text-sm font-medium">
-                  全选
-                </label>
-              </div>
-              <div className="border rounded-lg p-4 space-y-2 max-h-[400px] overflow-y-auto">
-                {orgTree.map((org) => (
-                  <div key={org.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`org-${org.id}`}
-                      checked={selectedOrgIds.includes(org.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedOrgIds([...selectedOrgIds, org.id]);
-                        } else {
-                          setSelectedOrgIds(selectedOrgIds.filter(id => id !== org.id));
-                        }
-                      }}
-                    />
-                    <label htmlFor={`org-${org.id}`} className="text-sm">
-                      <Building className="w-4 h-4 inline mr-1" />
-                      {org.fd_name}
-                    </label>
-                  </div>
-                ))}
-                {orgTree.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-4">
-                    暂无机构数据，请先同步组织架构
-                  </div>
-                )}
-              </div>
+            <div className="space-y-2">
+              <label htmlFor="orgIdInput" className="text-sm font-medium">
+                机构ID（EKP系统）
+              </label>
+              <input
+                id="orgIdInput"
+                type="text"
+                value={orgIdInput}
+                onChange={(e) => setOrgIdInput(e.target.value)}
+                placeholder="请输入EKP机构的ID，多个ID用逗号分隔"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <p className="text-xs text-muted-foreground">
+                示例：1001, 1002, 1003 （多个ID用逗号分隔）
+              </p>
             </div>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>注意</AlertTitle>
+              <AlertDescription>
+                机构ID需要在蓝凌EKP系统中获取。如果不确定，建议留空同步全部机构。
+              </AlertDescription>
+            </Alert>
             <div className="flex gap-2 justify-end">
               <Button
                 variant="outline"
                 onClick={() => {
                   setIsOrgSelectorOpen(false);
-                  setSelectedOrgIds([]);
+                  setOrgIdInput('');
                 }}
               >
                 取消
               </Button>
               <Button onClick={handleOrgSync}>
                 <Play className="w-4 h-4 mr-2" />
-                开始同步 ({selectedOrgIds.length > 0 ? `已选择 ${selectedOrgIds.length} 个机构` : '全部机构'})
+                开始同步
               </Button>
             </div>
           </div>
