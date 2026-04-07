@@ -37,6 +37,8 @@
 │   │   └── api/            # API 路由
 │   │       ├── chat/       # 对话 API
 │   │       ├── ekp/        # EKP 集成 API
+│   │       ├── admin/      # 管理后台 API
+│   │       │   └── ekp-interfaces/ # EKP接口管理 API
 │   │       ├── custom-skill/ # 自定义技能 API
 │   │       ├── auth/       # 认证 API（登录、密码管理）
 │   │       ├── database/   # 数据库管理 API（初始化、连接、迁移）
@@ -57,6 +59,9 @@
 │   ├── lib/                # 工具库
 │   │   ├── utils.ts        # 通用工具函数 (cn)
 │   │   ├── ekp-rest-client.ts # EKP REST 客户端
+│   │   ├── ekp-client.ts   # EKP业务接口适配器（集成EKPInterfaceRegistry）
+│   │   ├── ekp-interface-registry.ts # EKP接口注册中心
+│   │   ├── ekp-custom-interface-loader.ts # 二开接口加载器
 │   │   ├── custom-skill-executor.ts # 自定义技能执行器
 │   │   └── database/       # 数据库层
 │   │       ├── types.ts    # 数据库类型定义
@@ -248,6 +253,9 @@ interface CustomSkill {
 - `/admin/organization/structure` - 组织架构树
 - `/admin/organization/role` - 角色管理（新增）
 - `/admin/integration` - 集成中心
+  - `/admin/integration/ekp` - EKP集成配置
+    - "连接配置" Tab - 配置EKP连接信息
+    - "接口管理中心" Tab - 管理EKP接口
 - `/admin/database` - 数据库配置（新增）
 
 ## 组织架构管理
@@ -297,6 +305,142 @@ interface CustomSkill {
 
 ### 正确配置
 - EKP地址: `https://oa.fjhxrl.com`
+- 接口路径: `/api/sys-notify/sysNotifyTodoRestService/getTodo`
+- Content-Type: `application/json`
+- 认证方式: Basic Auth
+
+## EKP接口管理中心
+
+### 概述
+EKP接口管理中心是一个统一的接口管理平台，用于管理所有蓝凌EKP系统的接口配置。支持官方接口和二开接口的统一管理。
+
+### 核心功能
+- **官方接口管理** - 管理蓝凌EKP官方提供的REST接口
+- **二开接口管理** - 管理企业二次开发的接口
+- **接口测试** - 在线测试接口调用
+- **接口配置** - 配置请求参数、响应解析规则
+- **批量管理** - 支持导入、导出接口配置
+
+### 数据库表结构
+- `ekp_official_interfaces` - 官方接口表
+  - `id` - 主键
+  - `code` - 接口代码（唯一标识）
+  - `name` - 接口名称
+  - `category` - 分类（document、organization、system、workflow等）
+  - `endpoint` - API路径
+  - `method` - HTTP方法
+  - `enabled` - 是否启用
+  - `metadata` - 元数据（JSON格式）
+  - `is_system` - 是否系统预置
+
+- 二开接口配置存储在文件：`ekp-custom-interfaces.yaml`
+
+### EKPInterfaceRegistry
+EKPInterfaceRegistry是接口注册中心，提供统一的接口访问入口。
+
+**核心方法：**
+```typescript
+// 获取接口配置
+ekpInterfaceRegistry.get(code: string)
+
+// 批量获取接口
+ekpInterfaceRegistry.getBatch(codes: string[])
+
+// 获取所有接口
+ekpInterfaceRegistry.getAll()
+
+// 按来源获取
+ekpInterfaceRegistry.getBySource(source: 'official' | 'custom')
+
+// 获取统计信息
+ekpInterfaceRegistry.getStats()
+
+// 创建官方接口
+ekpInterfaceRegistry.createOfficial(data)
+
+// 创建二开接口
+ekpInterfaceRegistry.createCustom(data)
+```
+
+### API 接口
+- `GET /api/admin/ekp-interfaces` - 获取接口列表
+  - 查询参数：`type` (official|custom)、`category`、`keyword`、`enabled`
+- `POST /api/admin/ekp-interfaces` - 创建接口
+  - 参数：`source` (official|custom) 和接口数据
+- `PUT /api/admin/ekp-interfaces/[id]` - 更新接口
+- `DELETE /api/admin/ekp-interfaces/[id]` - 删除接口
+- `POST /api/admin/ekp-interfaces/test` - 测试接口调用
+- `POST /api/admin/ekp-interfaces/reload` - 重载配置
+
+### 页面路由
+- `/admin/integration/ekp` - EKP配置页面
+  - "连接配置" Tab - 配置EKP连接信息
+  - "接口管理中心" Tab - 管理EKP接口
+
+### 使用示例
+
+**1. 通过接口代码调用EKP接口：**
+```typescript
+import { callEKPInterface } from '@/lib/ekp-client';
+
+// 调用待办数量接口
+const result = await callEKPInterface<{ count: string }>(
+  'ekp.todo.getTodo',
+  { type: 0 }
+);
+
+if (result.success) {
+  console.log('待办数量:', result.data);
+}
+```
+
+**2. 批量调用接口：**
+```typescript
+import { callEKPInterfacesBatch } from '@/lib/ekp-client';
+
+const results = await callEKPInterfacesBatch([
+  { code: 'ekp.todo.getTodo', params: { type: 0 } },
+  { code: 'ekp.org.getPerson', params: { personId: 'xxx' } },
+]);
+
+results.forEach(({ code, success, data, error }) => {
+  console.log(`${code}:`, success ? data : error);
+});
+```
+
+**3. 直接使用 EKPInterfaceRegistry：**
+```typescript
+import { ekpInterfaceRegistry } from '@/lib/ekp-interface-registry';
+
+// 获取接口配置
+const interfaceConfig = await ekpInterfaceRegistry.get('ekp.todo.getTodo');
+
+// 按分类获取接口
+const workflowInterfaces = await ekpInterfaceRegistry.getByCategory('workflow');
+
+// 获取统计信息
+const stats = await ekpInterfaceRegistry.getStats();
+console.log('总接口数:', stats.total);
+console.log('官方接口:', stats.official);
+console.log('二开接口:', stats.custom);
+```
+
+### 前端组件
+- `interfaces-panel.tsx` - 接口管理面板
+- `official-interfaces-table.tsx` - 官方接口表格
+- `custom-interfaces-table.tsx` - 二开接口表格
+- `interface-form-dialog.tsx` - 接口添加/编辑对话框
+- `interface-test-dialog.tsx` - 接口测试对话框
+
+### 权限要求
+- 只有 `admin` 角色的用户才能访问 EKP接口管理中心
+- 左侧导航栏会根据用户角色动态显示"EKP接口管理中心"菜单项
+
+### 相关文件
+- `src/lib/ekp-interface-registry.ts` - 接口注册中心
+- `src/lib/ekp-custom-interface-loader.ts` - 二开接口加载器
+- `src/lib/ekp-client.ts` - EKP客户端（已集成EKPInterfaceRegistry）
+- `ekp-custom-interfaces.yaml` - 二开接口配置文件
 - 接口路径: `/api/sys-notify/sysNotifyTodoRestService/getTodo`
 - Content-Type: `application/json`
 - 认证方式: Basic Auth

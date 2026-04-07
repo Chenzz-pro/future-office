@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -16,7 +16,16 @@ import {
 import InterfaceFormDialog from './interface-form-dialog';
 import InterfaceTestDialog from './interface-test-dialog';
 
-export default function OfficialInterfacesTable({ onRefresh }: { onRefresh?: () => void }) {
+interface OfficialInterfacesTableProps {
+  onRefresh?: () => void;
+}
+
+export interface OfficialInterfacesTableRef {
+  handleAdd: () => void;
+}
+
+const OfficialInterfacesTable = forwardRef<OfficialInterfacesTableRef, OfficialInterfacesTableProps>(
+  ({ onRefresh }, ref) => {
   const [interfaces, setInterfaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -28,6 +37,11 @@ export default function OfficialInterfacesTable({ onRefresh }: { onRefresh?: () 
   useEffect(() => {
     loadInterfaces();
   }, []);
+
+  // 暴露给父组件的方法
+  useImperativeHandle(ref, () => ({
+    handleAdd,
+  }));
 
   const loadInterfaces = async () => {
     try {
@@ -230,4 +244,8 @@ export default function OfficialInterfacesTable({ onRefresh }: { onRefresh?: () 
       )}
     </div>
   );
-}
+});
+
+OfficialInterfacesTable.displayName = 'OfficialInterfacesTable';
+
+export default OfficialInterfacesTable;

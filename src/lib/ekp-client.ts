@@ -1,10 +1,12 @@
 /**
  * EKP 业务接口适配器
  * 用于业务接口调用 EKP REST 客户端
+ * 集成了 EKPInterfaceRegistry 进行统一的接口管理
  */
 
 import { EKPRestClient } from './ekp-rest-client';
 import { dbManager } from './database/manager';
+import { ekpInterfaceRegistry, EKPInterface } from './ekp-interface-registry';
 
 // EKP 配置接口
 interface EKPClientConfig {
@@ -89,10 +91,177 @@ export async function approveTodo(params: {
 }
 
 /**
+ * 通用接口调用方法
+ * 通过接口代码调用 EKP 接口，自动从 EKPInterfaceRegistry 获取配置
+ */
+export async function callEKPInterface<T = unknown>(
+  code: string,
+  params?: Record<string, unknown>
+): Promise<{ success: boolean; data?: T; error?: string }> {
+  try {
+    // 1. 获取接口配置
+    const interfaceConfig = await ekpInterfaceRegistry.get(code);
+
+    if (!interfaceConfig) {
+      throw new Error(`接口 ${code} 不存在`);
+    }
+
+    // 2. 检查接口是否启用
+    if (!interfaceConfig.enabled) {
+      throw new Error(`接口 ${code} 未启用`);
+    }
+
+    // 3. 创建 EKP 客户端
+    const client = await createEKPClient();
+    if (!client) {
+      throw new Error('EKP 客户端未配置');
+    }
+
+    // 4. 获取 EKP 配置
+    const configs = await dbManager.query(`
+      SELECT base_url, username, password
+      FROM ekp_configs
+      WHERE enabled = TRUE
+      LIMIT 1
+    `);
+
+    if (configs.rows.length === 0) {
+      throw new Error('EKP 配置未找到');
+    }
+
+    const ekpConfig = configs.rows[0] as { base_url: string; username: string; password: string };
+
+    // 5. 生成 Basic Auth 头
+    const credentials = typeof Buffer !== 'undefined'
+      ? Buffer.from(`${ekpConfig.username}:${ekpConfig.password}`).toString('base64')
+      : btoa(`${ekpConfig.username}:${ekpConfig.password}`);
+
+    // 6. 构造请求
+    const endpoint = `${ekpConfig.base_url}${interfaceConfig.path}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Basic ${credentials}`,
+    };
+
+    // 7. 发送请求（EKP 主要使用 POST）
+    const response = await fetch(endpoint, {
+      method: 'POST', // EKP 接口主要使用 POST
+      headers,
+      body: params ? JSON.stringify(params) : undefined,
+    });
+
+    // 8. 处理响应
+    const text = await response.text();
+    let result: any;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      result = { text };
+    }
+
+    // 9. 检查响应状态
+    if (response.status === 302 || response.status === 401) {
+      throw new Error('认证失败：用户名或密码错误');
+    }
+
+    if (response.status === 403) {
+      throw new Error('权限不足');
+    }
+
+    if (response.status === 404) {
+      throw new Error('服务不存在');
+    }
+
+    if (response.status === 500) {
+      throw new Error(`服务端错误：${text.substring(0, 100)}`);
+    }
+
+    // 10. 检查业务状态
+    if (result.returnState === 2) {
+      // 成功
+      return {
+        success: true,
+        data: result.data || result.message,
+      };
+    } else if (result.returnState === 1) {
+      // 失败
+      throw new Error(result.message || '业务处理失败');
+    } else {
+      // 其他情况
+      return {
+        success: response.status === 200,
+        data: result,
+        error: response.status === 200 ? undefined : `HTTP ${response.status}`,
+      };
+    }
+  } catch (error) {
+    console.error('[EKPClient] 调用接口失败:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '未知错误',
+    };
+  }
+}
+
+/**
+ * 批量调用接口
+ */
+export async function callEKPInterfacesBatch(
+  calls: Array<{ code: string; params?: Record<string, unknown> }>
+): Promise<Array<{ code: string; success: boolean; data?: unknown; error?: string }>> {
+  // 批量获取接口配置
+  const codes = calls.map(c => c.code);
+  const interfaceMap = await ekpInterfaceRegistry.getBatch(codes);
+
+  // 并行调用接口
+  const results = await Promise.all(
+    calls.map(async ({ code, params }) => {
+      const interfaceConfig = interfaceMap.get(code);
+
+      if (!interfaceConfig) {
+        return {
+          code,
+          success: false,
+          error: `接口 ${code} 不存在`,
+        };
+      }
+
+      if (!interfaceConfig.enabled) {
+        return {
+          code,
+          success: false,
+          error: `接口 ${code} 未启用`,
+        };
+      }
+
+      try {
+        const result = await callEKPInterface(code, params);
+        return {
+          code,
+          ...result,
+        };
+      } catch (error) {
+        return {
+          code,
+          success: false,
+          error: error instanceof Error ? error.message : '未知错误',
+        };
+      }
+    })
+  );
+
+  return results;
+}
+
+/**
  * 导出便捷使用的接口
  */
 export const ekpClient = {
   getTodoCount,
   approveTodo,
   createClient: createEKPClient,
+  callInterface: callEKPInterface,
+  callInterfaceBatch: callEKPInterfacesBatch,
+  getRegistry: () => ekpInterfaceRegistry,
 };

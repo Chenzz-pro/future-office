@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -16,7 +16,16 @@ import { Input } from '@/components/ui/input';
 import InterfaceFormDialog from './interface-form-dialog';
 import InterfaceTestDialog from './interface-test-dialog';
 
-export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () => void }) {
+interface CustomInterfacesTableProps {
+  onRefresh?: () => void;
+}
+
+export interface CustomInterfacesTableRef {
+  handleAdd: () => void;
+}
+
+const CustomInterfacesTable = forwardRef<CustomInterfacesTableRef, CustomInterfacesTableProps>(
+  ({ onRefresh }, ref) => {
   const [interfaces, setInterfaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -28,6 +37,11 @@ export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () =>
   useEffect(() => {
     loadInterfaces();
   }, []);
+
+  // 暴露给父组件的方法
+  useImperativeHandle(ref, () => ({
+    handleAdd,
+  }));
 
   const loadInterfaces = async () => {
     try {
@@ -267,4 +281,8 @@ export default function CustomInterfacesTable({ onRefresh }: { onRefresh?: () =>
       )}
     </div>
   );
-}
+});
+
+CustomInterfacesTable.displayName = 'CustomInterfacesTable';
+
+export default CustomInterfacesTable;

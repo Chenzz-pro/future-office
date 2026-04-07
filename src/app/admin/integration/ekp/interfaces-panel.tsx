@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Plus, Upload, Download, RefreshCw, Loader2 } from 'lucide-react';
@@ -12,6 +12,10 @@ export default function EKPInterfacesPanel() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isReloading, setIsReloading] = useState(false);
+
+  // 使用 ref 来调用表格组件的方法
+  const officialTableRef = useRef<{ handleAdd: () => void }>(null);
+  const customTableRef = useRef<{ handleAdd: () => void }>(null);
 
   useEffect(() => {
     loadStats();
@@ -49,6 +53,14 @@ export default function EKPInterfacesPanel() {
       alert('重载失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setIsReloading(false);
+    }
+  };
+
+  const handleAdd = () => {
+    if (activeTab === 'official' && officialTableRef.current) {
+      officialTableRef.current.handleAdd();
+    } else if (activeTab === 'custom' && customTableRef.current) {
+      customTableRef.current.handleAdd();
     }
   };
 
@@ -97,7 +109,7 @@ export default function EKPInterfacesPanel() {
             <Download className="w-4 h-4 mr-2" />
             导出配置
           </Button>
-          <Button size="sm">
+          <Button size="sm" onClick={handleAdd}>
             <Plus className="w-4 h-4 mr-2" />
             添加接口
           </Button>
@@ -126,11 +138,11 @@ export default function EKPInterfacesPanel() {
         </TabsList>
 
         <TabsContent value="official" className="mt-4">
-          <OfficialInterfacesTable />
+          <OfficialInterfacesTable ref={officialTableRef} />
         </TabsContent>
 
         <TabsContent value="custom" className="mt-4">
-          <CustomInterfacesTable />
+          <CustomInterfacesTable ref={customTableRef} />
         </TabsContent>
       </Tabs>
     </div>
