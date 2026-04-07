@@ -203,3 +203,79 @@ custom:
       dataPath: data
     description: 二开：查询审批效率统计
     version: 1.0
+
+  # ============================================
+  # 组织架构类接口
+  # ============================================
+  - code: org.getElementsBaseInfo
+    name: 获取所有组织架构基本信息
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/getElementsBaseInfo
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      returnOrgType: '[]'
+      returnType: '[]'
+    response:
+      successPath: returnState == 2
+      dataPath: message
+      countPath: count
+    description: 获取所有组织架构基本信息（包含id, name, type, no, order, keyword等）
+    version: 1.0
+
+  - code: org.getUpdatedElements
+    name: 获取更新的组织架构信息（增量同步）
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/getUpdatedElements
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      returnOrgType: '[]'
+      count: 500
+      beginTimeStamp: "{beginTimeStamp}"
+    response:
+      successPath: returnState == 2
+      dataPath: message
+      countPath: count
+      timestampPath: timeStamp
+    description: 获取更新的组织架构信息（支持按时间戳增量同步）
+    version: 1.0
+
+  - code: org.getUpdatedElementsByToken
+    name: 分页获取更新的组织架构信息
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/getUpdatedElementsByToken
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      returnOrgType: '[]'
+      pageNo: 1
+      count: 500
+      token: "{token}"
+      beginTimeStamp: "{beginTimeStamp}"
+    response:
+      successPath: returnState == 2
+      dataPath: message
+      countPath: count
+      tokenPath: token
+    description: 分页获取更新的组织架构信息（防止大量数据一次性返回）
+    version: 1.0
+
+  - code: org.findByExtendPara
+    name: 根据扩展参数查询组织
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/findByExtendPara
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      extendPara: "{}"
+      count: 100
+    response:
+      successPath: returnState == 2
+      dataPath: message
+    description: 根据扩展参数查询组织（支持按ID、登录名、关键字等查询）
+    version: 1.0
