@@ -195,47 +195,19 @@ export class AssistantAgent {
     // 调用 oneAPI 生成响应
     try {
       console.log('[AssistantAgent] 开始调用 oneAPI，准备获取响应');
-      // 直接读取配置文件，避免依赖 dbManager 单例
-      const fs = await import('fs');
-      const path = await import('path');
-      const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
 
-      let dbConfig = null;
-      try {
-        if (fs.existsSync(CONFIG_FILE_PATH)) {
-          const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
-          dbConfig = JSON.parse(data);
-          console.log('[AssistantAgent] 从配置文件读取数据库配置');
-        }
-      } catch (err) {
-        console.error('[AssistantAgent] 读取配置文件失败:', err);
-      }
+      // 使用 Repository 从数据库读取 oneAPI 配置（参考 EKP 的加载方式）
+      const { getOneAPIConfigRepository } = await import('@/lib/database');
+      const oneApiConfigRepository = getOneAPIConfigRepository();
 
-      if (!dbConfig) {
-        console.log('[AssistantAgent] 未找到数据库配置，返回固定响应');
+      if (!oneApiConfigRepository) {
+        console.log('[AssistantAgent] oneAPI 配置表未初始化，返回固定响应');
         return this.getFixedResponse(context.message);
       }
 
-      // 创建临时连接池读取 oneAPI 配置
-      const mysql = (await import('mysql2/promise')).default;
-      const connection = await mysql.createConnection({
-        host: dbConfig.host,
-        port: dbConfig.port,
-        user: dbConfig.username,
-        password: dbConfig.password,
-        database: dbConfig.databaseName,
-      });
+      console.log('[AssistantAgent] 从数据库查询 oneAPI 配置');
+      const configs = await oneApiConfigRepository.findEnabled();
 
-      console.log('[AssistantAgent] 临时连接数据库成功');
-
-      // 查询启用的 oneAPI 配置
-      const [rows] = await connection.execute(
-        'SELECT * FROM oneapi_configs WHERE enabled = 1 LIMIT 1'
-      );
-
-      await connection.end();
-
-      const configs = rows as any[];
       if (!configs || configs.length === 0) {
         console.log('[AssistantAgent] 未找到启用的 oneAPI 配置，返回固定响应');
         return this.getFixedResponse(context.message);

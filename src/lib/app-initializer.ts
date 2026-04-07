@@ -10,6 +10,7 @@ import { dbManager, databaseConfigRepository } from '@/lib/database';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseConfig } from '@/lib/database';
+import { getOneAPIConfigRepository } from '@/lib/database';
 
 // 配置文件路径（用于存储数据库连接信息）
 const CONFIG_FILE_PATH = path.join(process.cwd(), '.db-config.json');
