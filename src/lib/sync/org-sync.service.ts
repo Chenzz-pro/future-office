@@ -18,6 +18,7 @@ export interface SyncOptions {
   operatorName?: string;
   beginTimeStamp?: string;
   returnOrgType?: Array<{ type: string }>;
+  orgIds?: string[];
 }
 
 export interface SyncResult {
@@ -59,11 +60,11 @@ export class OrgSyncService {
       triggered_by: 'manual',
       operator_id: options.operatorId,
       operator_name: options.operatorName,
-      remark: '全量同步'
+      remark: options.orgIds ? `全量同步（${options.orgIds.length}个机构）` : '全量同步'
     });
 
     try {
-      console.log(`[全量同步] 开始同步，同步ID: ${syncLogId}`);
+      console.log(`[全量同步] 开始同步，同步ID: ${syncLogId}，机构范围: ${options.orgIds ? `${options.orgIds.length} 个机构` : '全部'}`);
 
       // 调用EKP接口获取全部数据
       const ekpResult = await callEKPInterface<{
@@ -76,9 +77,15 @@ export class OrgSyncService {
       });
 
       if (ekpResult.success && ekpResult.data?.returnState === 2) {
-        const ekpData = ekpResult.data.message || [];
+        let ekpData = ekpResult.data.message || [];
 
         console.log(`[全量同步] 从EKP获取到 ${ekpData.length} 条数据`);
+
+        // 如果指定了机构范围，过滤数据
+        if (options.orgIds && options.orgIds.length > 0) {
+          ekpData = this.filterByOrgIds(ekpData, options.orgIds);
+          console.log(`[全量同步] 过滤后剩余 ${ekpData.length} 条数据`);
+        }
 
         // 数据处理
         const result = await this.processOrgData(ekpData, {
@@ -140,6 +147,34 @@ export class OrgSyncService {
         message: error instanceof Error ? error.message : String(error)
       };
     }
+  }
+
+  /**
+   * 根据机构ID范围过滤数据
+   * 包含选中机构及其所有子机构
+   */
+  private filterByOrgIds(data: EKPOrgElement[], orgIds: string[]): EKPOrgElement[] {
+    // 构建所有需要包含的ID集合
+    const includeIds = new Set<string>(orgIds);
+
+    // 递归获取所有子机构ID
+    const getAllChildIds = (parentId: string) => {
+      const children = data.filter(item => item.parent === parentId);
+      children.forEach(child => {
+        if (!includeIds.has(child.id)) {
+          includeIds.add(child.id);
+          getAllChildIds(child.id);
+        }
+      });
+    };
+
+    // 为每个选中的机构获取其所有子机构
+    orgIds.forEach(orgId => {
+      getAllChildIds(orgId);
+    });
+
+    // 过滤数据
+    return data.filter(item => includeIds.has(item.id) || (item.parent && includeIds.has(item.parent)));
   }
 
   /**
@@ -335,6 +370,7 @@ export class OrgSyncService {
     duration: number;
   }> {
     const startTime = Date.now();
+    const totalItems = ekpData.length;
 
     // 数据清洗
     const filteredData = await orgSyncMapper.filterData(ekpData);
@@ -357,8 +393,16 @@ export class OrgSyncService {
     try {
       // 处理组织元素（分批处理）
       const batchSize = await orgSyncConfigRepository.getNumber('sync.batch_size', 500) || 500;
+      let processedCount = 0;
 
       for (let i = 0; i < elements.length; i += batchSize) {
+        // 检查是否已取消
+        const currentLog = await orgSyncLogRepository.findById(options.syncLogId);
+        if (currentLog?.status === 'cancelled') {
+          console.log('[数据处理] 同步已取消，停止处理');
+          throw new Error('同步已取消');
+        }
+
         const batch = elements.slice(i, i + batchSize);
         const batchResult = await this.processElementsBatch(batch, options.syncLogId);
         insertCount += batchResult.insert;
@@ -366,10 +410,21 @@ export class OrgSyncService {
         deleteCount += batchResult.delete;
         errorCount += batchResult.error;
         details.push(...batchResult.details);
+
+        // 更新进度
+        processedCount += batch.length;
+        await this.updateProgress(options.syncLogId, processedCount, totalItems, insertCount, updateCount, deleteCount, errorCount);
       }
 
       // 处理人员（分批处理）
       for (let i = 0; i < persons.length; i += batchSize) {
+        // 检查是否已取消
+        const currentLog = await orgSyncLogRepository.findById(options.syncLogId);
+        if (currentLog?.status === 'cancelled') {
+          console.log('[数据处理] 同步已取消，停止处理');
+          throw new Error('同步已取消');
+        }
+
         const batch = persons.slice(i, i + batchSize);
         const batchResult = await this.processPersonsBatch(batch, options.syncLogId);
         insertCount += batchResult.insert;
@@ -377,6 +432,10 @@ export class OrgSyncService {
         deleteCount += batchResult.delete;
         errorCount += batchResult.error;
         details.push(...batchResult.details);
+
+        // 更新进度
+        processedCount += batch.length;
+        await this.updateProgress(options.syncLogId, processedCount, totalItems, insertCount, updateCount, deleteCount, errorCount);
       }
 
       // 保存同步明细
@@ -409,6 +468,35 @@ export class OrgSyncService {
     } catch (error) {
       console.error('[数据处理] 处理失败:', error);
       throw error;
+    }
+  }
+
+  /**
+   * 更新同步进度
+   */
+  private async updateProgress(
+    syncLogId: string,
+    processedCount: number,
+    totalCount: number,
+    insertCount: number,
+    updateCount: number,
+    deleteCount: number,
+    errorCount: number
+  ): Promise<void> {
+    try {
+      const progress = Math.round((processedCount / totalCount) * 100);
+      await orgSyncLogRepository.update(syncLogId, {
+        total_count: totalCount,
+        insert_count: insertCount,
+        update_count: updateCount,
+        delete_count: deleteCount,
+        error_count: errorCount
+        // 可以添加一个 remark 字段来显示进度信息
+        // remark: `进度: ${progress}% (${processedCount}/${totalCount})`
+      });
+      console.log(`[进度更新] ${progress}% (${processedCount}/${totalCount})`);
+    } catch (error) {
+      console.error('[进度更新] 更新失败:', error);
     }
   }
 

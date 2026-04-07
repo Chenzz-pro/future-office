@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
       leaveTemplateId: body.leaveTemplateId || '',
       expenseTemplateId: body.expenseTemplateId || '',
       enabled: body.enabled || false,
+      authAreaId: body.authAreaId || '',
       userId: SYSTEM_USER_ID,
     });
 

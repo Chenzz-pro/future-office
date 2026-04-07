@@ -18,6 +18,7 @@ export interface EKPConfig {
   serviceId: string;
   leaveTemplateId: string;
   expenseTemplateId: string;
+  authAreaId: string;
   enabled: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -50,6 +51,7 @@ export class EKPConfigRepository {
       serviceId: data.serviceId,
       leaveTemplateId: data.leaveTemplateId,
       expenseTemplateId: data.expenseTemplateId,
+      authAreaId: data.authAreaId,
       enabled: data.enabled,
     });
 
@@ -129,6 +131,7 @@ export class EKPConfigRepository {
       serviceId: data.serviceId ?? existing.serviceId,
       leaveTemplateId: data.leaveTemplateId ?? existing.leaveTemplateId,
       expenseTemplateId: data.expenseTemplateId ?? existing.expenseTemplateId,
+      authAreaId: data.authAreaId ?? existing.authAreaId,
       enabled: data.enabled !== undefined ? data.enabled : existing.enabled,
     };
 
@@ -188,6 +191,7 @@ export class EKPConfigRepository {
       serviceId: config.serviceId || '',
       leaveTemplateId: config.leaveTemplateId || '',
       expenseTemplateId: config.expenseTemplateId || '',
+      authAreaId: config.authAreaId || '',
       enabled: config.enabled ?? false,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

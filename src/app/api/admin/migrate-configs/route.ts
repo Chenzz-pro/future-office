@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
           leaveTemplateId: ekpConfig.leaveTemplateId || '',
           expenseTemplateId: ekpConfig.expenseTemplateId || '',
           enabled: ekpConfig.enabled || false,
+          authAreaId: ekpConfig.authAreaId || '',
           userId: SYSTEM_USER_ID,
         });
         results.ekpConfig.success = true;

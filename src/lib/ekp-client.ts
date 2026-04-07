@@ -49,7 +49,14 @@ export async function createEKPClient(): Promise<EKPRestClient | null> {
     };
 
     console.log('[EKPClient] 最终配置:', JSON.stringify(config));
-    return new EKPRestClient(config);
+    return new EKPRestClient({
+      baseUrl: config.baseUrl,
+      username: config.username,
+      password: config.password,
+      apiPath: config.apiPath,
+      serviceId: config.serviceId || 'default',
+      enabled: true,
+    });
   } catch (error) {
     console.error('[EKPClient] 创建 EKP 客户端失败:', error);
     return null;
@@ -129,7 +136,7 @@ export async function callEKPInterface<T = unknown>(
 
     // 4. 获取 EKP 配置（用于认证）
     const configs = await dbManager.query(`
-      SELECT ekp_address, username, password
+      SELECT ekp_address, username, password, config
       FROM ekp_configs
       LIMIT 1
     `);
@@ -138,26 +145,34 @@ export async function callEKPInterface<T = unknown>(
       throw new Error('EKP 配置未找到');
     }
 
-    const ekpConfig = configs.rows[0] as { ekp_address: string; username: string; password: string };
+    const row = configs.rows[0] as { ekp_address: string; username: string; password: string; config: string };
+    const configJson = typeof row.config === 'string' ? JSON.parse(row.config) : row.config || {};
+    const authAreaId = configJson.authAreaId || '';
 
     // 5. 生成 Basic Auth 头
     const credentials = typeof Buffer !== 'undefined'
-      ? Buffer.from(`${ekpConfig.username}:${ekpConfig.password}`).toString('base64')
-      : btoa(`${ekpConfig.username}:${ekpConfig.password}`);
+      ? Buffer.from(`${row.username}:${row.password}`).toString('base64')
+      : btoa(`${row.username}:${row.password}`);
 
     // 6. 构造请求
-    const endpoint = `${ekpConfig.ekp_address}${interfaceConfig.path}`;
+    const endpoint = `${row.ekp_address}${interfaceConfig.path}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Basic ${credentials}`,
     };
 
-    // 7. 发送请求（EKP 主要使用 POST）
+    // 7. 构造请求体（包含authAreaId）
+    const requestBody = {
+      ...params,
+      authAreaId: authAreaId || undefined,
+    };
+
+    // 8. 发送请求（EKP 主要使用 POST）
     const response = await fetch(endpoint, {
       method: 'POST', // EKP 接口主要使用 POST
       headers,
-      body: params ? JSON.stringify(params) : undefined,
+      body: Object.keys(requestBody).length > 0 ? JSON.stringify(requestBody) : undefined,
     });
 
     // 8. 处理响应

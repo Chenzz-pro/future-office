@@ -112,6 +112,74 @@ export default function OrgSyncPage() {
     avgDuration: 0,
     lastSyncTime: null as string | null
   });
+  const [isOrgSelectorOpen, setIsOrgSelectorOpen] = useState(false);
+  const [orgTree, setOrgTree] = useState<any[]>([]);
+  const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>([]);
+  const [syncProgress, setSyncProgress] = useState<{
+    percentage: number;
+    processed: number;
+    total: number;
+    insert: number;
+    update: number;
+    delete: number;
+    error: number;
+  } | null>(null);
+
+  // 加载机构树数据
+  useEffect(() => {
+    loadOrgTree();
+  }, []);
+
+  const loadOrgTree = async () => {
+    try {
+      const response = await fetch('/api/organization?action=tree&type=1');
+      const result = await response.json();
+      if (result.success) {
+        setOrgTree(result.data || []);
+      }
+    } catch (error) {
+      console.error('加载机构树失败:', error);
+    }
+  };
+
+  // 轮询同步进度
+  useEffect(() => {
+    if (syncing && syncStatus?.runningSync) {
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch('/api/org-sync/logs/' + syncStatus.runningSync.id);
+          const result = await response.json();
+          if (result.success && result.data) {
+            const log = result.data;
+            const processed = log.insert_count + log.update_count + log.delete_count;
+            const percentage = log.total_count > 0 ? Math.round((processed / log.total_count) * 100) : 0;
+
+            setSyncProgress({
+              percentage,
+              processed,
+              total: log.total_count || 0,
+              insert: log.insert_count || 0,
+              update: log.update_count || 0,
+              delete: log.delete_count || 0,
+              error: log.error_count || 0
+            });
+
+            // 如果同步完成或失败，停止轮询
+            if (log.status === 'completed' || log.status === 'failed' || log.status === 'cancelled') {
+              setSyncProgress(null);
+              setSyncing(false);
+              setSyncingType(null);
+              loadData();
+            }
+          }
+        } catch (error) {
+          console.error('获取同步进度失败:', error);
+        }
+      }, 2000); // 每2秒查询一次
+
+      return () => clearInterval(interval);
+    }
+  }, [syncing, syncStatus?.runningSync]);
 
   // 加载数据
   useEffect(() => {
@@ -177,6 +245,7 @@ export default function OrgSyncPage() {
   };
 
   const triggerSync = async (syncType: 'full' | 'incremental') => {
+    // 增量同步直接执行
     setSyncing(true);
     setSyncingType(syncType);
     try {
@@ -202,6 +271,94 @@ export default function OrgSyncPage() {
     } finally {
       setSyncing(false);
       setSyncingType(null);
+    }
+  };
+
+  const handleOrgSync = async () => {
+    setIsOrgSelectorOpen(false);
+    setSyncing(true);
+    setSyncingType('full');
+    try {
+      const response = await fetch('/api/org-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          syncType: 'full',
+          operatorId: 'admin',
+          operatorName: '管理员',
+          orgIds: selectedOrgIds.length > 0 ? selectedOrgIds : undefined
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        // 等待一段时间后刷新数据
+        setTimeout(loadData, 2000);
+      }
+    } catch (error) {
+      console.error('触发同步失败:', error);
+    } finally {
+      setSyncing(false);
+      setSyncingType(null);
+      setSelectedOrgIds([]);
+    }
+  };
+
+  const cancelSync = async () => {
+    try {
+      const response = await fetch('/api/org-sync', {
+        method: 'DELETE'
+      });
+      const result = await response.json();
+      if (result.success) {
+        console.log('同步已取消');
+        loadData();
+      } else {
+        console.error('取消同步失败:', result.message);
+      }
+    } catch (error) {
+      console.error('取消同步失败:', error);
+    }
+  };
+
+  const retrySync = async (syncLogId: string) => {
+    try {
+      // 获取失败的同步日志
+      const response = await fetch(`/api/org-sync/logs/${syncLogId}`);
+      const result = await response.json();
+      if (!result.success || !result.data) {
+        console.error('获取同步日志失败:', result.message);
+        return;
+      }
+
+      const log = result.data;
+
+      // 使用相同的参数重新触发同步
+      const syncResponse = await fetch('/api/org-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          syncType: log.sync_type,
+          operatorId: log.operator_id || 'admin',
+          operatorName: log.operator_name || '管理员',
+          // 如果有机构范围，尝试传递（需要后端支持）
+          // orgIds: log.org_scope ? JSON.parse(log.org_scope as string) : undefined
+        })
+      });
+
+      const syncResult = await syncResponse.json();
+      if (syncResult.success) {
+        console.log('重试同步已启动');
+        loadData();
+      } else {
+        console.error('重试同步失败:', syncResult.message);
+      }
+    } catch (error) {
+      console.error('重试同步失败:', error);
     }
   };
 
@@ -446,8 +603,58 @@ export default function OrgSyncPage() {
                 </Button>
               </div>
               {syncing && (
-                <div className="text-sm text-muted-foreground text-center">
-                  正在执行{syncingType === 'full' ? '全量' : '增量'}同步...
+                <div className="space-y-3">
+                  {syncProgress ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          同步进度: {syncProgress.percentage}%
+                        </span>
+                        <span className="text-muted-foreground">
+                          {syncProgress.processed}/{syncProgress.total}
+                        </span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div
+                          className="bg-primary h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${syncProgress.percentage}%` }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 text-xs">
+                        <div className="text-center">
+                          <div className="font-medium text-green-600">{syncProgress.insert}</div>
+                          <div className="text-muted-foreground">新增</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-medium text-blue-600">{syncProgress.update}</div>
+                          <div className="text-muted-foreground">更新</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-medium text-orange-600">{syncProgress.delete}</div>
+                          <div className="text-muted-foreground">删除</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-medium text-red-600">{syncProgress.error}</div>
+                          <div className="text-muted-foreground">错误</div>
+                        </div>
+                      </div>
+                      <div className="flex justify-center pt-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={cancelSync}
+                          className="w-full"
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          取消同步
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground text-center">
+                      正在执行{syncingType === 'full' ? '全量' : '增量'}同步...
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -542,13 +749,25 @@ export default function OrgSyncPage() {
                         </TableCell>
                         <TableCell>{log.operator_name || log.triggered_by}</TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => viewLogDetails(log.id)}
-                          >
-                            详情
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => viewLogDetails(log.id)}
+                            >
+                              详情
+                            </Button>
+                            {log.status === 'failed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => retrySync(log.id)}
+                                title="重试同步"
+                              >
+                                <RefreshCw className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -727,11 +946,86 @@ export default function OrgSyncPage() {
             <Button
               onClick={() => {
                 setIsFullSyncDialogOpen(false);
-                triggerSync('full');
+                setIsOrgSelectorOpen(true);
               }}
             >
-              确认同步
+              选择同步范围
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 机构选择对话框 */}
+      <Dialog open={isOrgSelectorOpen} onOpenChange={setIsOrgSelectorOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>选择同步范围</DialogTitle>
+            <DialogDescription>
+              选择要同步的机构范围，不选择则同步全部机构
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="checkbox"
+                  id="select-all-org"
+                  checked={selectedOrgIds.length === orgTree.length && orgTree.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedOrgIds(orgTree.map(org => org.id));
+                    } else {
+                      setSelectedOrgIds([]);
+                    }
+                  }}
+                />
+                <label htmlFor="select-all-org" className="text-sm font-medium">
+                  全选
+                </label>
+              </div>
+              <div className="border rounded-lg p-4 space-y-2 max-h-[400px] overflow-y-auto">
+                {orgTree.map((org) => (
+                  <div key={org.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`org-${org.id}`}
+                      checked={selectedOrgIds.includes(org.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedOrgIds([...selectedOrgIds, org.id]);
+                        } else {
+                          setSelectedOrgIds(selectedOrgIds.filter(id => id !== org.id));
+                        }
+                      }}
+                    />
+                    <label htmlFor={`org-${org.id}`} className="text-sm">
+                      <Building className="w-4 h-4 inline mr-1" />
+                      {org.fd_name}
+                    </label>
+                  </div>
+                ))}
+                {orgTree.length === 0 && (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    暂无机构数据，请先同步组织架构
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsOrgSelectorOpen(false);
+                  setSelectedOrgIds([]);
+                }}
+              >
+                取消
+              </Button>
+              <Button onClick={handleOrgSync}>
+                <Play className="w-4 h-4 mr-2" />
+                开始同步 ({selectedOrgIds.length > 0 ? `已选择 ${selectedOrgIds.length} 个机构` : '全部机构'})
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
