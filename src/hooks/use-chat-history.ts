@@ -235,26 +235,32 @@ export function useChatHistory() {
                     title,
                   };
                 }
-                // 如果没有消息，返回 null，稍后过滤掉
-                console.log('[useChatHistory] 会话没有消息，将被过滤:', session.id);
-                return null;
+                // 如果没有消息，仍然保留会话，只是消息为空
+                console.log('[useChatHistory] 会话没有消息，但保留会话:', session.id);
+                return {
+                  ...session,
+                  messages: [],
+                  preview: '暂无消息',
+                };
               } catch (error) {
                 console.error('[useChatHistory] 加载会话消息失败:', session.id, error);
-                return null;
+                // 即使加载失败，也保留会话，只是消息为空
+                return {
+                  ...session,
+                  messages: [],
+                  preview: '消息加载失败',
+                };
               }
             })
           );
 
-          // 过滤掉没有消息的会话
-          const validSessions = sessionsWithMessages.filter((s): s is ChatSession => s !== null);
-
+          // 不再过滤掉没有消息的会话
           console.log('[useChatHistory] 从数据库加载完成:', {
             total: dbSessions.length,
-            valid: validSessions.length,
-            filtered: dbSessions.length - validSessions.length,
+            valid: sessionsWithMessages.length,
           });
 
-          setSessions(validSessions);
+          setSessions(sessionsWithMessages.filter((s): s is ChatSession => s !== null));
           setIsOnline(true);
         }
       } catch (error) {
@@ -497,28 +503,101 @@ export function useChatHistory() {
 
   // 加载指定会话
   const loadSession = useCallback(async (sessionId: string) => {
-    const session = sessions.find(s => s.id === sessionId);
-    if (session) {
-      setCurrentSession(session);
-      
-      // 尝试从数据库加载最新消息
-      try {
-        if (isOnline) {
-          const result = await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`);
-          if (result.success && result.data.length > session.messages.length) {
-            const messages: Message[] = result.data.map((m: Record<string, unknown>) => ({
-              id: m.id as string,
-              role: m.role as 'user' | 'assistant' | 'system',
-              content: m.content as string,
-              timestamp: new Date((m.createdAt as Date).toISOString()), // 转换为 Date 对象
-            }));
+    console.log('[useChatHistory] 开始加载会话:', sessionId);
 
-            await updateSession(sessionId, { messages });
+    // 从 sessions 列表中查找会话
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) {
+      console.log('[useChatHistory] 会话不在列表中，尝试从数据库直接加载');
+      // 如果会话不在列表中，尝试从数据库直接加载
+      try {
+        // 1. 先获取会话信息
+        const sessionResult = await fetchWithAuth(`/api/chat/sessions/${sessionId}`);
+        if (!sessionResult.success) {
+          console.error('[useChatHistory] 加载会话信息失败');
+          return;
+        }
+
+        const sessionData = sessionResult.data;
+        const loadedSession: ChatSession = {
+          id: sessionData.id,
+          title: sessionData.title,
+          preview: '',
+          messages: [],
+          createdAt: sessionData.createdAt,
+          updatedAt: sessionData.updatedAt,
+          model: 'default',
+          provider: 'default',
+        };
+
+        // 2. 加载消息
+        const messagesResult = await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`);
+        if (messagesResult.success && messagesResult.data.length > 0) {
+          const messages: Message[] = messagesResult.data.map((m: Record<string, unknown>) => ({
+            id: m.id as string,
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: m.content as string,
+            timestamp: new Date((m.createdAt as Date).toISOString()),
+          }));
+
+          // 更新预览和标题
+          const lastMessage = messages[messages.length - 1];
+          loadedSession.preview = lastMessage?.content?.slice(0, 50) || '';
+          loadedSession.messages = messages;
+
+          const firstUserMessage = messages.find(m => m.role === 'user');
+          if (firstUserMessage) {
+            loadedSession.title = firstUserMessage.content.slice(0, 30) + (firstUserMessage.content.length > 30 ? '...' : '');
           }
         }
+
+        setCurrentSession(loadedSession);
+        console.log('[useChatHistory] 从数据库直接加载会话成功:', sessionId);
+        return;
       } catch (error) {
-        console.error('[useChatHistory] 加载消息失败:', error);
+        console.error('[useChatHistory] 从数据库直接加载会话失败:', error);
+        return;
       }
+    }
+
+    // 会话在列表中，先设置当前会话
+    setCurrentSession(session);
+
+    // 始终从数据库加载最新消息，不管 session.messages 是否为空
+    try {
+      if (isOnline) {
+        const result = await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`);
+        if (result.success) {
+          const messages: Message[] = result.data.map((m: Record<string, unknown>) => ({
+            id: m.id as string,
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: m.content as string,
+            timestamp: new Date((m.createdAt as Date).toISOString()),
+          }));
+
+          console.log('[useChatHistory] 加载消息成功:', {
+            sessionId,
+            messageCount: messages.length,
+          });
+
+          // 直接更新 currentSession 的消息，避免依赖 updateSession 的异步特性
+          const updatedSession = {
+            ...session,
+            messages,
+            preview: messages.length > 0 ? messages[messages.length - 1].content.slice(0, 50) : '',
+            updatedAt: new Date().toISOString(),
+          };
+
+          setCurrentSession(updatedSession);
+
+          // 同时也更新 sessions 列表中的会话
+          const newSessions = sessions.map(s => s.id === sessionId ? updatedSession : s);
+          saveToLocal(newSessions);
+          setSessions(newSessions);
+        }
+      }
+    } catch (error) {
+      console.error('[useChatHistory] 加载消息失败:', error);
     }
   }, [sessions, updateSession, isOnline]);
 
