@@ -1,351 +1,116 @@
 /**
- * 个人助理Agent
+ * 助理智能体
  * 负责：日程管理、提醒通知、个人事务
  */
 
-import { ASSISTANT_AGENT_CONFIG } from '@/lib/constants/agents';
-import { oneAPIManager } from '@/lib/oneapi';
-import type {
-  AgentContext,
-  AgentResult,
-  Intent,
-} from '@/types/agent';
+import { BaseBusinessAgent } from './base-business-agent';
 
-/**
- * 个人助理Agent类
- */
-export class AssistantAgent {
-  private config = ASSISTANT_AGENT_CONFIG;
+export class AssistantAgent extends BaseBusinessAgent {
+  constructor() {
+    super('assistant');
+  }
 
   /**
-   * 处理请求
-   * @param context 上下文
-   * @param intent 意图
+   * 调用技能
+   * @param skillCode 技能代码
+   * @param params 参数
    * @returns 执行结果
    */
-  async process(
-    context: AgentContext,
-    intent: Intent
-  ): Promise<AgentResult> {
-    console.log('[AssistantAgent] 开始处理请求', {
-      userId: context.userId,
-      message: context.message,
-      skill: intent.skill,
-    });
+  protected async callSkill(skillCode: string, params: Record<string, any>): Promise<any> {
+    console.log('[AssistantAgent] 调用技能:', skillCode, params);
 
-    try {
-      const skill = intent.skill || this.inferSkill(context.message);
-
-      switch (skill) {
-        case 'schedule.list':
-          return await this.getSchedule(context);
-        case 'schedule.create':
-          return await this.createSchedule(context);
-        case 'reminder.add':
-          return await this.addReminder(context);
-        case 'profile.query':
-          return await this.queryProfile(context);
-        case 'general':
-          return await this.generalChat(context);
-        default:
-          return await this.generalChat(context);
-      }
-    } catch (error) {
-      console.error('[AssistantAgent] 处理失败', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '处理失败',
-        agentType: 'assistant',
-      };
+    // TODO: 实际调用日程管理接口
+    switch (skillCode) {
+      case 'schedule.list':
+        return this.getSchedule(params);
+      case 'schedule.create':
+        return this.createSchedule(params);
+      case 'schedule.update':
+        return this.updateSchedule(params);
+      case 'schedule.delete':
+        return this.deleteSchedule(params);
+      case 'reminder.add':
+        return this.addReminder(params);
+      case 'profile.query':
+        return this.queryProfile(params);
+      default:
+        throw new Error(`未知技能: ${skillCode}`);
     }
   }
 
   /**
-   * 推断技能
+   * 查询日程
    */
-  private inferSkill(message: string): string {
-    const lowerMessage = message.toLowerCase();
-
-    if (
-      lowerMessage.includes('日程') ||
-      lowerMessage.includes('安排')
-    ) {
-      if (
-        lowerMessage.includes('添加') ||
-        lowerMessage.includes('创建') ||
-        lowerMessage.includes('新增')
-      ) {
-        return 'schedule.create';
-      }
-      return 'schedule.list';
-    }
-
-    if (
-      lowerMessage.includes('提醒') ||
-      lowerMessage.includes('闹钟')
-    ) {
-      return 'reminder.add';
-    }
-
-    if (
-      lowerMessage.includes('个人') ||
-      lowerMessage.includes('信息') ||
-      lowerMessage.includes('资料')
-    ) {
-      return 'profile.query';
-    }
-
-    return 'general';
-  }
-
-  /**
-   * 获取日程
-   */
-  private async getSchedule(
-    context: AgentContext
-  ): Promise<AgentResult> {
-    console.log('[AssistantAgent] 获取日程', { userId: context.userId });
-
+  private async getSchedule(params: Record<string, any>): Promise<any> {
+    // TODO: 调用日程查询接口
     return {
       success: true,
-      data: {
-        type: 'schedule.list',
-        content: '您今天的日程安排如下：\n- 09:00 项目周会\n- 14:00 客户会议\n- 16:00 文档编写',
-        details: [
-          { time: '09:00', event: '项目周会', location: '会议室A' },
-          { time: '14:00', event: '客户会议', location: '会议室B' },
-          { time: '16:00', event: '文档编写', location: '办公室' },
-        ],
-      },
-      agentType: 'assistant',
+      data: [
+        { id: '1', title: '部门例会', time: '2026-04-07 14:00', location: '会议室A' },
+        { id: '2', title: '客户会议', time: '2026-04-07 16:00', location: '线上' },
+      ],
     };
   }
 
   /**
    * 创建日程
    */
-  private async createSchedule(
-    context: AgentContext
-  ): Promise<AgentResult> {
-    console.log('[AssistantAgent] 创建日程', { userId: context.userId });
-
+  private async createSchedule(params: Record<string, any>): Promise<any> {
+    // TODO: 调用日程创建接口
     return {
       success: true,
-      data: {
-        type: 'schedule.create',
-        content: '日程已添加',
-        details: {
-          message: '您的日程已成功添加',
-        },
-      },
-      agentType: 'assistant',
+      data: { message: '日程创建成功', scheduleId: 'sch-123' },
+    };
+  }
+
+  /**
+   * 更新日程
+   */
+  private async updateSchedule(params: Record<string, any>): Promise<any> {
+    // TODO: 调用日程更新接口
+    return {
+      success: true,
+      data: { message: '日程更新成功' },
+    };
+  }
+
+  /**
+   * 删除日程
+   */
+  private async deleteSchedule(params: Record<string, any>): Promise<any> {
+    // TODO: 调用日程删除接口
+    return {
+      success: true,
+      data: { message: '日程已删除' },
     };
   }
 
   /**
    * 添加提醒
    */
-  private async addReminder(
-    context: AgentContext
-  ): Promise<AgentResult> {
-    console.log('[AssistantAgent] 添加提醒', { userId: context.userId });
-
+  private async addReminder(params: Record<string, any>): Promise<any> {
+    // TODO: 调用提醒添加接口
     return {
       success: true,
-      data: {
-        type: 'reminder.add',
-        content: '提醒已设置',
-        details: {
-          message: '您的提醒已成功设置',
-        },
-      },
-      agentType: 'assistant',
+      data: { message: '提醒已添加', reminderId: 'rem-123' },
     };
   }
 
   /**
    * 查询个人资料
    */
-  private async queryProfile(
-    context: AgentContext
-  ): Promise<AgentResult> {
-    console.log('[AssistantAgent] 查询个人资料', { userId: context.userId });
-
+  private async queryProfile(params: Record<string, any>): Promise<any> {
+    // TODO: 调用个人资料查询接口
     return {
       success: true,
       data: {
-        type: 'profile.query',
-        content: '您的个人资料信息',
-        details: {
-          message: '这是您的个人资料信息',
-        },
+        name: '张三',
+        department: '技术部',
+        email: 'zhangsan@example.com',
+        phone: '13800138000',
       },
-      agentType: 'assistant',
-    };
-  }
-
-  /**
-   * 通用对话
-   */
-  private async generalChat(
-    context: AgentContext
-  ): Promise<AgentResult> {
-    console.log('[AssistantAgent] 通用对话', { userId: context.userId });
-
-    // 调用 oneAPI 生成响应
-    try {
-      console.log('[AssistantAgent] 开始调用 oneAPI，准备获取响应');
-
-      // 使用 Repository 从数据库读取 oneAPI 配置（参考 EKP 的加载方式）
-      const { getOneAPIConfigRepository } = await import('@/lib/database');
-      const oneApiConfigRepository = getOneAPIConfigRepository();
-
-      if (!oneApiConfigRepository) {
-        console.log('[AssistantAgent] oneAPI 配置表未初始化，返回固定响应');
-        return this.getFixedResponse(context.message);
-      }
-
-      console.log('[AssistantAgent] 从数据库查询 oneAPI 配置');
-      const configs = await oneApiConfigRepository.findEnabled();
-
-      if (!configs || configs.length === 0) {
-        console.log('[AssistantAgent] 未找到启用的 oneAPI 配置，返回固定响应');
-        return this.getFixedResponse(context.message);
-      }
-
-      const config = configs[0];
-      console.log('[AssistantAgent] 使用 oneAPI 配置:', {
-        name: config.name,
-        baseUrl: config.base_url,
-        model: config.model,
-        enabled: config.enabled,
-      });
-
-      if (!config.enabled) {
-        console.log('[AssistantAgent] oneAPI 未启用，返回固定响应');
-        return this.getFixedResponse(context.message);
-      }
-
-      console.log('[AssistantAgent] 调用 oneAPI 生成响应');
-
-      // 创建 oneAPI 客户端
-      const { OneAPIClient } = await import('@/lib/oneapi/client');
-      const client = new OneAPIClient({
-        id: config.id,
-        name: config.name,
-        baseUrl: config.base_url,
-        apiKey: config.api_key,
-        model: config.model,
-        enabled: config.enabled,
-        createdAt: config.created_at,
-        updatedAt: config.updated_at,
-      });
-
-      // 构建消息列表
-      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-        {
-          role: 'system' as const,
-          content: '你是企业OA系统的个人助理，负责回答用户的各种问题。请用友好、专业的语气回答。',
-        },
-      ];
-
-      // 如果有对话历史，添加到消息列表中
-      if (context.conversationHistory && context.conversationHistory.length > 0) {
-        const historyMessages = context.conversationHistory.map((msg) => {
-          // 确保角色类型正确，只允许 'system'、'user' 或 'assistant'
-          let role: 'system' | 'user' | 'assistant' = 'user';
-          if (msg.role === 'assistant') {
-            role = 'assistant';
-          } else if (msg.role === 'system') {
-            role = 'system';
-          } else {
-            role = 'user';
-          }
-
-          return {
-            role,
-            content: msg.content,
-          };
-        });
-        messages.push(...historyMessages);
-      }
-
-      // 添加当前用户消息
-      messages.push({
-        role: 'user' as const,
-        content: context.message,
-      });
-
-      // 调用 oneAPI
-      const response = await client.chat(messages, {
-        temperature: 0.7,
-        maxTokens: 2000,
-      });
-
-      console.log('[AssistantAgent] oneAPI 响应成功', {
-        responseLength: response.length,
-        responsePreview: response.substring(0, 100),
-      });
-
-      console.log('[AssistantAgent] 准备返回成功结果');
-      return {
-        success: true,
-        data: {
-          type: 'general',
-          content: response,
-        },
-        agentType: 'assistant',
-      };
-    } catch (error) {
-      console.error('[AssistantAgent] oneAPI 调用失败', error);
-      console.error('[AssistantAgent] 错误详情:', {
-        message: error instanceof Error ? error.message : '未知错误',
-        name: error instanceof Error ? error.name : 'Unknown',
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-
-      // 区分不同类型的错误
-      let shouldFallback = true;
-      let errorMessage = 'oneAPI调用失败';
-
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          errorMessage = 'oneAPI请求超时（超过20秒）';
-        } else if (error.message.includes('oneAPI请求失败')) {
-          errorMessage = `oneAPI服务错误: ${error.message}`;
-        } else {
-          errorMessage = `oneAPI调用异常: ${error.message}`;
-        }
-      }
-
-      console.log('[AssistantAgent] 错误类型:', errorMessage);
-      console.log('[AssistantAgent] 降级到固定响应');
-
-      // 降级到固定响应
-      return this.getFixedResponse(context.message, errorMessage);
-    }
-  }
-
-  /**
-   * 返回固定响应（降级方案）
-   * @param message 用户消息
-   * @param error 错误信息
-   */
-  private getFixedResponse(message: string, error?: string): AgentResult {
-    const content = `我收到了您的消息："${message}"，正在为您处理...`;
-    console.log('[AssistantAgent] 固定响应:', { content, error });
-
-    return {
-      success: true,
-      data: {
-        type: 'general',
-        content,
-        metadata: {
-          isFallback: true,
-          error: error || 'oneAPI不可用',
-        },
-      },
-      agentType: 'assistant',
     };
   }
 }
+
+export const assistantAgent = new AssistantAgent();

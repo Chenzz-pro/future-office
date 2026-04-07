@@ -1,22 +1,10 @@
 /**
  * Agent数据访问层
+ * 支持新架构：RootAgent + 业务Agent + 规则引擎
  */
 
 import { dbManager } from '../manager';
-
-export interface AgentConfig {
-  id: string;
-  type: string;
-  name: string;
-  description: string;
-  avatar: string;
-  systemPrompt: string;
-  enabled: boolean;
-  skills: string[];
-  bots: Array<{ id: string; name: string }>;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { AgentConfig, IntentResult } from '@/lib/types/agent';
 
 export class AgentRepository {
   /**
@@ -27,11 +15,16 @@ export class AgentRepository {
       SELECT
         a.id,
         a.type,
+        a.agent_type as agentType,
         a.name,
         a.description,
         a.avatar,
         a.system_prompt as systemPrompt,
         a.enabled,
+        a.skills_config as skillsConfig,
+        a.permission_rules as permissionRules,
+        a.business_rules as businessRules,
+        a.version,
         a.created_at as createdAt,
         a.updated_at as updatedAt,
         COALESCE(
@@ -71,11 +64,16 @@ export class AgentRepository {
       SELECT
         a.id,
         a.type,
+        a.agent_type as agentType,
         a.name,
         a.description,
         a.avatar,
         a.system_prompt as systemPrompt,
         a.enabled,
+        a.skills_config as skillsConfig,
+        a.permission_rules as permissionRules,
+        a.business_rules as businessRules,
+        a.version,
         a.created_at as createdAt,
         a.updated_at as updatedAt,
         COALESCE(
@@ -108,6 +106,99 @@ export class AgentRepository {
   }
 
   /**
+   * 根据ID获取Agent
+   */
+  async findById(id: string): Promise<AgentConfig | null> {
+    const result = await dbManager.query(`
+      SELECT
+        a.id,
+        a.type,
+        a.agent_type as agentType,
+        a.name,
+        a.description,
+        a.avatar,
+        a.system_prompt as systemPrompt,
+        a.enabled,
+        a.skills_config as skillsConfig,
+        a.permission_rules as permissionRules,
+        a.business_rules as businessRules,
+        a.version,
+        a.created_at as createdAt,
+        a.updated_at as updatedAt
+      FROM agents a
+      WHERE a.id = ? AND a.enabled = TRUE
+    `, [id]);
+
+    const agents = result.rows as AgentConfig[];
+    return agents.length > 0 ? agents[0] : null;
+  }
+
+  /**
+   * 获取RootAgent
+   */
+  async getRootAgent(): Promise<AgentConfig | null> {
+    const result = await dbManager.query(`
+      SELECT
+        a.id,
+        a.type,
+        a.agent_type as agentType,
+        a.name,
+        a.description,
+        a.avatar,
+        a.system_prompt as systemPrompt,
+        a.enabled,
+        a.skills_config as skillsConfig,
+        a.permission_rules as permissionRules,
+        a.business_rules as businessRules,
+        a.version,
+        a.created_at as createdAt,
+        a.updated_at as updatedAt
+      FROM agents a
+      WHERE a.agent_type = 'root' AND a.enabled = TRUE
+      LIMIT 1
+    `);
+
+    const agents = result.rows as AgentConfig[];
+    return agents.length > 0 ? agents[0] : null;
+  }
+
+  /**
+   * 获取所有业务Agent
+   */
+  async getBusinessAgents(): Promise<AgentConfig[]> {
+    const result = await dbManager.query(`
+      SELECT
+        a.id,
+        a.type,
+        a.agent_type as agentType,
+        a.name,
+        a.description,
+        a.avatar,
+        a.system_prompt as systemPrompt,
+        a.enabled,
+        a.skills_config as skillsConfig,
+        a.permission_rules as permissionRules,
+        a.business_rules as businessRules,
+        a.version,
+        a.created_at as createdAt,
+        a.updated_at as updatedAt,
+        COALESCE(
+          (
+            SELECT JSON_ARRAYAGG(as_table.skill_id)
+            FROM agents_skills as_table
+            WHERE as_table.agent_type = a.type
+          ),
+          JSON_ARRAY()
+        ) as skills
+      FROM agents a
+      WHERE a.agent_type = 'business' AND a.enabled = TRUE
+      ORDER BY a.type
+    `);
+
+    return result.rows as AgentConfig[];
+  }
+
+  /**
    * 更新Agent配置
    */
   async update(type: string, config: Partial<AgentConfig>): Promise<boolean> {
@@ -134,9 +225,22 @@ export class AgentRepository {
       updates.push('enabled = ?');
       values.push(config.enabled);
     }
+    if (config.skillsConfig !== undefined) {
+      updates.push('skills_config = ?');
+      values.push(JSON.stringify(config.skillsConfig));
+    }
+    if (config.permissionRules !== undefined) {
+      updates.push('permission_rules = ?');
+      values.push(JSON.stringify(config.permissionRules));
+    }
+    if (config.businessRules !== undefined) {
+      updates.push('business_rules = ?');
+      values.push(JSON.stringify(config.businessRules));
+    }
 
     if (updates.length === 0) return false;
 
+    updates.push('version = version + 1');
     values.push(type);
 
     await dbManager.query(`
@@ -182,6 +286,74 @@ export class AgentRepository {
     }
 
     return true;
+  }
+
+  /**
+   * 保存Agent规则配置（新架构）
+   */
+  async saveRules(agentType: string, rules: {
+    skillsConfig?: any;
+    permissionRules?: any;
+    businessRules?: any;
+  }): Promise<boolean> {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (rules.skillsConfig !== undefined) {
+      updates.push('skills_config = ?');
+      values.push(JSON.stringify(rules.skillsConfig));
+    }
+    if (rules.permissionRules !== undefined) {
+      updates.push('permission_rules = ?');
+      values.push(JSON.stringify(rules.permissionRules));
+    }
+    if (rules.businessRules !== undefined) {
+      updates.push('business_rules = ?');
+      values.push(JSON.stringify(rules.businessRules));
+    }
+
+    if (updates.length === 0) return false;
+
+    updates.push('version = version + 1');
+    values.push(agentType);
+
+    await dbManager.query(`
+      UPDATE agents
+      SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      WHERE type = ?
+    `, values);
+
+    return true;
+  }
+
+  /**
+   * 获取Agent规则配置（新架构）
+   */
+  async getRules(agentType: string): Promise<{
+    skillsConfig?: any;
+    permissionRules?: any;
+    businessRules?: any;
+    version: number;
+  } | null> {
+    const result = await dbManager.query(`
+      SELECT
+        skills_config as skillsConfig,
+        permission_rules as permissionRules,
+        business_rules as businessRules,
+        version
+      FROM agents
+      WHERE type = ?
+    `, [agentType]);
+
+    const rows = result.rows as any[];
+    if (rows.length === 0) return null;
+
+    return {
+      skillsConfig: rows[0].skillsConfig,
+      permissionRules: rows[0].permissionRules,
+      businessRules: rows[0].businessRules,
+      version: rows[0].version,
+    };
   }
 }
 

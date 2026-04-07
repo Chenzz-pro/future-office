@@ -1,0 +1,93 @@
+/**
+ * Agent 类型定义
+ * 新架构：RootAgent + 业务Agent + 规则引擎
+ */
+
+// 统一返回格式
+export interface AgentResponse {
+  code: string;      // '200' | '403' | '500' | '404'
+  msg: string;       // 提示信息
+  data: any;         // 返回数据
+}
+
+// 意图识别结果
+export interface IntentResult {
+  agentId: string;
+  action: string;
+  context: {
+    userId: string;
+    deptId?: string;
+    params: Record<string, any>;
+  };
+}
+
+// Agent类型
+export type AgentType = 'root' | 'business';
+
+// Agent业务类型
+export type AgentBusinessType = 'root' | 'approval' | 'meeting' | 'data' | 'assistant';
+
+// Agent配置
+export interface AgentConfig {
+  id: string;
+  type: AgentBusinessType;
+  agentType: AgentType;
+  name: string;
+  description: string;
+  avatar: string;
+  systemPrompt: string;
+  enabled: boolean;
+  skillsConfig?: SkillsConfig;
+  permissionRules?: PermissionRule[];
+  businessRules?: BusinessRule[];
+  version: number;
+  skills?: string[];
+  bots?: Array<{ id: string; name: string }>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 技能绑定配置
+export interface SkillsConfig {
+  skills: SkillBinding[];
+}
+
+export interface SkillBinding {
+  skillCode: string;
+  skillName: string;
+  apiPath: string;
+  desc: string;
+}
+
+// 权限规则配置
+export interface PermissionRule {
+  ruleId: string;
+  ruleName: string;
+  condition: string;
+  checkLogic: string;
+  interceptAction: string;
+}
+
+// 业务规则配置
+export interface BusinessRule {
+  ruleId: string;
+  ruleName: string;
+  stepList: string[];
+}
+
+// 用户上下文
+export interface UserContext {
+  userId: string;
+  userName?: string;
+  deptId?: string;
+  role?: string;
+  isAdmin?: boolean;
+}
+
+// LLM配置
+export interface LLMConfig {
+  provider: string;
+  apiKey: string;
+  baseUrl?: string;
+  model?: string;
+}

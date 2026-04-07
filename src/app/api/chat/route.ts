@@ -40,12 +40,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 构建上下文
-    const context: AgentContext = {
+    const userContext = {
       userId,
-      deptId: deptId || '',
+      deptId: deptId || undefined,
       role: role || 'user',
-      message,
-      conversationHistory,
     };
 
     console.log('[API:Chat] 收到请求', {
@@ -54,16 +52,16 @@ export async function POST(request: NextRequest) {
       role,
     });
 
-    // 调用RootAgent处理
-    const result = await rootAgent.process(context);
+    // 调用RootAgent处理（新架构）
+    // TODO: 等待RootAgent完全实现后，取消注释
+    // const result = await rootAgent.process(message, userContext);
 
-    console.log('[API:Chat] 处理结果', result);
-
+    // 临时返回（等待RootAgent完全实现）
     return NextResponse.json({
-      success: result.success,
-      data: result.data,
-      error: result.error,
-      agentType: result.agentType,
+      success: true,
+      data: {
+        message: 'RootAgent正在开发中，请稍后再试',
+      },
     });
   } catch (error) {
     console.error('[API:Chat] 处理失败', error);
