@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export interface EKPCustomInterface {
+  id?: string;
   code: string;
   name: string;
   category: string;

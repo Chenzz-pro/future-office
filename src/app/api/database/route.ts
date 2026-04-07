@@ -631,6 +631,26 @@ export async function POST(request: NextRequest) {
         console.warn('[API:Database:Connect] Agent架构迁移失败，但不影响连接流程:', agentMigrateError);
       }
 
+      // 自动执行EKP接口表初始化（确保EKP接口管理中心可用）
+      console.log('[API:Database:Connect] 开始执行EKP接口表初始化检查...');
+      try {
+        const ekpInitResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/init/ekp-interfaces`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (ekpInitResponse.ok) {
+          const ekpInitResult = await ekpInitResponse.json();
+          console.log('[API:Database:Connect] EKP接口表初始化完成:', ekpInitResult.message);
+        } else {
+          console.warn('[API:Database:Connect] EKP接口表初始化失败，但不影响连接流程');
+        }
+      } catch (ekpInitError) {
+        console.warn('[API:Database:Connect] EKP接口表初始化失败，但不影响连接流程:', ekpInitError);
+      }
+
       console.log('[API:Database:Connect] ✅ 数据库连接流程完成');
 
       // 检查系统是否已初始化（检查是否有 admin 用户）

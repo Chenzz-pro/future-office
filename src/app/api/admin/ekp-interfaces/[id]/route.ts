@@ -54,29 +54,24 @@ export async function PUT(
 
     if (targetInterface.source === 'official') {
       // 更新官方接口
-      const success = await ekpInterfaceRegistry.updateOfficial(id, {
-        interfaceCode: body.code,
-        interfaceName: body.name,
-        interfaceCategory: body.category,
-        apiPath: body.path,
+      const metadata: any = {
         serviceId: body.serviceId,
-        httpMethod: body.method,
         requestTemplate: body.request,
         responseParser: body.response,
-        description: body.description,
         version: body.version,
+      };
+      const success = await ekpInterfaceRegistry.updateOfficial(id, {
+        code: body.code,
+        name: body.name,
+        description: body.description,
+        category: body.category,
+        endpoint: body.path,
+        method: body.method,
         enabled: body.enabled,
-        updatedBy: body.updatedBy,
+        metadata,
       });
 
-      if (success) {
-        return NextResponse.json({ success: true });
-      } else {
-        return NextResponse.json(
-          { success: false, error: '更新失败' },
-          { status: 500 }
-        );
-      }
+      return NextResponse.json({ success: true });
     } else {
       // 更新二开接口
       const success = ekpInterfaceRegistry.updateCustom(targetInterface.code, {
@@ -139,16 +134,8 @@ export async function DELETE(
 
     if (targetInterface.source === 'official') {
       // 删除官方接口
-      const success = await ekpInterfaceRegistry.deleteOfficial(id);
-
-      if (success) {
-        return NextResponse.json({ success: true });
-      } else {
-        return NextResponse.json(
-          { success: false, error: '删除失败' },
-          { status: 500 }
-        );
-      }
+      await ekpInterfaceRegistry.deleteOfficial(id);
+      return NextResponse.json({ success: true });
     } else {
       // 删除二开接口
       const success = ekpInterfaceRegistry.deleteCustom(targetInterface.code);

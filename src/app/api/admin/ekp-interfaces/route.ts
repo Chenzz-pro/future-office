@@ -79,21 +79,22 @@ export async function POST(request: NextRequest) {
 
     if (source === 'official') {
       // 创建官方接口
-      const id = await ekpInterfaceRegistry.createOfficial({
-        interfaceCode: interfaceData.code,
-        interfaceName: interfaceData.name,
-        interfaceCategory: interfaceData.category,
-        apiPath: interfaceData.path,
+      const metadata: any = {
         serviceId: interfaceData.serviceId,
-        httpMethod: interfaceData.method,
         requestTemplate: interfaceData.request,
         responseParser: interfaceData.response,
-        description: interfaceData.description,
         version: interfaceData.version || '1.0',
-        enabled: interfaceData.enabled !== false,
         isSystem: false,
-        createdBy: interfaceData.createdBy,
-        updatedBy: interfaceData.updatedBy,
+      };
+      const id = await ekpInterfaceRegistry.createOfficial({
+        code: interfaceData.code,
+        name: interfaceData.name,
+        description: interfaceData.description,
+        category: interfaceData.category,
+        endpoint: interfaceData.path,
+        method: interfaceData.method,
+        enabled: interfaceData.enabled !== false,
+        metadata,
       });
 
       return NextResponse.json({

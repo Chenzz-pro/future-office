@@ -30,6 +30,14 @@ export interface EKPInterfaceStats {
   byCategory: Record<string, { official: number; custom: number }>;
 }
 
+export interface EKPOfficialInterfaceMetadata {
+  serviceId?: string;
+  requestTemplate?: Record<string, unknown>;
+  responseParser?: Record<string, unknown>;
+  version?: string;
+  isSystem?: boolean;
+}
+
 export class EKPInterfaceRegistry {
   private officialRepo: EKPOfficialInterfaceRepository;
   private customLoader: EKPCustomInterfaceLoader;
@@ -156,10 +164,10 @@ export class EKPInterfaceRegistry {
     const byCategory: Record<string, { official: number; custom: number }> = {};
 
     official.forEach(item => {
-      if (!byCategory[item.interfaceCategory]) {
-        byCategory[item.interfaceCategory] = { official: 0, custom: 0 };
+      if (!byCategory[item.category]) {
+        byCategory[item.category] = { official: 0, custom: 0 };
       }
-      byCategory[item.interfaceCategory].official++;
+      byCategory[item.category].official++;
     });
 
     custom.forEach(item => {
@@ -183,13 +191,13 @@ export class EKPInterfaceRegistry {
   }
 
   // 更新官方接口
-  async updateOfficial(id: string, data: Partial<EKPOfficialInterface>): Promise<boolean> {
-    return await this.officialRepo.update(id, data);
+  async updateOfficial(id: string, data: Partial<EKPOfficialInterface>): Promise<void> {
+    await this.officialRepo.update(id, data);
   }
 
   // 删除官方接口
-  async deleteOfficial(id: string): Promise<boolean> {
-    return await this.officialRepo.delete(id);
+  async deleteOfficial(id: string): Promise<void> {
+    await this.officialRepo.delete(id);
   }
 
   // 创建二开接口
@@ -213,25 +221,27 @@ export class EKPInterfaceRegistry {
   ): EKPInterface {
     if (source === 'official') {
       const official = data as EKPOfficialInterface;
+      const metadata = official.metadata as EKPOfficialInterfaceMetadata || {};
       return {
         id: official.id,
-        code: official.interfaceCode,
-        name: official.interfaceName,
-        category: official.interfaceCategory,
-        path: official.apiPath,
-        serviceId: official.serviceId,
-        method: official.httpMethod,
+        code: official.code,
+        name: official.name,
+        category: official.category,
+        path: official.endpoint,
+        serviceId: metadata.serviceId || 'ekp-service',
+        method: official.method,
         enabled: official.enabled,
-        request: official.requestTemplate,
-        response: official.responseParser,
+        request: metadata.requestTemplate || {},
+        response: metadata.responseParser || {},
         description: official.description,
-        version: official.version,
-        source,
-        isSystem: official.isSystem,
+        version: metadata.version,
+        source: 'official',
+        isSystem: metadata.isSystem,
       };
     } else {
       const custom = data as EKPCustomInterface;
       return {
+        id: custom.id,
         code: custom.code,
         name: custom.name,
         category: custom.category,
@@ -243,7 +253,8 @@ export class EKPInterfaceRegistry {
         response: custom.response,
         description: custom.description,
         version: custom.version,
-        source,
+        source: 'custom',
+        isSystem: false,
       };
     }
   }
