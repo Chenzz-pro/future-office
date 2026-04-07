@@ -108,27 +108,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
       role: role || 'user',
     };
 
-    // 7. 调用RootAgent处理（意图识别 + 权限拦截）
-    const rootResult = await rootAgent.process(message, userContext);
+    // 7. 调用RootAgent处理（只做意图识别）
+    const intent = await rootAgent.process(message, userContext);
 
-    console.log('[RootAgent:API] RootAgent处理完成:', {
-      intent: rootResult.intent,
-      permissionGranted: rootResult.permissionGranted,
+    console.log('[RootAgent:API] RootAgent意图识别完成:', {
+      agentId: intent.agentId,
+      action: intent.action,
     });
 
-    // 8. 权限检查
-    if (!rootResult.permissionGranted) {
+    // 8. 路由权限校验（仅校验用户是否能调用该Agent）
+    const routePermission = await rootAgent.checkRoutePermission(userContext, intent);
+    if (!routePermission.granted) {
       return NextResponse.json({
         success: false,
-        error: '抱歉，您没有权限执行此操作',
-        data: {
-          intent: rootResult.intent,
-        },
+        error: routePermission.reason || '抱歉，您没有权限使用此功能',
       });
     }
 
     // 9. 检查是否有匹配的业务Agent
-    const agentId = rootResult.intent.agentId;
+    const agentId = intent.agentId;
     if (agentId === 'unknown') {
       // 无匹配的Agent，返回RootAgent的直接回复
       const defaultMessage = '我暂时无法处理该需求，请尝试以下方式：\n1. 查询待办事项\n2. 查询会议列表\n3. 预定会议室\n4. 查询个人日程';
@@ -137,7 +135,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
         success: true,
         data: {
           message: defaultMessage,
-          intent: rootResult.intent,
+          logs: {
+            intent: {
+              agentId: intent.agentId,
+              action: intent.action,
+              userId: intent.context.userId,
+              deptId: intent.context.deptId,
+              params: intent.context.params,
+            },
+          },
         },
       });
     }
@@ -148,27 +154,45 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
       return NextResponse.json({
         success: false,
         error: `未找到对应的业务Agent: ${agentId}`,
-        data: {
-          intent: rootResult.intent,
-        },
       });
     }
 
-    // 11. 执行业务Agent
-    const businessResult = await businessAgent.execute(rootResult.intent, userContext);
+    // 11. 执行业务Agent（业务权限校验由业务Agent自己执行）
+    const businessResult = await businessAgent.execute(intent, userContext);
 
     console.log('[RootAgent:API] 业务Agent执行完成:', businessResult);
 
     // 12. 响应格式化（内网代码，不使用LLM）
     const finalMessage = rootAgent.formatResponse(businessResult);
 
-    // 13. 返回最终结果
+    // 13. 返回最终结果（包含完整的测试日志）
     return NextResponse.json({
       success: businessResult.code === '200',
       data: {
+        // 最终用户可见的响应
         message: finalMessage,
-        intent: rootResult.intent,
-        businessResult,
+        // 业务Agent返回的原始数据（用于前端展示）
+        businessData: businessResult.data,
+        // 测试日志（用于调试）
+        logs: {
+          // 意图识别日志
+          intent: {
+            agentId: intent.agentId,
+            action: intent.action,
+            userId: intent.context.userId,
+            deptId: intent.context.deptId,
+            params: intent.context.params,
+          },
+          // 业务Agent执行日志
+          execution: {
+            agentType: businessResult.agentType,
+            code: businessResult.code,
+            msg: businessResult.msg,
+            permissionChecked: businessResult.permissionChecked || false,
+            permissionGranted: businessResult.permissionGranted || false,
+            skillCalled: businessResult.skillCalled || false,
+          },
+        },
       },
       error: businessResult.code !== '200' ? businessResult.msg : undefined,
     });

@@ -33,23 +33,29 @@ export abstract class BaseBusinessAgent {
     try {
       // 加载 Agent 配置
       this.config = await agentRepository.findByType(this.agentType);
-      
+
       if (!this.config) {
         throw new Error(`未找到 Agent 配置: ${this.agentType}`);
       }
 
       console.log(`[${this.agentType}] 配置加载成功:`, this.config.name);
 
-      // 加载权限规则
-      if (this.config.permissionRules) {
+      // 加载权限规则（确保是数组）
+      if (this.config.permissionRules && Array.isArray(this.config.permissionRules)) {
         this.permissionRules = this.config.permissionRules;
         console.log(`[${this.agentType}] 权限规则加载成功:`, this.permissionRules.length);
+      } else {
+        this.permissionRules = [];
+        console.log(`[${this.agentType}] 权限规则为空或无效，使用空数组`);
       }
 
-      // 加载业务规则
-      if (this.config.businessRules) {
+      // 加载业务规则（确保是数组）
+      if (this.config.businessRules && Array.isArray(this.config.businessRules)) {
         this.businessRules = this.config.businessRules;
         console.log(`[${this.agentType}] 业务规则加载成功:`, this.businessRules.length);
+      } else {
+        this.businessRules = [];
+        console.log(`[${this.agentType}] 业务规则为空或无效，使用空数组`);
       }
 
       console.log(`[${this.agentType}] 初始化完成`);
@@ -77,13 +83,17 @@ export abstract class BaseBusinessAgent {
         await this.initialize();
       }
 
-      // 2. 权限校验
+      // 2. 权限校验（业务数据权限）
       const permissionResult = await this.checkPermission(intent.action, userContext);
       if (!permissionResult.granted) {
         return {
           code: '403',
           msg: permissionResult.reason || '无权限执行此操作',
           data: null,
+          agentType: this.agentType,
+          permissionChecked: true,
+          permissionGranted: false,
+          skillCalled: false,
         };
       }
 
@@ -97,19 +107,31 @@ export abstract class BaseBusinessAgent {
       );
 
       console.log(`[${this.agentType}] 业务规则执行完成:`, businessResult);
-      return businessResult;
+
+      // 添加执行日志
+      return {
+        ...businessResult,
+        agentType: this.agentType,
+        permissionChecked: true,
+        permissionGranted: true,
+        skillCalled: businessResult.skillCalled || false,
+      };
     } catch (error) {
       console.error(`[${this.agentType}] 执行失败:`, error);
       return {
         code: '500',
         msg: error instanceof Error ? error.message : '执行失败',
         data: null,
+        agentType: this.agentType,
+        permissionChecked: false,
+        permissionGranted: false,
+        skillCalled: false,
       };
     }
   }
 
   /**
-   * 权限校验
+   * 权限校验（业务数据权限）
    * @param action 执行的操作
    * @param userContext 用户上下文
    * @returns 校验结果
@@ -118,11 +140,19 @@ export abstract class BaseBusinessAgent {
     action: string,
     userContext: UserContext
   ): Promise<{ granted: boolean; reason?: string }> {
+    console.log(`[${this.agentType}] 开始业务权限校验:`, {
+      action,
+      userId: userContext.userId,
+      role: userContext.role,
+    });
+
+    // 如果没有配置权限规则，默认允许
     if (this.permissionRules.length === 0) {
-      // 没有配置权限规则，默认允许
+      console.log(`[${this.agentType}] 无权限规则配置，默认允许`);
       return { granted: true };
     }
 
+    // 使用规则引擎执行权限规则校验
     return await ruleEngine.executePermissionRules(
       this.permissionRules,
       userContext,

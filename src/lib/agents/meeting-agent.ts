@@ -7,7 +7,7 @@ import { BaseBusinessAgent } from './base-business-agent';
 
 export class MeetingAgent extends BaseBusinessAgent {
   constructor() {
-    super('meeting');
+    super('meeting-agent');
   }
 
   /**

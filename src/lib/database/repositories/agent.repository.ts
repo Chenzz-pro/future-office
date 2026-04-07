@@ -15,7 +15,7 @@ export class AgentRepository {
       SELECT
         a.id,
         a.type,
-        a.agent_type as agentType,
+        a.type as agentType,
         a.name,
         a.description,
         a.avatar,
@@ -64,7 +64,7 @@ export class AgentRepository {
       SELECT
         a.id,
         a.type,
-        a.agent_type as agentType,
+        a.type as agentType,
         a.name,
         a.description,
         a.avatar,
@@ -113,7 +113,7 @@ export class AgentRepository {
       SELECT
         a.id,
         a.type,
-        a.agent_type as agentType,
+        a.type as agentType,
         a.name,
         a.description,
         a.avatar,
@@ -141,7 +141,7 @@ export class AgentRepository {
       SELECT
         a.id,
         a.type,
-        a.agent_type as agentType,
+        a.type as agentType,
         a.name,
         a.description,
         a.avatar,
@@ -154,7 +154,7 @@ export class AgentRepository {
         a.created_at as createdAt,
         a.updated_at as updatedAt
       FROM agents a
-      WHERE a.agent_type = 'root' AND a.enabled = TRUE
+      WHERE a.type = 'root' AND a.enabled = TRUE
       LIMIT 1
     `);
 
@@ -170,7 +170,7 @@ export class AgentRepository {
       SELECT
         a.id,
         a.type,
-        a.agent_type as agentType,
+        a.type as agentType,
         a.name,
         a.description,
         a.avatar,
@@ -191,7 +191,7 @@ export class AgentRepository {
           JSON_ARRAY()
         ) as skills
       FROM agents a
-      WHERE a.agent_type = 'business' AND a.enabled = TRUE
+      WHERE a.type <> 'root' AND a.enabled = TRUE
       ORDER BY a.type
     `);
 

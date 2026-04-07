@@ -5,9 +5,13 @@
 
 // 统一返回格式
 export interface AgentResponse {
-  code: string;      // '200' | '403' | '500' | '404'
-  msg: string;       // 提示信息
-  data: any;         // 返回数据
+  code: string;                      // '200' | '403' | '500' | '404'
+  msg: string;                       // 提示信息
+  data: any;                         // 返回数据
+  agentType?: string;                // Agent类型（用于测试日志）
+  permissionChecked?: boolean;       // 是否进行了权限检查（用于测试日志）
+  permissionGranted?: boolean;       // 权限检查结果（用于测试日志）
+  skillCalled?: boolean;             // 是否调用了技能（用于测试日志）
 }
 
 // 意图识别结果

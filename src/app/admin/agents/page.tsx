@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Search, Settings, X, Save, Loader2, Shield, Code, Play, FileText } from 'lucide-react';
+import { Bot, Search, Settings, X, Save, Loader2, Shield, Code, Play, FileText, Terminal, BrainCircuit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AgentConfig {
@@ -636,16 +636,102 @@ export default function AgentsManagement() {
 
                   {/* 测试结果 */}
                   {testResult && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">测试结果</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <pre className="text-xs overflow-auto bg-gray-50 p-4 rounded">
-                          {JSON.stringify(testResult, null, 2)}
-                        </pre>
-                      </CardContent>
-                    </Card>
+                    <div className="mt-4 space-y-4">
+                      <h4 className="font-medium text-sm">测试结果</h4>
+
+                      {/* 三栏展示 */}
+                      <div className="grid grid-cols-1 gap-4">
+                        {/* 1. RootAgent执行日志 */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Terminal className="w-4 h-4" />
+                              RootAgent执行日志
+                              <Badge variant="outline" className="ml-auto">
+                                路由权限拦截
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className="text-gray-500">识别的Agent:</span>
+                                <Badge variant="secondary">
+                                  {testResult.data?.targetAgent || '未知'}
+                                </Badge>
+                              </div>
+                              {testResult.data?.routePermissionCheck && (
+                                <div className="text-xs space-y-1 mt-2 p-2 bg-gray-50 rounded">
+                                  <div>✓ 用户ID: {testResult.data.routePermissionCheck.userId}</div>
+                                  <div>✓ 路由检查: {testResult.data.routePermissionCheck.checkResult}</div>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* 2. 意图识别日志 */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <BrainCircuit className="w-4 h-4" />
+                              意图识别日志
+                              <Badge variant="outline" className="ml-auto">
+                                RootAgent.process()
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 text-xs">
+                              {testResult.data?.intentLogs?.map((log: any, idx: number) => (
+                                <div key={idx} className="p-2 bg-gray-50 rounded">
+                                  <div className="font-medium mb-1">候选Agent: {log.agentId}</div>
+                                  <div>匹配得分: {log.score?.toFixed(4)}</div>
+                                  <div>关键词: {log.matchedKeywords?.join(', ') || '无'}</div>
+                                  <div className="text-gray-500">推理: {log.reasoning}</div>
+                                </div>
+                              )) || (
+                                <div className="text-gray-500 text-center py-4">
+                                  暂无意图识别日志
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* 3. 业务Agent执行日志 */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Settings className="w-4 h-4" />
+                              业务Agent执行日志
+                              <Badge variant="outline" className="ml-auto">
+                                权限校验+技能调用
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 text-xs">
+                              <div className="flex items-center gap-4 p-2 bg-gray-50 rounded">
+                                <span>Agent类型: <strong>{testResult.agentType || '未知'}</strong></span>
+                                <span>权限检查: <Badge variant={testResult.permissionChecked ? 'default' : 'secondary'}>
+                                  {testResult.permissionChecked ? '✓ 已检查' : '✗ 未检查'}
+                                </Badge></span>
+                                <span>权限结果: <Badge variant={testResult.permissionGranted ? 'default' : 'destructive'}>
+                                  {testResult.permissionGranted ? '✓ 通过' : '✗ 拒绝'}
+                                </Badge></span>
+                                <span>技能调用: <Badge variant={testResult.skillCalled ? 'default' : 'secondary'}>
+                                  {testResult.skillCalled ? '✓ 已调用' : '✗ 未调用'}
+                                </Badge></span>
+                              </div>
+                              <pre className="mt-2 overflow-auto bg-gray-50 p-2 rounded max-h-48">
+                                {JSON.stringify(testResult.data, null, 2)}
+                              </pre>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </div>
                   )}
                 </CardContent>
               </Card>

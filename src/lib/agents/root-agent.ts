@@ -203,13 +203,13 @@ export class RootAgent {
   }
 
   /**
-   * 权限拦截
+   * 路由权限校验（只校验用户是否能调用该Agent，不做业务权限）
    * @param userContext 用户上下文
    * @param intentResult 意图识别结果
    * @returns 是否有权限
    */
-  async checkPermission(userContext: UserContext, intentResult: IntentResult): Promise<boolean> {
-    console.log('[RootAgent] 开始权限检查:', {
+  async checkRoutePermission(userContext: UserContext, intentResult: IntentResult): Promise<{ granted: boolean; reason?: string }> {
+    console.log('[RootAgent] 开始路由权限校验:', {
       userId: userContext.userId,
       role: userContext.role,
       agentId: intentResult.agentId,
@@ -218,23 +218,32 @@ export class RootAgent {
 
     // 1. 检查Agent是否存在且启用
     const agent = this.availableAgents.get(intentResult.agentId);
-    if (!agent || !agent.enabled) {
-      console.warn('[RootAgent] Agent不存在或未启用:', intentResult.agentId);
-      return false;
+    if (!agent) {
+      console.warn('[RootAgent] Agent不存在:', intentResult.agentId);
+      return { granted: false, reason: `未找到对应的智能体: ${intentResult.agentId}` };
     }
 
-    // 2. 检查是否有权限规则配置
-    if (!agent.permissionRules || agent.permissionRules.length === 0) {
-      console.log('[RootAgent] 无权限规则，默认允许访问');
-      return true;
+    if (!agent.enabled) {
+      console.warn('[RootAgent] Agent未启用:', intentResult.agentId);
+      return { granted: false, reason: `智能体 ${agent.name} 未启用` };
     }
 
-    // 3. 执行权限规则校验
-    // TODO: 实现具体的权限规则校验逻辑（在阶段三：规则引擎中实现）
-    console.log('[RootAgent] 权限规则校验（待规则引擎实现）');
+    // 2. 基础功能权限检查（只检查用户是否有权限访问该Agent功能）
+    // 注意：这里不做业务数据权限，业务权限由业务Agent自己校验
 
-    // 临时：默认允许访问（后续由规则引擎实现）
-    return true;
+    // 2.1 检查是否需要登录
+    if (!userContext.userId) {
+      return { granted: false, reason: '请先登录' };
+    }
+
+    // 2.2 检查角色权限（路由级别）
+    // 某些Agent可能需要特定角色才能访问
+    if (intentResult.agentId === 'approval-agent' && !['admin', 'manager'].includes(userContext.role || '')) {
+      return { granted: false, reason: '您没有权限使用审批功能' };
+    }
+
+    console.log('[RootAgent] 路由权限校验通过，将请求转发给业务Agent进行业务权限校验');
+    return { granted: true };
   }
 
   /**
@@ -348,27 +357,16 @@ export class RootAgent {
   }
 
   /**
-   * 完整的处理流程
+   * 完整的处理流程（只做意图识别，权限检查交给外部调用）
    * @param userInput 用户输入
    * @param userContext 用户上下文
-   * @returns 最终结果
+   * @returns 意图识别结果
    */
-  async process(userInput: string, userContext: UserContext): Promise<{
-    intent: IntentResult;
-    permissionGranted: boolean;
-    message?: string;
-  }> {
+  async process(userInput: string, userContext: UserContext): Promise<IntentResult> {
     try {
-      // 1. 意图识别（LLM：只传递用户信息，不传业务数据）
+      // 意图识别（LLM：只传递用户信息，不传业务数据）
       const intent = await this.recognizeIntent(userInput, userContext);
-
-      // 2. 权限检查
-      const permissionGranted = await this.checkPermission(userContext, intent);
-
-      return {
-        intent,
-        permissionGranted,
-      };
+      return intent;
     } catch (error) {
       console.error('[RootAgent] 处理失败:', error);
       throw error;
