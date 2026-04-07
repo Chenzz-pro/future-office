@@ -78,7 +78,7 @@ const menuItems: MenuItem[] = [
       { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration/ekp' },
       { id: 'int-org-sync', label: '组织架构同步', path: '/admin/integration/ekp/org-sync' },
       { id: 'int-sync-scheduler', label: '定时任务配置', path: '/admin/integration/ekp/sync-scheduler' },
-      { id: 'int-sync-monitor', label: '监控告警', path: '/admin/integration/ekp/sync-monitor' },
+      { id: 'int-sync-alerts', label: '监控告警', path: '/admin/integration/ekp/sync-alerts' },
       { id: 'int-api', label: 'API 管理', path: '/admin/integration/api' },
       { id: 'int-webhook', label: 'Webhook 配置', path: '/admin/integration/webhook' },
     ],
