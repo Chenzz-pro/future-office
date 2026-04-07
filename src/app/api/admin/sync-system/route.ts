@@ -7,7 +7,6 @@ import {
 } from '@/lib/sync/sync-system-startup';
 import { syncScheduler } from '@/lib/sync/sync-scheduler';
 import { syncMonitor } from '@/lib/sync/sync-monitor';
-import { orgSyncService } from '@/lib/sync/org-sync-service';
 
 /**
  * 同步系统管理API

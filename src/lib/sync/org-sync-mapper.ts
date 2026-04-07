@@ -76,7 +76,7 @@ export class OrgSyncMapper {
     return {
       fd_id: ekpData.id,
       fd_name: ekpData.name,
-      fd_login_name: ekpData.loginName || undefined,
+      fd_login_name: ekpData.loginName || ekpData.id, // 使用ID作为默认登录名
       fd_password: defaultPassword || '123456', // 使用默认密码
       fd_no: ekpData.no || undefined,
       fd_order: ekpData.order ? parseInt(ekpData.order, 10) : undefined,

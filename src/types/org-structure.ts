@@ -8,7 +8,8 @@
 export enum OrgElementType {
   ORGANIZATION = 1,  // 机构
   DEPARTMENT = 2,    // 部门
-  POSITION = 3       // 岗位
+  POSITION = 3,      // 岗位
+  GROUP = 4          // 群组
 }
 
 /**
@@ -17,7 +18,8 @@ export enum OrgElementType {
 export const OrgElementTypeLabels: Record<OrgElementType, string> = {
   [OrgElementType.ORGANIZATION]: '机构',
   [OrgElementType.DEPARTMENT]: '部门',
-  [OrgElementType.POSITION]: '岗位'
+  [OrgElementType.POSITION]: '岗位',
+  [OrgElementType.GROUP]: '群组'
 };
 
 /**
@@ -102,6 +104,7 @@ export interface OrgElementDTO {
   fd_parentorgid?: string;
   fd_parentid?: string;
   fd_creator_id?: string;
+  fd_persons_number?: number; // 群组成员数量
 }
 
 // ============================================

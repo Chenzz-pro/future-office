@@ -22,11 +22,20 @@ export async function POST(request: NextRequest) {
 
     console.log(`[API] 触发${syncType === 'full' ? '全量' : '增量'}同步，操作人: ${operatorName || operatorId || 'system'}`);
 
-    const result = await orgSyncService[syncType]({
-      operatorId,
-      operatorName,
-      returnOrgType
-    });
+    let result;
+    if (syncType === 'full') {
+      result = await orgSyncService.fullSync({
+        operatorId,
+        operatorName,
+        returnOrgType
+      });
+    } else {
+      result = await orgSyncService.incrementalSync({
+        operatorId,
+        operatorName,
+        returnOrgType
+      });
+    }
 
     return NextResponse.json({
       success: result.success,

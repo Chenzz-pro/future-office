@@ -276,7 +276,7 @@ export class SyncMonitor {
     }
 
     // 获取通知渠道
-    const channels = await orgSyncConfigRepository.getJSON<string[]>('sync.notification_channels', ['email']);
+    const channels = await orgSyncConfigRepository.getJSON<string[]>('sync.notification_channels', ['email']) ?? ['email'];
 
     try {
       // 发送邮件通知

@@ -4,10 +4,10 @@
  */
 
 import cron from 'node-cron';
-import { orgSyncService } from './org-sync-service';
+import type { ScheduledTask } from 'node-cron';
+import { orgSyncService } from './org-sync.service';
 import { orgSyncLogRepository } from '../database/repositories/org-sync-log.repository';
 import { orgSyncConfigRepository } from '../database/repositories/org-sync-config.repository';
-import { dbManager } from '../database/manager';
 
 export interface SchedulerConfig {
   enableIncrementalSync: boolean;
@@ -19,9 +19,9 @@ export interface SchedulerConfig {
 
 export class SyncScheduler {
   private isRunning = false;
-  private incrementalTask: cron.ScheduledTask | null = null;
-  private fullSyncTask: cron.ScheduledTask | null = null;
-  private monitorTask: cron.ScheduledTask | null = null;
+  private incrementalTask: ScheduledTask | null = null;
+  private fullSyncTask: ScheduledTask | null = null;
+  private monitorTask: ScheduledTask | null = null;
   private incrementalRetryCount = 0;
   private fullSyncRetryCount = 0;
   private readonly MAX_RETRY_COUNT = 3;
@@ -272,12 +272,14 @@ export class SyncScheduler {
     const enableIncrementalSync = await orgSyncConfigRepository.getBoolean('sync.enable_incremental_sync', true) ?? true;
     const incrementalSyncInterval = await orgSyncConfigRepository.getNumber('sync.incremental_sync_interval', 30) ?? 30;
     const enableFullSync = await orgSyncConfigRepository.getBoolean('sync.enable_full_sync', true) ?? true;
+    const fullSyncInterval = await orgSyncConfigRepository.getNumber('sync.full_sync_interval', 720) ?? 720;
     const enableMonitor = await orgSyncConfigRepository.getBoolean('sync.enable_monitor', true) ?? true;
 
     return {
       enableIncrementalSync,
       incrementalSyncInterval,
       enableFullSync,
+      fullSyncInterval,
       enableMonitor
     };
   }

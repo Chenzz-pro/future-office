@@ -55,7 +55,7 @@ export class OrgSyncService {
       sync_type: 'full',
       sync_mode: 'all',
       status: 'running',
-      return_org_type: options.returnOrgType,
+      return_org_type: options.returnOrgType as unknown as Record<string, unknown>,
       triggered_by: 'manual',
       operator_id: options.operatorId,
       operator_name: options.operatorName,
@@ -170,7 +170,7 @@ export class OrgSyncService {
       sync_mode: 'time',
       status: 'running',
       begin_time_stamp: beginTimeStamp,
-      return_org_type: options.returnOrgType,
+      return_org_type: options.returnOrgType as unknown as Record<string, unknown>,
       triggered_by: 'manual',
       operator_id: options.operatorId,
       operator_name: options.operatorName,
@@ -180,7 +180,7 @@ export class OrgSyncService {
     try {
       console.log(`[增量同步] 开始同步，同步ID: ${syncLogId}，时间戳: ${beginTimeStamp}`);
 
-      const batchSize = await orgSyncConfigRepository.getNumber('sync.batch_size', 500);
+      const batchSize = await orgSyncConfigRepository.getNumber('sync.batch_size', 500) || 500;
       let allData: EKPOrgElement[] = [];
       let count = batchSize;
       let hasMore = true;
@@ -356,7 +356,7 @@ export class OrgSyncService {
 
     try {
       // 处理组织元素（分批处理）
-      const batchSize = await orgSyncConfigRepository.getNumber('sync.batch_size', 500);
+      const batchSize = await orgSyncConfigRepository.getNumber('sync.batch_size', 500) || 500;
 
       for (let i = 0; i < elements.length; i += batchSize) {
         const batch = elements.slice(i, i + batchSize);

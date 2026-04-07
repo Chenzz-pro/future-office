@@ -29,7 +29,7 @@ export class OrgSyncConfigRepository {
       return null;
     }
 
-    const row = rows[0];
+    const row = rows[0] as SyncConfig;
     return this.parseValue(row.config_value, row.config_type);
   }
 

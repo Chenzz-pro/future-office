@@ -147,7 +147,7 @@ export class SyncSystemInitializer {
       `;
 
       const result = await dbManager.query(checkSql, [table]);
-      const count = result.rows[0]?.count || 0;
+      const count = (result.rows[0] as { count: number })?.count || 0;
 
       if (count === 0) {
         console.warn(`[SyncSystemInitializer] 表 ${table} 不存在，请执行数据库初始化脚本`);
@@ -218,7 +218,7 @@ export class SyncSystemInitializer {
       `;
 
       const result = await dbManager.query(checkSql);
-      const count = result.rows[0]?.count || 0;
+      const count = (result.rows[0] as { count: number })?.count || 0;
 
       return count > 0 && this.initialized;
     } catch (error) {

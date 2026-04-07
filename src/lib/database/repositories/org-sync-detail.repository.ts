@@ -127,13 +127,43 @@ export class OrgSyncDetailRepository {
     };
 
     for (const row of rows) {
-      const action = row.action;
-      const dataType = row.data_type;
-      const count = Number(row.count);
+      const action = (row as { action: string }).action;
+      const dataType = (row as { data_type: string }).data_type;
+      const count = Number((row as { count: number }).count);
 
-      stats[action] += count;
-      if (stats.byType[dataType]) {
-        stats.byType[dataType][action] += count;
+      // 验证 action 是合法的
+      const validActions = ['insert', 'update', 'delete', 'skip', 'error'];
+      if (validActions.includes(action)) {
+        if (action === 'insert') {
+          stats.insert += count;
+        } else if (action === 'update') {
+          stats.update += count;
+        } else if (action === 'delete') {
+          stats.delete += count;
+        } else if (action === 'skip') {
+          stats.skip += count;
+        } else if (action === 'error') {
+          stats.error += count;
+        }
+
+        // 验证 dataType 是合法的
+        const validDataTypes = ['org', 'dept', 'group', 'post', 'person'];
+        if (validDataTypes.includes(dataType)) {
+          const byTypeAction = stats.byType[dataType as keyof typeof stats.byType];
+          if (byTypeAction) {
+            if (action === 'insert') {
+              byTypeAction.insert += count;
+            } else if (action === 'update') {
+              byTypeAction.update += count;
+            } else if (action === 'delete') {
+              byTypeAction.delete += count;
+            } else if (action === 'skip') {
+              byTypeAction.skip += count;
+            } else if (action === 'error') {
+              byTypeAction.error += count;
+            }
+          }
+        }
       }
     }
 
