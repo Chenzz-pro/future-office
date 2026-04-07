@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'update') {
       const body = await request.json();
-      const { type, name, description, avatar, systemPrompt, skills, bots } = body;
+      const { type, name, description, avatar, systemPrompt, skills, bots, permissionRules, businessRules } = body;
 
       if (!type) {
         return NextResponse.json(
@@ -88,6 +88,14 @@ export async function POST(request: NextRequest) {
         avatar,
         systemPrompt,
       });
+
+      // 更新新架构字段
+      if (permissionRules !== undefined) {
+        await agentRepository.update(type, { permissionRules });
+      }
+      if (businessRules !== undefined) {
+        await agentRepository.update(type, { businessRules });
+      }
 
       // 更新技能列表
       if (skills && Array.isArray(skills)) {
