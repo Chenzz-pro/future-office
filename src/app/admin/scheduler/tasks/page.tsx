@@ -42,6 +42,15 @@ import {
   AlertCircle,
   RefreshCw,
   MoreHorizontal,
+  Building2,
+  Database,
+  FileText,
+  Bell,
+  Activity,
+  Settings,
+  List,
+  RefreshCcw,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -54,6 +63,9 @@ import {
   CRON_TEMPLATES,
   ScheduledTask,
   TaskStats,
+  PresetTaskTemplate,
+  PRESET_TASK_TEMPLATES,
+  getPresetTemplate,
 } from '@/lib/scheduler/types';
 
 interface TaskWithStats extends ScheduledTask {
@@ -89,6 +101,7 @@ export default function SchedulerTasksPage() {
     cronExpression: '*/5 * * * *',
     intervalMinutes: 5,
     relatedSystem: '',
+    selectedTemplate: PresetTaskTemplate.CUSTOM as PresetTaskTemplate,
     handlerConfig: {
       handlerType: 'api' as 'api' | 'function' | 'script',
       handlerPath: '',
@@ -220,6 +233,18 @@ export default function SchedulerTasksPage() {
   // 创建/更新任务
   const handleSubmit = async () => {
     try {
+      // 验证表单
+      if (!formData.name.trim()) {
+        alert('请输入任务名称');
+        return;
+      }
+      
+      // 自定义任务必须填写API路径
+      if (formData.selectedTemplate === PresetTaskTemplate.CUSTOM && !formData.handlerConfig.handlerPath.trim()) {
+        alert('请输入API路径');
+        return;
+      }
+
       const payload = {
         ...formData,
         cronExpression: formData.scheduleType === 'cron' ? formData.cronExpression : undefined,
@@ -258,6 +283,7 @@ export default function SchedulerTasksPage() {
       cronExpression: '*/5 * * * *',
       intervalMinutes: 5,
       relatedSystem: '',
+      selectedTemplate: PresetTaskTemplate.CUSTOM,
       handlerConfig: {
         handlerType: 'api',
         handlerPath: '',
@@ -266,8 +292,36 @@ export default function SchedulerTasksPage() {
     });
   };
 
+  // 处理模板选择变化
+  const handleTemplateChange = (templateId: PresetTaskTemplate) => {
+    const template = getPresetTemplate(templateId);
+    if (!template) return;
+
+    setFormData(prev => ({
+      ...prev,
+      selectedTemplate: templateId,
+      type: template.taskType,
+      group: template.taskGroup,
+      relatedSystem: template.defaultRelatedSystem || prev.relatedSystem,
+      handlerConfig: {
+        ...template.defaultHandlerConfig,
+        parameters: template.defaultHandlerConfig.parameters || {},
+      },
+      cronExpression: template.suggestedCron || prev.cronExpression,
+      intervalMinutes: template.suggestedIntervalMinutes || prev.intervalMinutes,
+    }));
+  };
+
+  // 打开编辑对话框
   const openEditDialog = (task: TaskWithStats) => {
     setEditingTask(task);
+    
+    // 尝试匹配现有任务的模板
+    const matchedTemplate = PRESET_TASK_TEMPLATES.find(t => 
+      t.defaultHandlerConfig.handlerPath === task.handlerConfig.handlerPath &&
+      t.taskType === task.type
+    );
+    
     setFormData({
       name: task.name,
       description: task.description || '',
@@ -278,12 +332,29 @@ export default function SchedulerTasksPage() {
       cronExpression: task.cronExpression || '*/5 * * * *',
       intervalMinutes: task.intervalMinutes || 5,
       relatedSystem: task.relatedSystem || '',
+      selectedTemplate: matchedTemplate?.id || PresetTaskTemplate.CUSTOM,
       handlerConfig: {
         ...task.handlerConfig,
         parameters: task.handlerConfig.parameters || {},
       },
     });
     setCreateDialogOpen(true);
+  };
+
+  // 获取模板图标
+  const getTemplateIcon = (icon?: string) => {
+    const iconMap: Record<string, React.ReactNode> = {
+      'building': <Building2 className="w-4 h-4" />,
+      'refresh': <RefreshCw className="w-4 h-4" />,
+      'list': <List className="w-4 h-4" />,
+      'database': <Database className="w-4 h-4" />,
+      'trash': <Trash2 className="w-4 h-4" />,
+      'activity': <Activity className="w-4 h-4" />,
+      'bell': <Bell className="w-4 h-4" />,
+      'file-text': <FileText className="w-4 h-4" />,
+      'settings': <Settings className="w-4 h-4" />,
+    };
+    return iconMap[icon || 'settings'] || <Settings className="w-4 h-4" />;
   };
 
   const getStatusBadge = (status: TaskStatus) => {
@@ -660,39 +731,71 @@ export default function SchedulerTasksPage() {
               </div>
             </div>
 
+            {/* 任务模板选择 */}
             <div className="border-t pt-4">
-              <h4 className="font-medium mb-4">执行配置</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <h4 className="font-medium mb-4">选择任务模板</h4>
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="handlerType">处理器类型</Label>
+                  <Label htmlFor="template">任务模板 *</Label>
                   <Select 
-                    value={formData.handlerConfig.handlerType} 
-                    onValueChange={v => setFormData({ 
-                      ...formData, 
-                      handlerConfig: { ...formData.handlerConfig, handlerType: v as 'api' | 'function' }
-                    })}
+                    value={formData.selectedTemplate} 
+                    onValueChange={v => handleTemplateChange(v as PresetTaskTemplate)}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="请选择任务模板" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="api">API调用</SelectItem>
-                      <SelectItem value="function">函数执行</SelectItem>
+                      {PRESET_TASK_TEMPLATES.map(template => (
+                        <SelectItem key={template.id} value={template.id}>
+                          <div className="flex items-center gap-2">
+                            {getTemplateIcon(template.icon)}
+                            <span>{template.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="handlerPath">处理器路径 *</Label>
-                  <Input
-                    id="handlerPath"
-                    value={formData.handlerConfig.handlerPath}
-                    onChange={e => setFormData({ 
-                      ...formData, 
-                      handlerConfig: { ...formData.handlerConfig, handlerPath: e.target.value }
-                    })}
-                    placeholder={formData.handlerConfig.handlerType === 'api' ? '/api/xxx' : 'sync:orgSync'}
-                  />
-                </div>
+
+                {/* 模板说明 */}
+                {formData.selectedTemplate !== PresetTaskTemplate.CUSTOM && (
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <Zap className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+                      <div className="text-sm">
+                        <p className="font-medium text-foreground">
+                          {getPresetTemplate(formData.selectedTemplate)?.name}
+                        </p>
+                        <p className="text-muted-foreground mt-1">
+                          {getPresetTemplate(formData.selectedTemplate)?.description}
+                        </p>
+                        {getPresetTemplate(formData.selectedTemplate)?.suggestedCron && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            推荐执行时间：{getPresetTemplate(formData.selectedTemplate)?.suggestedCron}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 自定义任务的API路径输入 */}
+                {formData.selectedTemplate === PresetTaskTemplate.CUSTOM && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="handlerPath">API路径</Label>
+                      <Input
+                        id="handlerPath"
+                        value={formData.handlerConfig.handlerPath}
+                        onChange={e => setFormData({ 
+                          ...formData, 
+                          handlerConfig: { ...formData.handlerConfig, handlerPath: e.target.value }
+                        })}
+                        placeholder="/api/xxx"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
