@@ -28,8 +28,8 @@ export interface EKPOrgElement {
   members?: string[];
   persons?: string[];
   posts?: string[];
-  loginName?: string;
-  fd_login_name?: string; // EKP系统的登录名字段
+  fd_login_name?: string; // EKP系统的登录名字段（优先使用）
+  loginName?: string; // 兼容旧字段名
   password?: string;
   mobileNo?: string;
   email?: string;
@@ -57,6 +57,15 @@ export class OrgSyncMapper {
     if (isAvailableValue === 'false' || isAvailableValue === '0' || ekpData.isAvailable === false) {
       isAvailable = false;
     }
+
+    console.log('[mapToOrgElement] 组织元素映射:', {
+      id: ekpData.id,
+      name: ekpData.name,
+      type: ekpData.type,
+      fd_parentid: ekpData.fd_parentid,
+      fd_parentorgid: ekpData.fd_parentorgid,
+      isAvailable: isAvailable
+    });
 
     return {
       fd_id: ekpData.id,
@@ -97,12 +106,14 @@ export class OrgSyncMapper {
     const deptId = ekpData.fd_parentid || undefined;
 
     console.log('[mapToOrgPerson] 人员映射:', {
+      id: ekpData.id,
       name: ekpData.name,
       fd_login_name: ekpData.fd_login_name,
       loginName: ekpData.loginName,
       finalLoginName: loginName,
       fd_parentid: ekpData.fd_parentid,
-      deptId: deptId
+      deptId: deptId,
+      posts: ekpData.posts
     });
 
     return {
