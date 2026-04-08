@@ -23,6 +23,7 @@ export class OrgElementRepository {
     const id = dto.fd_id || crypto.randomUUID();
     const now = new Date();
 
+    // 只插入核心字段，避免字段数不匹配
     const sql = `
       INSERT INTO ${this.tableName} (
         fd_id,
@@ -41,10 +42,9 @@ export class OrgElementRepository {
         fd_super_leaderid,
         fd_parentorgid,
         fd_parentid,
-        fd_creator_id,
         fd_create_time,
         fd_alter_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     await dbManager.query(sql, [
@@ -64,7 +64,6 @@ export class OrgElementRepository {
       dto.fd_super_leaderid || null,
       dto.fd_parentorgid || null,
       dto.fd_parentid || null,
-      dto.fd_creator_id || null,
       now,
       now
     ]);
