@@ -1,11 +1,18 @@
 /**
  * 组织架构同步 API
- * 支持从EKP系统同步组织架构数据
+ * 
+ * 使用蓝凌EKP标准同步接口 getUpdatedElements 获取组织架构数据
+ * 接口路径：/api/sys-organization/sysSynchroGetOrg/getUpdatedElements
+ * 
+ * 根据接口文档，该接口支持：
+ * 1. 按组织类型过滤（org/dept/post/person等）
+ * 2. 分批次获取大量数据
+ * 3. 按时间戳增量同步
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
-import { EKPRestClient, OrgTreeNode, PersonInfo } from '@/lib/ekp-rest-client';
+import { EKPRestClient, SyncedElement, SyncedElementsResult } from '@/lib/ekp-rest-client';
 import { hashPassword, generateRandomPassword } from '@/lib/password/password-utils';
 
 export async function POST(request: NextRequest) {
@@ -43,31 +50,66 @@ export async function POST(request: NextRequest) {
       persons: { total: 0, success: 0, failed: 0 },
     };
 
-    // 同步机构
+    // 确定要同步的组织类型
+    const orgTypes: string[] = [];
     if (scope.includes('organizations')) {
-      const orgResult = await syncOrganizations(client, type);
-      stats.organizations = orgResult;
-      stats.total += orgResult.total;
-      stats.success += orgResult.success;
-      stats.failed += orgResult.failed;
+      orgTypes.push('org');
     }
-
-    // 同步部门
     if (scope.includes('departments')) {
-      const deptResult = await syncDepartments(client, type);
-      stats.departments = deptResult;
-      stats.total += deptResult.total;
-      stats.success += deptResult.success;
-      stats.failed += deptResult.failed;
+      orgTypes.push('dept');
+    }
+    // 群组和岗位暂不支持
+    // if (scope.includes('posts')) {
+    //   orgTypes.push('post');
+    // }
+    if (scope.includes('persons')) {
+      orgTypes.push('person');
     }
 
-    // 同步人员
-    if (scope.includes('persons')) {
-      const personResult = await syncPersons(client, type);
-      stats.persons = personResult;
-      stats.total += personResult.total;
-      stats.success += personResult.success;
-      stats.failed += personResult.failed;
+    console.log('[API:Organization/Sync] 同步类型:', orgTypes);
+
+    // 使用 getUpdatedElements 同步所有数据
+    const syncResult = await syncAllElements(client, orgTypes);
+
+    if (!syncResult.success) {
+      return NextResponse.json({
+        success: false,
+        error: syncResult.error || '同步失败',
+      }, { status: 500 });
+    }
+
+    // 统计结果
+    for (const element of syncResult.elements || []) {
+      stats.total++;
+      
+      if (element.type === 'org' && scope.includes('organizations')) {
+        stats.organizations.total++;
+        if (await saveOrganization(element)) {
+          stats.organizations.success++;
+          stats.success++;
+        } else {
+          stats.organizations.failed++;
+          stats.failed++;
+        }
+      } else if (element.type === 'dept' && scope.includes('departments')) {
+        stats.departments.total++;
+        if (await saveDepartment(element)) {
+          stats.departments.success++;
+          stats.success++;
+        } else {
+          stats.departments.failed++;
+          stats.failed++;
+        }
+      } else if (element.type === 'person' && scope.includes('persons')) {
+        stats.persons.total++;
+        if (await savePerson(element)) {
+          stats.persons.success++;
+          stats.success++;
+        } else {
+          stats.persons.failed++;
+          stats.failed++;
+        }
+      }
     }
 
     console.log('[API:Organization/Sync] 同步完成', stats);
@@ -123,285 +165,245 @@ async function createEKPClient(): Promise<EKPRestClient | null> {
 }
 
 /**
- * 递归获取组织树
+ * 同步所有组织架构元素
+ * 使用 getUpdatedElements 接口，支持分批次获取
  */
-async function fetchOrgTree(client: EKPRestClient, parentId?: string): Promise<OrgTreeNode[]> {
-  try {
-    const result = await client.getOrgTree(parentId);
+async function syncAllElements(
+  client: EKPRestClient, 
+  orgTypes: string[]
+): Promise<{ success: boolean; elements: SyncedElement[]; error?: string }> {
+  const allElements: SyncedElement[] = [];
+  let timeStamp = '';
+  const batchSize = 500; // 每批获取500条
+  let hasMore = true;
+  let batchCount = 0;
+
+  console.log('[Sync] 开始分批获取组织架构数据...');
+
+  while (hasMore) {
+    batchCount++;
+    console.log(`[Sync] 获取第 ${batchCount} 批数据...`);
+
+    // 调用 getUpdatedElements 接口
+    const result = await client.getUpdatedElements({
+      returnOrgType: orgTypes.length > 0 ? orgTypes : undefined,
+      count: batchSize,
+      beginTimeStamp: timeStamp || undefined,
+    });
+
     if (!result.success || !result.data) {
-      return [];
+      console.error(`[Sync] 获取第 ${batchCount} 批数据失败:`, result.msg);
+      return { success: false, elements: allElements, error: result.msg };
     }
-    return result.data;
-  } catch (error) {
-    console.error('[Sync] 获取组织树失败:', error);
-    return [];
-  }
-}
 
-/**
- * 同步机构
- */
-async function syncOrganizations(client: EKPRestClient, type: string): Promise<{ total: number; success: number; failed: number }> {
-  let total = 0, success = 0, failed = 0;
-  
-  try {
-    // 获取组织树
-    const treeData = await fetchOrgTree(client);
+    const { elements, timeStamp: newTimeStamp, hasMore: more } = result.data;
     
-    // 筛选机构（type=1）
-    const organizations = treeData.filter(node => {
-      const nodeType = node.fdOrgType || node.type;
-      return nodeType === 1;
-    });
-
-    total = organizations.length;
-
-    for (const org of organizations) {
-      try {
-        const id = org.fdId || org.id;
-        const name = org.fdName || org.name || '';
-        const hierarchyId = org.fdHierarchyId || '';
-
-        // 检查是否已存在
-        const existing = await dbManager.query(
-          'SELECT fd_id FROM sys_org_element WHERE fd_id = ?',
-          [id]
-        );
-
-        if (existing.rows.length > 0) {
-          // 更新
-          await dbManager.query(`
-            UPDATE sys_org_element SET 
-              fd_name = ?, fd_no = ?, fd_order = ?, fd_hierarchy_id = ?
-            WHERE fd_id = ?
-          `, [
-            name,
-            org.fdNo || '',
-            org.fdOrder || 0,
-            hierarchyId,
-            id,
-          ]);
-        } else {
-          // 插入
-          await dbManager.query(`
-            INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid, fd_hierarchy_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `, [
-            id,
-            1, // 机构类型
-            name,
-            org.fdNo || '',
-            org.fdOrder || 0,
-            null, // 机构没有父级
-            hierarchyId,
-          ]);
-        }
-        success++;
-      } catch (err) {
-        console.error('[Sync] 同步机构失败:', org, err);
-        failed++;
-      }
-    }
-
-    console.log(`[Sync] 机构同步完成: 总计${total}, 成功${success}, 失败${failed}`);
-  } catch (error) {
-    console.error('[Sync] 同步机构失败:', error);
-  }
-
-  return { total, success, failed };
-}
-
-/**
- * 同步部门
- */
-async function syncDepartments(client: EKPRestClient, type: string): Promise<{ total: number; success: number; failed: number }> {
-  let total = 0, success = 0, failed = 0;
-  
-  try {
-    // 获取组织树
-    const treeData = await fetchOrgTree(client);
+    console.log(`[Sync] 第 ${batchCount} 批获取到 ${elements.length} 条数据`);
+    allElements.push(...elements);
     
-    // 筛选部门（type=2）
-    const departments = treeData.filter(node => {
-      const nodeType = node.fdOrgType || node.type;
-      return nodeType === 2;
-    });
+    hasMore = more;
+    timeStamp = newTimeStamp;
 
-    total = departments.length;
-
-    for (const dept of departments) {
-      try {
-        const id = dept.fdId || dept.id;
-        const name = dept.fdName || dept.name || '';
-        const hierarchyId = dept.fdHierarchyId || '';
-        
-        // 从层级路径解析父级ID
-        // 格式: x{id1}x{id2}x...，取倒数第二个作为父级
-        let parentId: string | null = null;
-        if (hierarchyId) {
-          const parts = hierarchyId.split('x').filter(Boolean);
-          if (parts.length >= 2) {
-            parentId = parts[parts.length - 2];
-          }
-        }
-
-        // 检查是否已存在
-        const existing = await dbManager.query(
-          'SELECT fd_id FROM sys_org_element WHERE fd_id = ?',
-          [id]
-        );
-
-        if (existing.rows.length > 0) {
-          // 更新
-          await dbManager.query(`
-            UPDATE sys_org_element SET 
-              fd_name = ?, fd_no = ?, fd_order = ?, fd_hierarchy_id = ?, fd_parentorgid = ?
-            WHERE fd_id = ?
-          `, [
-            name,
-            dept.fdNo || '',
-            dept.fdOrder || 0,
-            hierarchyId,
-            parentId,
-            id,
-          ]);
-        } else {
-          // 插入
-          await dbManager.query(`
-            INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid, fd_hierarchy_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `, [
-            id,
-            2, // 部门类型
-            name,
-            dept.fdNo || '',
-            dept.fdOrder || 0,
-            parentId,
-            hierarchyId,
-          ]);
-        }
-        success++;
-      } catch (err) {
-        console.error('[Sync] 同步部门失败:', dept, err);
-        failed++;
-      }
+    // 安全限制，防止无限循环
+    if (batchCount > 100) {
+      console.warn('[Sync] 达到最大批次限制，停止获取');
+      break;
     }
-
-    console.log(`[Sync] 部门同步完成: 总计${total}, 成功${success}, 失败${failed}`);
-  } catch (error) {
-    console.error('[Sync] 同步部门失败:', error);
   }
 
-  return { total, success, failed };
+  console.log(`[Sync] 数据获取完成，共 ${batchCount} 批，${allElements.length} 条记录`);
+  
+  // 按类型统计
+  const typeStats: Record<string, number> = {};
+  for (const elem of allElements) {
+    typeStats[elem.type] = (typeStats[elem.type] || 0) + 1;
+  }
+  console.log('[Sync] 各类型数量:', typeStats);
+
+  return { success: true, elements: allElements };
 }
 
 /**
- * 同步人员
+ * 保存机构数据
  */
-async function syncPersons(client: EKPRestClient, type: string): Promise<{ total: number; success: number; failed: number }> {
-  let total = 0, success = 0, failed = 0;
-  
+async function saveOrganization(element: SyncedElement): Promise<boolean> {
   try {
-    // 分页获取人员列表
-    let page = 1;
-    const pageSize = 100;
-    let hasMore = true;
+    const id = element.id || element.lunid;
+    if (!id) return false;
 
-    while (hasMore) {
-      const result = await client.getPersonList(undefined, page, pageSize);
-      
-      if (!result.success || !result.data) {
-        console.log('[Sync] 获取人员列表失败:', result.msg);
-        break;
-      }
+    // 解析层级路径获取顶级父级
+    let parentOrgId: string | null = null;
 
-      const { count, persons } = result.data;
-      total = count;
+    // 检查是否已存在
+    const existing = await dbManager.query(
+      'SELECT fd_id FROM sys_org_element WHERE fd_id = ?',
+      [id]
+    );
 
-      for (const person of persons) {
-        try {
-          const id = person.fdId || person.fdLoginName;
-          if (!id) continue;
-
-          // 从层级路径解析所属部门ID
-          const hierarchyId = person.fdHierarchyId || '';
-          let deptId: string | null = null;
-          if (hierarchyId) {
-            const parts = hierarchyId.split('x').filter(Boolean);
-            if (parts.length >= 1) {
-              deptId = parts[parts.length - 1];
-            }
-          }
-
-          // 检查是否已存在
-          const existing = await dbManager.query(
-            'SELECT fd_id FROM sys_org_person WHERE fd_id = ?',
-            [id]
-          );
-
-          if (existing.rows.length > 0) {
-            // 更新
-            await dbManager.query(`
-              UPDATE sys_org_person SET 
-                fd_name = ?, fd_no = ?, fd_email = ?, fd_mobile = ?, 
-                fd_dept_id = ?, fd_rtx_account = ?, fd_hierarchy_id = ?
-              WHERE fd_id = ?
-            `, [
-              person.fdName || person.name || '',
-              person.fdNo || '',
-              person.fdEmail || '',
-              person.fdMobile || '',
-              deptId,
-              person.fdRtxAccount || null,
-              hierarchyId,
-              id,
-            ]);
-          } else {
-            // 生成随机密码
-            const password = generateRandomPassword(12, {
-              includeNumbers: true,
-              includeSpecialChars: false,
-              includeUppercase: true,
-            });
-            const hashedPassword = await hashPassword(password);
-
-            // 插入
-            await dbManager.query(`
-              INSERT INTO sys_org_person (
-                fd_id, fd_name, fd_no, fd_login_name, fd_email, fd_mobile, 
-                fd_dept_id, fd_rtx_account, fd_hierarchy_id, fd_password, fd_is_login_enabled, fd_role
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-              id,
-              person.fdName || person.name || '',
-              person.fdNo || '',
-              person.fdLoginName || id,
-              person.fdEmail || '',
-              person.fdMobile || '',
-              deptId,
-              person.fdRtxAccount || null,
-              hierarchyId,
-              hashedPassword,
-              1, // fd_is_login_enabled
-              'user', // 默认角色
-            ]);
-          }
-          success++;
-        } catch (err) {
-          console.error('[Sync] 同步人员失败:', person, err);
-          failed++;
-        }
-      }
-
-      // 判断是否还有更多数据
-      hasMore = persons.length === pageSize && (page * pageSize) < count;
-      page++;
+    if (existing.rows.length > 0) {
+      // 更新
+      await dbManager.query(`
+        UPDATE sys_org_element SET 
+          fd_name = ?, fd_no = ?, fd_order = ?, fd_hierarchy_id = ?, fd_is_available = ?
+        WHERE fd_id = ?
+      `, [
+        element.name || '',
+        element.no || '',
+        element.order || '',
+        '', // 机构没有层级路径
+        element.isAvailable !== false ? 1 : 0,
+        id,
+      ]);
+    } else {
+      // 插入
+      await dbManager.query(`
+        INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid, fd_hierarchy_id, fd_is_available)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        id,
+        1, // 机构类型
+        element.name || '',
+        element.no || '',
+        element.order || '',
+        parentOrgId,
+        '', // 机构没有层级路径
+        element.isAvailable !== false ? 1 : 0,
+      ]);
     }
 
-    console.log(`[Sync] 人员同步完成: 总计${total}, 成功${success}, 失败${failed}`);
-  } catch (error) {
-    console.error('[Sync] 同步人员失败:', error);
+    return true;
+  } catch (err) {
+    console.error('[Sync] 保存机构失败:', element, err);
+    return false;
   }
+}
 
-  return { total, success, failed };
+/**
+ * 保存部门数据
+ */
+async function saveDepartment(element: SyncedElement): Promise<boolean> {
+  try {
+    const id = element.id || element.lunid;
+    if (!id) return false;
+
+    // parent 字段表示父部门ID
+    const parentId = element.parent || null;
+
+    // 检查是否已存在
+    const existing = await dbManager.query(
+      'SELECT fd_id FROM sys_org_element WHERE fd_id = ?',
+      [id]
+    );
+
+    if (existing.rows.length > 0) {
+      // 更新
+      await dbManager.query(`
+        UPDATE sys_org_element SET 
+          fd_name = ?, fd_no = ?, fd_order = ?, fd_parentorgid = ?, fd_is_available = ?
+        WHERE fd_id = ?
+      `, [
+        element.name || '',
+        element.no || '',
+        element.order || '',
+        parentId,
+        element.isAvailable !== false ? 1 : 0,
+        id,
+      ]);
+    } else {
+      // 插入
+      await dbManager.query(`
+        INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid, fd_is_available)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        id,
+        2, // 部门类型
+        element.name || '',
+        element.no || '',
+        element.order || '',
+        parentId,
+        element.isAvailable !== false ? 1 : 0,
+      ]);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[Sync] 保存部门失败:', element, err);
+    return false;
+  }
+}
+
+/**
+ * 保存人员数据
+ */
+async function savePerson(element: SyncedElement): Promise<boolean> {
+  try {
+    // 人员的ID使用lunid（唯一标识）
+    const id = element.id || element.lunid;
+    if (!id) return false;
+
+    // parent 字段表示所属部门
+    const deptId = element.parent || null;
+
+    // 检查是否已存在
+    const existing = await dbManager.query(
+      'SELECT fd_id FROM sys_org_person WHERE fd_id = ?',
+      [id]
+    );
+
+    if (existing.rows.length > 0) {
+      // 更新
+      await dbManager.query(`
+        UPDATE sys_org_person SET 
+          fd_name = ?, fd_no = ?, fd_email = ?, fd_mobile = ?, 
+          fd_dept_id = ?, fd_rtx_account = ?, fd_hierarchy_id = ?,
+          fd_is_login_enabled = ?
+        WHERE fd_id = ?
+      `, [
+        element.name || '',
+        element.no || '',
+        element.email || '',
+        element.mobileNo || '',
+        deptId,
+        element.rtx || null,
+        '', // 人员没有单独的层级路径
+        element.isAvailable !== false ? 1 : 0,
+        id,
+      ]);
+    } else {
+      // 生成随机密码
+      const password = generateRandomPassword(12, {
+        includeNumbers: true,
+        includeSpecialChars: false,
+        includeUppercase: true,
+      });
+      const hashedPassword = await hashPassword(password);
+
+      // 插入
+      await dbManager.query(`
+        INSERT INTO sys_org_person (
+          fd_id, fd_name, fd_no, fd_login_name, fd_email, fd_mobile, 
+          fd_dept_id, fd_rtx_account, fd_password, fd_is_login_enabled, fd_role,
+          fd_is_available
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        id,
+        element.name || '',
+        element.no || '',
+        element.loginName || id,
+        element.email || '',
+        element.mobileNo || '',
+        deptId,
+        element.rtx || null,
+        hashedPassword,
+        1, // fd_is_login_enabled
+        'user', // 默认角色
+        element.isAvailable !== false ? 1 : 0,
+      ]);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[Sync] 保存人员失败:', element, err);
+    return false;
+  }
 }
