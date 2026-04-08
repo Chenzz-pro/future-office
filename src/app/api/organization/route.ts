@@ -226,24 +226,27 @@ async function deleteOrgElement(type: string, id: string) {
 
 // 获取树形数据
 async function getTreeData(type: number) {
-  // 查询机构和部门数据（不查询人员和岗位）
+  // 查询机构和部门数据（不查询人员）
   // 添加 fd_hierarchy_id 字段用于解析层级关系
   let query = `
     SELECT fd_id, fd_org_type, fd_name, fd_parentid, fd_parentorgid, fd_persons_number, fd_hierarchy_id
     FROM sys_org_element
-    WHERE fd_is_available = 1 AND fd_is_abandon = 0
+    WHERE 1=1
   `;
 
   const params: unknown[] = [];
-
-  // type: 1=只显示机构，2=显示机构和部门（默认）
+  
+  // type: 1=只显示机构，2=显示机构和部门+岗位（默认），3=只显示岗位
   if (type === 1) {
     query += ' AND fd_org_type = 1';
+  } else if (type === 3) {
+    query += ' AND fd_org_type = 3';
   } else {
-    query += ' AND fd_org_type IN (1, 2)';
+    // 默认显示机构和部门、岗位
+    query += ' AND fd_org_type IN (1, 2, 3)';
   }
 
-  query += ' ORDER BY fd_order ASC, fd_create_time ASC';
+  query += ' ORDER BY fd_org_type ASC, fd_order ASC, fd_create_time ASC';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await dbManager.query<any>(query, params);
