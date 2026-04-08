@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Dialog, 
   DialogContent, 
@@ -65,6 +66,7 @@ export default function SchedulerTasksPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithStats | null>(null);
+  const [tableNotExists, setTableNotExists] = useState(false);
   
   // 统计数据
   const [stats, setStats] = useState({
@@ -101,11 +103,26 @@ export default function SchedulerTasksPage() {
       const data = await response.json();
       if (data.success) {
         setTasks(data.data);
+        setTableNotExists(false);
       }
     } catch (error) {
       console.error('加载任务失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 检查表是否存在
+  const checkTables = async () => {
+    try {
+      const response = await fetch('/api/database/init/scheduler');
+      const data = await response.json();
+      if (data.success && !data.data?.scheduledTasksTable) {
+        setTableNotExists(true);
+        setLoading(false);
+      }
+    } catch {
+      console.error('检查表失败');
     }
   };
 
@@ -123,6 +140,7 @@ export default function SchedulerTasksPage() {
   };
 
   useEffect(() => {
+    checkTables();
     loadTasks();
     loadStats();
     
@@ -296,6 +314,24 @@ export default function SchedulerTasksPage() {
 
   return (
     <div className="space-y-6">
+      {/* 表不存在提示 */}
+      {tableNotExists && (
+        <Alert className="border-yellow-500 bg-yellow-50">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <strong>定时任务表未初始化</strong>
+                <p className="text-sm mt-1">请先在{'<a href="/admin/database" className="underline">数据库配置</a>'}页面初始化定时任务表。</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => window.location.href = '/admin/database'}>
+                前往初始化
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Alert as AlertUI, AlertDescription } from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -28,11 +29,12 @@ import {
   Eye,
   Bell,
   BellOff,
+  AlertCircle,
 } from 'lucide-react';
 import {
-  Alert,
+  Alert as AlertData,
   AlertLevel,
-  AlertType,
+  AlertType as AlertTypeEnum,
   ALERT_LEVEL_LABELS,
   ALERT_TYPE_LABELS,
   ALERT_LEVEL_COLORS,
@@ -40,12 +42,27 @@ import {
 } from '@/lib/monitor/types';
 
 export default function MonitorAlertsPage() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [stats, setStats] = useState<AlertStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('active');
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [updating, setUpdating] = useState<string | null>(null);
+  const [tableNotExists, setTableNotExists] = useState(false);
+
+  // 检查表是否存在
+  const checkTables = async () => {
+    try {
+      const response = await fetch('/api/monitor/init?action=status');
+      const data = await response.json();
+      if (data.success && !data.data?.alertsTable) {
+        setTableNotExists(true);
+        setLoading(false);
+      }
+    } catch {
+      console.error('检查表失败');
+    }
+  };
 
   // 加载告警列表
   const loadAlerts = async () => {
@@ -86,6 +103,7 @@ export default function MonitorAlertsPage() {
   };
 
   useEffect(() => {
+    checkTables();
     loadAlerts();
     loadStats();
     
@@ -138,6 +156,24 @@ export default function MonitorAlertsPage() {
 
   return (
     <div className="space-y-6">
+      {/* 表不存在提示 */}
+      {tableNotExists && (
+        <AlertUI className="border-yellow-500 bg-yellow-50">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <strong>监控中心表未初始化</strong>
+                <p className="text-sm mt-1">请先在{'<a href="/admin/database" className="underline">数据库配置</a>'}页面初始化监控中心表。</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => window.location.href = '/admin/database'}>
+                前往初始化
+              </Button>
+            </div>
+          </AlertDescription>
+        </AlertUI>
+      )}
+
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
