@@ -101,10 +101,11 @@ export class OrgSyncService {
         if (ekpData.length > 0) {
           console.log(`[全量同步] 前5条EKP数据:`, JSON.stringify(ekpData.slice(0, 5), null, 2));
 
-          // 检查第一条数据是否有 parent 字段
+          // 检查第一条数据是否有 fd_parentid 字段
           const firstItem = ekpData[0];
           console.log(`[全量同步] 第一条数据的所有字段:`, Object.keys(firstItem));
-          console.log(`[全量同步] 第一条数据的 parent 字段:`, firstItem.parent);
+          console.log(`[全量同步] 第一条数据的 fd_parentid 字段:`, firstItem.fd_parentid);
+          console.log(`[全量同步] 第一条数据的 fd_parentorgid 字段:`, firstItem.fd_parentorgid);
           console.log(`[全量同步] 第一条数据的完整数据:`, JSON.stringify(firstItem, null, 2));
         }
 
@@ -198,7 +199,7 @@ export class OrgSyncService {
 
     // 递归获取所有子机构ID
     const getAllChildIds = (parentId: string) => {
-      const children = data.filter(item => item.parent === parentId);
+      const children = data.filter(item => item.fd_parentid === parentId);
       console.log(`[机构过滤] 机构 ${parentId} 的子机构数量: ${children.length}`);
       children.forEach(child => {
         if (!includeIds.has(child.id)) {
@@ -219,11 +220,11 @@ export class OrgSyncService {
     // 过滤数据
     const filtered = data.filter(item => {
       const isIncluded = includeIds.has(item.id);
-      const hasIncludedParent = item.parent && includeIds.has(item.parent);
+      const hasIncludedParent = item.fd_parentid && includeIds.has(item.fd_parentid);
       const result = isIncluded || hasIncludedParent;
 
       if (!result) {
-        console.log(`[机构过滤] 过滤掉 ${item.type}: ${item.name} (${item.id}), parent: ${item.parent}`);
+        console.log(`[机构过滤] 过滤掉 ${item.type}: ${item.name} (${item.id}), fd_parentid: ${item.fd_parentid}`);
       }
 
       return result;

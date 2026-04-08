@@ -21,7 +21,8 @@ export interface EKPOrgElement {
   keyword?: string;
   memo?: string;
   isAvailable?: boolean;
-  parent?: string;
+  fd_parentid?: string;
+  fd_parentorgid?: string;
   thisLeader?: string;
   superLeader?: string;
   members?: string[];
@@ -65,8 +66,8 @@ export class OrgSyncMapper {
       fd_keyword: ekpData.keyword || undefined,
       fd_is_available: isAvailable,
       fd_memo: ekpData.memo || undefined,
-      fd_parentid: ekpData.parent || undefined,
-      fd_parentorgid: ekpData.parent || undefined, // 父机构ID（与父部门ID相同）
+      fd_parentid: ekpData.fd_parentid || undefined,
+      fd_parentorgid: ekpData.fd_parentorgid || undefined,
       fd_this_leaderid: ekpData.thisLeader || undefined,
       fd_super_leaderid: ekpData.superLeader || undefined,
       // 群组成员特殊处理
@@ -96,7 +97,7 @@ export class OrgSyncMapper {
       fd_no: ekpData.no || undefined,
       fd_order: ekpData.order ? parseInt(ekpData.order, 10) : undefined,
       fd_keyword: ekpData.keyword || undefined,
-      fd_dept_id: ekpData.parent || undefined,
+      fd_dept_id: ekpData.fd_parentid || undefined,
       fd_post_id: ekpData.posts && ekpData.posts.length > 0 ? ekpData.posts[0] : undefined,
       fd_post_ids: ekpData.posts || [],
       fd_email: ekpData.email || undefined,
@@ -250,7 +251,7 @@ export class OrgSyncMapper {
       return true;
     }
 
-    if (ekpData.parent !== localData.fd_parentid) {
+    if (ekpData.fd_parentid !== localData.fd_parentid) {
       return true;
     }
 
