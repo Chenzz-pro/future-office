@@ -67,14 +67,14 @@ export class OrgSyncService {
       console.log(`[全量同步] 开始同步，同步ID: ${syncLogId}，机构范围: ${options.orgIds ? `${options.orgIds.length} 个机构` : '全部'}`);
 
       // 调用EKP接口获取全部数据
+      console.log(`[全量同步] 开始调用EKP接口 org.getElementsBaseInfo`);
       const ekpResult = await callEKPInterface<{
         returnState: number;
         message: EKPOrgElement[];
         count: number;
-      }>('org.getElementsBaseInfo', {
-        returnOrgType: JSON.stringify(options.returnOrgType || [{ type: 'org' }, { type: 'dept' }, { type: 'post' }, { type: 'person' }]),
-        returnType: JSON.stringify([{ type: 'no' }, { type: 'order' }, { type: 'keyword' }])
-      });
+      }>('org.getElementsBaseInfo');
+
+      console.log(`[全量同步] EKP接口返回:`, JSON.stringify(ekpResult));
 
       if (ekpResult.success && ekpResult.data?.returnState === 2) {
         let ekpData = ekpResult.data.message || [];

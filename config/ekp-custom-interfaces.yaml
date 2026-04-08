@@ -215,8 +215,8 @@ custom:
     method: POST
     enabled: true
     request:
-      returnOrgType: '[]'
-      returnType: '[]'
+      returnOrgType: '[{"type":"org"},{"type":"dept"},{"type":"post"},{"type":"person"}]'
+      returnType: '[{"type":"no"},{"type":"order"},{"type":"keyword"}]'
     response:
       successPath: returnState == 2
       dataPath: message

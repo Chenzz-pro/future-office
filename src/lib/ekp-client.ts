@@ -157,7 +157,12 @@ export async function callEKPInterface<T = unknown>(
       : btoa(`${row.username}:${row.password}`);
 
     // 6. 构造请求
-    const endpoint = `${row.ekp_address}${interfaceConfig.path}`;
+    // 移除baseUrl末尾的斜杠和path开头的斜杠，避免双斜杠
+    const baseUrl = row.ekp_address.replace(/\/+$/, '');
+    const path = interfaceConfig.path.replace(/^\/+/, '');
+    const endpoint = `${baseUrl}/${path}`;
+    console.log('[EKPClient] 接口配置:', JSON.stringify(interfaceConfig));
+    console.log('[EKPClient] 最终endpoint:', endpoint);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -165,10 +170,14 @@ export async function callEKPInterface<T = unknown>(
     };
 
     // 7. 构造请求体（包含authAreaId）
+    // 合并配置文件中的request参数和调用时传递的params
     const requestBody = {
+      ...interfaceConfig.request,
       ...params,
       authAreaId: authAreaId || undefined,
     };
+
+    console.log('[EKPClient] 请求体:', JSON.stringify(requestBody));
 
     // 8. 发送请求（EKP 主要使用 POST）
     const response = await fetch(endpoint, {
@@ -179,6 +188,8 @@ export async function callEKPInterface<T = unknown>(
 
     // 8. 处理响应
     const text = await response.text();
+    console.log('[EKPClient] 响应状态:', response.status);
+    console.log('[EKPClient] 响应内容:', text.substring(0, 500));
     let result: any;
     try {
       result = JSON.parse(text);
@@ -206,9 +217,22 @@ export async function callEKPInterface<T = unknown>(
     // 10. 检查业务状态
     if (result.returnState === 2) {
       // 成功
+      // 如果message是字符串，尝试解析为JSON
+      let message = result.message;
+      if (typeof message === 'string') {
+        try {
+          message = JSON.parse(message);
+        } catch {
+          // 解析失败，保持原样
+        }
+      }
       return {
         success: true,
-        data: result.data || result.message,
+        data: {
+          returnState: result.returnState,
+          message: message,
+          count: result.count,
+        } as any,
       };
     } else if (result.returnState === 1) {
       // 失败

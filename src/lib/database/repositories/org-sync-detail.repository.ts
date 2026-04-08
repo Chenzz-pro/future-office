@@ -49,32 +49,38 @@ export class OrgSyncDetailRepository {
       return;
     }
 
+    // 构造占位符
+    const placeholders = details.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+
     const sql = `
       INSERT INTO ${this.tableName} (
         id, sync_log_id, data_type, action, ekp_id, ekp_lunid,
         local_id, ekp_name, old_data, new_data, error_message,
         error_code, batch_no, is_processed
-      ) VALUES ?
+      ) VALUES ${placeholders}
     `;
 
-    const values = details.map((detail) => [
-      crypto.randomUUID(),
-      detail.sync_log_id,
-      detail.data_type,
-      detail.action,
-      detail.ekp_id,
-      detail.ekp_lunid || null,
-      detail.local_id || null,
-      detail.ekp_name || null,
-      detail.old_data ? JSON.stringify(detail.old_data) : null,
-      detail.new_data ? JSON.stringify(detail.new_data) : null,
-      detail.error_message || null,
-      detail.error_code || null,
-      detail.batch_no || null,
-      detail.is_processed ?? true
-    ]);
+    const values: unknown[] = [];
+    details.forEach((detail) => {
+      values.push(
+        crypto.randomUUID(),
+        detail.sync_log_id,
+        detail.data_type,
+        detail.action,
+        detail.ekp_id,
+        detail.ekp_lunid || null,
+        detail.local_id || null,
+        detail.ekp_name || null,
+        detail.old_data ? JSON.stringify(detail.old_data) : null,
+        detail.new_data ? JSON.stringify(detail.new_data) : null,
+        detail.error_message || null,
+        detail.error_code || null,
+        detail.batch_no || null,
+        detail.is_processed ?? true
+      );
+    });
 
-    await dbManager.query(sql, [values]);
+    await dbManager.query(sql, values);
   }
 
   /**
