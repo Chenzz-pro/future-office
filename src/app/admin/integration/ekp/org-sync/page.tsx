@@ -740,8 +740,14 @@ export default function OrgSyncPage() {
               <CardDescription>最近的同步记录</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+                  <span>加载中...</span>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>同步类型</TableHead>
@@ -755,54 +761,63 @@ export default function OrgSyncPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {syncLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell>{getSyncTypeLabel(log.sync_type)}</TableCell>
-                        <TableCell>{getStatusBadge(log.status)}</TableCell>
-                        <TableCell>{formatTime(log.start_time)}</TableCell>
-                        <TableCell>{formatDuration(log.duration_seconds)}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2 text-xs">
-                            <span title="机构">🏢{log.org_count}</span>
-                            <span title="部门">🏢{log.dept_count}</span>
-                            <span title="岗位">👤{log.post_count}</span>
-                            <span title="人员">👥{log.person_count}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2 text-xs">
-                            <span className="text-green-600">+{log.insert_count}</span>
-                            <span className="text-blue-600">~{log.update_count}</span>
-                            <span className="text-red-600">-{log.delete_count}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{log.operator_name || log.triggered_by}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => viewLogDetails(log.id)}
-                            >
-                              详情
-                            </Button>
-                            {log.status === 'failed' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => retrySync(log.id)}
-                                title="重试同步"
-                              >
-                                <RefreshCw className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
+                    {syncLogs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                          暂无同步记录
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      syncLogs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell>{getSyncTypeLabel(log.sync_type)}</TableCell>
+                          <TableCell>{getStatusBadge(log.status)}</TableCell>
+                          <TableCell>{formatTime(log.start_time)}</TableCell>
+                          <TableCell>{formatDuration(log.duration_seconds)}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-2 text-xs">
+                              <span title="机构">🏢{log.org_count}</span>
+                              <span title="部门">🏢{log.dept_count}</span>
+                              <span title="岗位">👤{log.post_count}</span>
+                              <span title="人员">👥{log.person_count}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2 text-xs">
+                              <span className="text-green-600">+{log.insert_count}</span>
+                              <span className="text-blue-600">~{log.update_count}</span>
+                              <span className="text-red-600">-{log.delete_count}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{log.operator_name || log.triggered_by}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => viewLogDetails(log.id)}
+                              >
+                                详情
+                              </Button>
+                              {log.status === 'failed' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => retrySync(log.id)}
+                                  title="重试同步"
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
