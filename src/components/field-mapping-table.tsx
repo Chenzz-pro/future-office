@@ -19,6 +19,7 @@ import {
   Briefcase,
   Users,
   User,
+  GitBranch,
   Info,
   ArrowRight,
   CheckCircle,
@@ -33,6 +34,7 @@ const iconMap: Record<string, React.ReactNode> = {
   Briefcase: <Briefcase className="w-4 h-4" />,
   Users: <Users className="w-4 h-4" />,
   User: <User className="w-4 h-4" />,
+  GitBranch: <GitBranch className="w-4 h-4" />,
 };
 
 // 颜色映射
@@ -41,6 +43,7 @@ const colorMap: Record<string, string> = {
   green: 'bg-green-100 text-green-700 border-green-200',
   purple: 'bg-purple-100 text-purple-700 border-purple-200',
   orange: 'bg-orange-100 text-orange-700 border-orange-200',
+  cyan: 'bg-cyan-100 text-cyan-700 border-cyan-200',
 };
 
 // 单个映射表组件
@@ -55,7 +58,7 @@ function MappingTable({ category }: { category: MappingCategory }) {
           <div>
             <CardTitle>{category.label}字段映射</CardTitle>
             <CardDescription>
-              共 {category.fields.length} 个字段映射规则
+              {category.description || `共 ${category.fields.length} 个字段映射规则`}
             </CardDescription>
           </div>
         </div>

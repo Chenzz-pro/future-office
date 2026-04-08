@@ -11,6 +11,121 @@ import {
 import { hashPassword } from '../password/password-utils';
 import { orgSyncConfigRepository } from '../database/repositories/org-sync-config.repository';
 
+// ============================================
+// fd_hierarchy_id 层级路径解析工具
+// ============================================
+
+/**
+ * 层级路径格式: x{id1}x{id2}x{id3}x...
+ * - 以 'x' 开头和分隔
+ * - 依次表示一级、二级、三级...
+ * - 可以是机构、部门、人员的混合层级
+ * 
+ * 示例: x19a3e7807150a6c09ce100349a3a8933x19a0b9edcbfcf5894b4ad384d06aec30x
+ * - 一级: 19a3e7807150a6c09ce100349a3a8933 (可能是机构或顶级部门)
+ * - 二级: 19a0b9edcbfcf5894b4ad384d06aec30 (二级部门)
+ */
+
+/**
+ * 解析 fd_hierarchy_id 获取所有层级ID
+ * @param hierarchyId 层级路径字符串
+ * @returns 层级ID数组，如 ['id1', 'id2', 'id3']
+ */
+export function parseHierarchyId(hierarchyId: string | undefined | null): string[] {
+  if (!hierarchyId || typeof hierarchyId !== 'string') {
+    return [];
+  }
+  
+  // 按 'x' 分割并过滤空字符串
+  const parts = hierarchyId.split('x').filter(part => part.trim() !== '');
+  
+  return parts;
+}
+
+/**
+ * 从层级路径获取直接父级ID（最后一级的前一个）
+ * @param hierarchyId 层级路径字符串
+ * @param currentId 当前记录的ID
+ * @returns 直接父级ID
+ */
+export function getParentIdFromHierarchy(hierarchyId: string | undefined | null, currentId: string): string | undefined {
+  const levels = parseHierarchyId(hierarchyId);
+  
+  if (levels.length === 0) {
+    return undefined;
+  }
+  
+  // 如果当前ID在层级路径中，找到它的位置
+  const currentIndex = levels.indexOf(currentId);
+  
+  if (currentIndex > 0) {
+    // 返回上一级
+    return levels[currentIndex - 1];
+  } else if (currentIndex === -1 && levels.length > 0) {
+    // 当前ID不在路径中（可能是根节点或路径不完整），返回最后一级作为父级
+    return levels[levels.length - 1];
+  }
+  
+  return undefined;
+}
+
+/**
+ * 从层级路径获取顶级父级ID（第一级）
+ * @param hierarchyId 层级路径字符串
+ * @returns 顶级父级ID
+ */
+export function getTopParentIdFromHierarchy(hierarchyId: string | undefined | null): string | undefined {
+  const levels = parseHierarchyId(hierarchyId);
+  return levels.length > 0 ? levels[0] : undefined;
+}
+
+/**
+ * 获取层级深度（从1开始）
+ * @param hierarchyId 层级路径字符串
+ * @returns 层级深度
+ */
+export function getHierarchyDepth(hierarchyId: string | undefined | null): number {
+  return parseHierarchyId(hierarchyId).length;
+}
+
+/**
+ * 从层级路径提取所有父级ID（不包含当前节点）
+ * @param hierarchyId 层级路径字符串
+ * @param currentId 当前记录的ID
+ * @returns 所有父级ID数组
+ */
+export function getAllParentIdsFromHierarchy(hierarchyId: string | undefined | null, currentId: string): string[] {
+  const levels = parseHierarchyId(hierarchyId);
+  const currentIndex = levels.indexOf(currentId);
+  
+  if (currentIndex > 0) {
+    return levels.slice(0, currentIndex);
+  } else if (currentIndex === -1 && levels.length > 0) {
+    // 当前ID不在路径中，返回全部作为父级
+    return levels;
+  }
+  
+  return [];
+}
+
+/**
+ * 判断两个节点是否在同一层级路径下
+ * @param hierarchyId1 第一个节点的层级路径
+ * @param hierarchyId2 第二个节点的层级路径
+ * @returns 是否有共同的父级
+ */
+export function isInSameHierarchy(hierarchyId1: string | undefined | null, hierarchyId2: string | undefined | null): boolean {
+  const levels1 = parseHierarchyId(hierarchyId1);
+  const levels2 = parseHierarchyId(hierarchyId2);
+  
+  if (levels1.length === 0 || levels2.length === 0) {
+    return false;
+  }
+  
+  // 检查是否有共同的ID
+  return levels1.some(id => levels2.includes(id));
+}
+
 export interface EKPOrgElement {
   id: string;
   lunid: string;
@@ -21,8 +136,9 @@ export interface EKPOrgElement {
   keyword?: string;
   memo?: string;
   isAvailable?: boolean;
-  fd_parentid?: string;
-  fd_parentorgid?: string;
+  fd_parentid?: string;      // 直接父级ID（部分EKP数据可能有）
+  fd_parentorgid?: string;   // 父机构ID
+  fd_hierarchy_id?: string;  // 层级路径：x{id1}x{id2}x{id3}x...
   thisLeader?: string;
   superLeader?: string;
   members?: string[];
@@ -47,6 +163,11 @@ export interface EKPOrgElement {
 export class OrgSyncMapper {
   /**
    * 将EKP组织元素映射为本系统组织元素
+   * 
+   * 父级关系确定逻辑：
+   * 1. 首先尝试使用 fd_parentid（直接父级）
+   * 2. 如果没有，尝试从 fd_hierarchy_id 解析（层级路径）
+   * 3. 对于机构类型，优先使用 fd_parentorgid
    */
   async mapToOrgElement(ekpData: EKPOrgElement): Promise<OrgElementDTO> {
     const type = this.mapOrgType(ekpData.type);
@@ -58,12 +179,41 @@ export class OrgSyncMapper {
       isAvailable = false;
     }
 
+    // 确定父级ID
+    let parentId = ekpData.fd_parentid;
+    let parentOrgId = ekpData.fd_parentorgid;
+
+    // 如果没有直接的父级ID，从层级路径解析
+    if (!parentId && ekpData.fd_hierarchy_id) {
+      // 从层级路径获取直接父级
+      const parentFromHierarchy = getParentIdFromHierarchy(ekpData.fd_hierarchy_id, ekpData.id);
+      if (parentFromHierarchy && parentFromHierarchy !== ekpData.id) {
+        parentId = parentFromHierarchy;
+        console.log(`[mapToOrgElement] 从层级路径解析父级ID: ${parentId}, 层级路径: ${ekpData.fd_hierarchy_id}`);
+      }
+    }
+
+    // 如果是机构类型，设置父机构ID
+    if (type === 1 && !parentOrgId) {
+      // 从层级路径获取顶级父级
+      const topParent = getTopParentIdFromHierarchy(ekpData.fd_hierarchy_id);
+      if (topParent && topParent !== ekpData.id) {
+        parentOrgId = topParent;
+      }
+    }
+
+    // 解析层级深度
+    const hierarchyDepth = getHierarchyDepth(ekpData.fd_hierarchy_id);
+
     console.log('[mapToOrgElement] 组织元素映射:', {
       id: ekpData.id,
       name: ekpData.name,
       type: ekpData.type,
-      fd_parentid: ekpData.fd_parentid,
-      fd_parentorgid: ekpData.fd_parentorgid,
+      fd_org_type: type,
+      fd_parentid: parentId,
+      fd_parentorgid: parentOrgId,
+      fd_hierarchy_id: ekpData.fd_hierarchy_id,
+      hierarchyDepth: hierarchyDepth,
       isAvailable: isAvailable
     });
 
@@ -76,8 +226,8 @@ export class OrgSyncMapper {
       fd_keyword: ekpData.keyword || undefined,
       fd_is_available: isAvailable,
       fd_memo: ekpData.memo || undefined,
-      fd_parentid: ekpData.fd_parentid || undefined,
-      fd_parentorgid: ekpData.fd_parentorgid || undefined,
+      fd_parentid: parentId,
+      fd_parentorgid: parentOrgId,
       fd_this_leaderid: ekpData.thisLeader || undefined,
       fd_super_leaderid: ekpData.superLeader || undefined,
       // 群组成员特殊处理
@@ -87,6 +237,11 @@ export class OrgSyncMapper {
 
   /**
    * 将EKP人员映射为本系统人员
+   * 
+   * 部门ID确定逻辑：
+   * 1. 首先尝试使用 fd_parentid（直接父级ID）
+   * 2. 如果没有，尝试从 fd_hierarchy_id 解析（层级路径）
+   * 3. 人员通常在部门/岗位下，所以取层级路径的最后一级作为部门
    */
   async mapToOrgPerson(ekpData: EKPOrgElement): Promise<OrgPersonDTO> {
     // 获取默认密码
@@ -102,8 +257,31 @@ export class OrgSyncMapper {
     // 登录名：优先使用EKP的fd_login_name，其次使用loginName，最后使用ID
     const loginName = ekpData.fd_login_name || ekpData.loginName || ekpData.id;
 
-    // 部门ID：优先使用fd_parentid（父级ID），如果不存在则为undefined
-    const deptId = ekpData.fd_parentid || undefined;
+    // 部门ID确定逻辑
+    let deptId = ekpData.fd_parentid;
+    
+    // 如果没有直接的部门ID，从层级路径解析
+    if (!deptId && ekpData.fd_hierarchy_id) {
+      const levels = parseHierarchyId(ekpData.fd_hierarchy_id);
+      
+      if (levels.length > 0) {
+        // 获取层级路径的最后一级（通常是人员所属的部门/岗位）
+        const lastLevel = levels[levels.length - 1];
+        
+        // 如果最后一级不是当前人员ID，则作为部门ID
+        if (lastLevel !== ekpData.id) {
+          deptId = lastLevel;
+          console.log(`[mapToOrgPerson] 从层级路径解析部门ID: ${deptId}, 层级路径: ${ekpData.fd_hierarchy_id}`);
+        } else if (levels.length > 1) {
+          // 如果最后一级是当前人员ID，取倒数第二级
+          deptId = levels[levels.length - 2];
+          console.log(`[mapToOrgPerson] 从层级路径解析部门ID（倒数第二级）: ${deptId}, 层级路径: ${ekpData.fd_hierarchy_id}`);
+        }
+      }
+    }
+
+    // 解析层级深度
+    const hierarchyDepth = getHierarchyDepth(ekpData.fd_hierarchy_id);
 
     console.log('[mapToOrgPerson] 人员映射:', {
       id: ekpData.id,
@@ -112,7 +290,9 @@ export class OrgSyncMapper {
       loginName: ekpData.loginName,
       finalLoginName: loginName,
       fd_parentid: ekpData.fd_parentid,
+      fd_hierarchy_id: ekpData.fd_hierarchy_id,
       deptId: deptId,
+      hierarchyDepth: hierarchyDepth,
       posts: ekpData.posts
     });
 
@@ -124,7 +304,7 @@ export class OrgSyncMapper {
       fd_no: ekpData.no || undefined,
       fd_order: ekpData.order ? parseInt(ekpData.order, 10) : undefined,
       fd_keyword: ekpData.keyword || undefined,
-      fd_dept_id: deptId, // 使用fd_parentid作为部门ID
+      fd_dept_id: deptId, // 使用fd_parentid或层级路径解析的部门ID
       fd_post_id: ekpData.posts && ekpData.posts.length > 0 ? ekpData.posts[0] : undefined,
       fd_post_ids: ekpData.posts || [],
       fd_email: ekpData.email || undefined,
