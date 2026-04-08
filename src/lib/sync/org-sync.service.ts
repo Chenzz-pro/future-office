@@ -42,6 +42,19 @@ export interface SyncResult {
 
 export class OrgSyncService {
   /**
+   * 初始化同步配置
+   */
+  private async initSyncConfig(): Promise<void> {
+    try {
+      // 设置人员登录名要求为 false（默认不要求）
+      await orgSyncConfigRepository.setKey('sync.require_person_login_name', false, 'boolean');
+      console.log('[初始化配置] sync.require_person_login_name = false');
+    } catch (error) {
+      console.warn('[初始化配置] 设置配置失败:', error);
+    }
+  }
+
+  /**
    * 全量同步
    */
   async fullSync(options: Omit<SyncOptions, 'syncType' | 'beginTimeStamp'> = {}): Promise<SyncResult> {
@@ -66,6 +79,9 @@ export class OrgSyncService {
     try {
       console.log(`[全量同步] 开始同步，同步ID: ${syncLogId}，机构范围: ${options.orgIds ? `${options.orgIds.length} 个机构` : '全部'}`);
 
+      // 初始化同步配置（确保人员可以同步）
+      await this.initSyncConfig();
+
       // 调用EKP接口获取全部数据
       console.log(`[全量同步] 开始调用EKP接口 org.getElementsBaseInfo`);
       const ekpResult = await callEKPInterface<{
@@ -80,6 +96,15 @@ export class OrgSyncService {
         let ekpData = ekpResult.data.message || [];
 
         console.log(`[全量同步] 从EKP获取到 ${ekpData.length} 条数据`);
+
+        // 打印前5条数据，用于调试
+        if (ekpData.length > 0) {
+          console.log(`[全量同步] 前5条EKP数据:`, JSON.stringify(ekpData.slice(0, 5), null, 2));
+        }
+
+        // 统计各类型数量
+        const typeStats = orgSyncMapper.getStatsByType(ekpData);
+        console.log(`[全量同步] EKP数据类型统计:`, typeStats);
 
         // 如果指定了机构范围，过滤数据
         if (options.orgIds && options.orgIds.length > 0) {
@@ -154,12 +179,21 @@ export class OrgSyncService {
    * 包含选中机构及其所有子机构
    */
   private filterByOrgIds(data: EKPOrgElement[], orgIds: string[]): EKPOrgElement[] {
+    console.log(`[机构过滤] 开始过滤，指定机构ID: ${JSON.stringify(orgIds)}`);
+    console.log(`[机构过滤] 数据总数: ${data.length}`);
+
+    // 打印前5条数据的结构，用于调试
+    if (data.length > 0) {
+      console.log(`[机构过滤] 前5条数据结构:`, JSON.stringify(data.slice(0, 5), null, 2));
+    }
+
     // 构建所有需要包含的ID集合
     const includeIds = new Set<string>(orgIds);
 
     // 递归获取所有子机构ID
     const getAllChildIds = (parentId: string) => {
       const children = data.filter(item => item.parent === parentId);
+      console.log(`[机构过滤] 机构 ${parentId} 的子机构数量: ${children.length}`);
       children.forEach(child => {
         if (!includeIds.has(child.id)) {
           includeIds.add(child.id);
@@ -170,11 +204,28 @@ export class OrgSyncService {
 
     // 为每个选中的机构获取其所有子机构
     orgIds.forEach(orgId => {
+      console.log(`[机构过滤] 获取机构 ${orgId} 的所有子机构`);
       getAllChildIds(orgId);
     });
 
+    console.log(`[机构过滤] 总共包含 ${includeIds.size} 个机构ID`);
+
     // 过滤数据
-    return data.filter(item => includeIds.has(item.id) || (item.parent && includeIds.has(item.parent)));
+    const filtered = data.filter(item => {
+      const isIncluded = includeIds.has(item.id);
+      const hasIncludedParent = item.parent && includeIds.has(item.parent);
+      const result = isIncluded || hasIncludedParent;
+
+      if (!result) {
+        console.log(`[机构过滤] 过滤掉 ${item.type}: ${item.name} (${item.id}), parent: ${item.parent}`);
+      }
+
+      return result;
+    });
+
+    console.log(`[机构过滤] 过滤后剩余 ${filtered.length} 条数据`);
+
+    return filtered;
   }
 
   /**

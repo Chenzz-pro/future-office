@@ -49,6 +49,13 @@ export class OrgSyncMapper {
   async mapToOrgElement(ekpData: EKPOrgElement): Promise<OrgElementDTO> {
     const type = this.mapOrgType(ekpData.type);
 
+    // 正确处理 isAvailable 字段，支持字符串和布尔值
+    let isAvailable = true;
+    const isAvailableValue = String(ekpData.isAvailable ?? '').toLowerCase();
+    if (isAvailableValue === 'false' || isAvailableValue === '0' || ekpData.isAvailable === false) {
+      isAvailable = false;
+    }
+
     return {
       fd_id: ekpData.id,
       fd_org_type: type,
@@ -56,9 +63,10 @@ export class OrgSyncMapper {
       fd_no: ekpData.no || undefined,
       fd_order: ekpData.order ? parseInt(ekpData.order, 10) : undefined,
       fd_keyword: ekpData.keyword || undefined,
-      fd_is_available: ekpData.isAvailable !== false,
+      fd_is_available: isAvailable,
       fd_memo: ekpData.memo || undefined,
       fd_parentid: ekpData.parent || undefined,
+      fd_parentorgid: ekpData.parent || undefined, // 父机构ID（与父部门ID相同）
       fd_this_leaderid: ekpData.thisLeader || undefined,
       fd_super_leaderid: ekpData.superLeader || undefined,
       // 群组成员特殊处理
@@ -72,6 +80,13 @@ export class OrgSyncMapper {
   async mapToOrgPerson(ekpData: EKPOrgElement): Promise<OrgPersonDTO> {
     // 获取默认密码
     const defaultPassword = await orgSyncConfigRepository.getString('sync.default_password', '123456');
+
+    // 正确处理 isAvailable 字段，支持字符串和布尔值
+    let isAvailable = true;
+    const isAvailableValue = String(ekpData.isAvailable ?? '').toLowerCase();
+    if (isAvailableValue === 'false' || isAvailableValue === '0' || ekpData.isAvailable === false) {
+      isAvailable = false;
+    }
 
     return {
       fd_id: ekpData.id,
@@ -91,7 +106,7 @@ export class OrgSyncMapper {
       fd_gender: this.mapGender(ekpData.sex),
       fd_wechat: ekpData.wechat || undefined,
       fd_short_no: ekpData.shortNo || undefined,
-      fd_is_login_enabled: ekpData.isAvailable !== false,
+      fd_is_login_enabled: isAvailable, // 使用处理后的可用性状态
       fd_memo: ekpData.memo || undefined
     };
   }
@@ -127,6 +142,7 @@ export class OrgSyncMapper {
    */
   async filterData(ekpData: EKPOrgElement[]): Promise<EKPOrgElement[]> {
     const filterInactive = await orgSyncConfigRepository.getBoolean('sync.filter_inactive_users', true);
+    const requireLoginName = await orgSyncConfigRepository.getBoolean('sync.require_person_login_name', false); // 默认不需要登录名
 
     return ekpData.filter((item) => {
       // 如果启用过滤无效数据，则过滤掉 isAvailable 为 false 的数据
@@ -140,7 +156,8 @@ export class OrgSyncMapper {
       }
 
       // 过滤人员类型中缺少登录名的数据（如果需要登录）
-      if (item.type === 'person' && !item.loginName) {
+      if (item.type === 'person' && requireLoginName && !item.loginName) {
+        console.warn(`[数据清洗] 过滤掉没有登录名的人员: ${item.name} (${item.id})`);
         return false;
       }
 
