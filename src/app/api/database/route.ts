@@ -227,6 +227,26 @@ export async function POST(request: NextRequest) {
         console.warn('[init] Agent架构迁移失败，但不影响初始化流程:', agentMigrateError);
       }
 
+      // 自动执行组织架构同步表初始化（确保组织架构同步功能可用）
+      console.log('[init] 开始执行组织架构同步表初始化检查...');
+      try {
+        const syncInitResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/init/sync-tables`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (syncInitResponse.ok) {
+          const syncInitResult = await syncInitResponse.json();
+          console.log('[init] 组织架构同步表初始化完成:', syncInitResult.message);
+        } else {
+          console.warn('[init] 组织架构同步表初始化失败，但不影响初始化流程');
+        }
+      } catch (syncInitError) {
+        console.warn('[init] 组织架构同步表初始化失败，但不影响初始化流程:', syncInitError);
+      }
+
       return NextResponse.json({
         success: true,
         message: '数据库初始化成功',
@@ -649,6 +669,26 @@ export async function POST(request: NextRequest) {
         }
       } catch (ekpInitError) {
         console.warn('[API:Database:Connect] EKP接口表初始化失败，但不影响连接流程:', ekpInitError);
+      }
+
+      // 自动执行组织架构同步表初始化（确保组织架构同步功能可用）
+      console.log('[API:Database:Connect] 开始执行组织架构同步表初始化检查...');
+      try {
+        const syncInitResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/init/sync-tables`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (syncInitResponse.ok) {
+          const syncInitResult = await syncInitResponse.json();
+          console.log('[API:Database:Connect] 组织架构同步表初始化完成:', syncInitResult.message);
+        } else {
+          console.warn('[API:Database:Connect] 组织架构同步表初始化失败，但不影响连接流程');
+        }
+      } catch (syncInitError) {
+        console.warn('[API:Database:Connect] 组织架构同步表初始化失败，但不影响连接流程:', syncInitError);
       }
 
       console.log('[API:Database:Connect] ✅ 数据库连接流程完成');
