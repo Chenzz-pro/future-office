@@ -3,11 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function IntegrationPage() {
+export default function SchedulerPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/admin/integration/llm');
+    router.replace('/admin/scheduler/tasks');
   }, [router]);
 
   return null;
