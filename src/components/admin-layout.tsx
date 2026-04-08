@@ -17,7 +17,11 @@ import {
   X,
   Search,
   Bell,
-  Database
+  Database,
+  Clock,
+  AlertTriangle,
+  Link2,
+  Cpu
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -69,18 +73,36 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'integration',
-    label: '集成中心',
-    icon: <Settings className="w-5 h-5" />,
+    label: '第三方系统集成',
+    icon: <Link2 className="w-5 h-5" />,
     path: '/admin/integration',
     subItems: [
-      { id: 'int-overview', label: '集成概览', path: '/admin/integration/overview' },
-      { id: 'int-llm', label: '大模型配置', path: '/admin/integration/llm' },
-      { id: 'int-ekp', label: '蓝凌EKP配置', path: '/admin/integration/ekp' },
-      { id: 'int-org-sync', label: '组织架构同步', path: '/admin/integration/ekp/org-sync' },
-      { id: 'int-sync-scheduler', label: '定时任务配置', path: '/admin/integration/ekp/sync-scheduler' },
-      { id: 'int-sync-alerts', label: '监控告警', path: '/admin/integration/ekp/sync-alerts' },
-      { id: 'int-api', label: 'API 管理', path: '/admin/integration/api' },
-      { id: 'int-webhook', label: 'Webhook 配置', path: '/admin/integration/webhook' },
+      { id: 'int-overview', label: '集成概览', path: '/admin/integration' },
+      { id: 'int-llm', label: 'AI服务配置', path: '/admin/integration/llm' },
+      { id: 'int-ekp', label: '蓝凌EKP', path: '/admin/integration/ekp' },
+      { id: 'int-dingtalk', label: '钉钉', path: '/admin/integration/dingtalk' },
+      { id: 'int-wechat', label: '企业微信', path: '/admin/integration/wechat' },
+    ],
+  },
+  {
+    id: 'scheduler',
+    label: '定时任务',
+    icon: <Clock className="w-5 h-5" />,
+    path: '/admin/scheduler',
+    subItems: [
+      { id: 'scheduler-tasks', label: '任务列表', path: '/admin/scheduler/tasks' },
+      { id: 'scheduler-history', label: '执行历史', path: '/admin/scheduler/history' },
+    ],
+  },
+  {
+    id: 'monitor',
+    label: '监控中心',
+    icon: <AlertTriangle className="w-5 h-5" />,
+    path: '/admin/monitor',
+    subItems: [
+      { id: 'monitor-alerts', label: '告警列表', path: '/admin/monitor/alerts' },
+      { id: 'monitor-rules', label: '告警规则', path: '/admin/monitor/rules' },
+      { id: 'monitor-channels', label: '通知渠道', path: '/admin/monitor/channels' },
     ],
   },
   {
