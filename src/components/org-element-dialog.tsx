@@ -306,7 +306,7 @@ export function OrgElementDialog({
                     value={String(formData.fd_org_id || selectedOrgId || '')}
                     onValueChange={(value) => {
                       setSelectedOrgId(value);
-                      setFormData({ ...formData, fd_org_id: value, fd_dept_id: '' });
+                      setFormData({ ...formData, fd_org_id: value, fd_dept_id: null });
                     }}
                   >
                     <SelectTrigger id="fd_org_id">
@@ -334,8 +334,8 @@ export function OrgElementDialog({
                     关联部门 <span className="text-red-500">*</span>
                   </Label>
                   <Select
-                    value={String(formData.fd_dept_id || '')}
-                    onValueChange={(value) => setFormData({ ...formData, fd_dept_id: value })}
+                    value={formData.fd_dept_id ? String(formData.fd_dept_id) : ''}
+                    onValueChange={(value) => setFormData({ ...formData, fd_dept_id: value || null })}
                     disabled={!selectedOrgId && !formData.fd_org_id}
                   >
                     <SelectTrigger id="fd_dept_id">

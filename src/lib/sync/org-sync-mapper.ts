@@ -29,6 +29,7 @@ export interface EKPOrgElement {
   persons?: string[];
   posts?: string[];
   loginName?: string;
+  fd_login_name?: string; // EKP系统的登录名字段
   password?: string;
   mobileNo?: string;
   email?: string;
@@ -89,15 +90,30 @@ export class OrgSyncMapper {
       isAvailable = false;
     }
 
+    // 登录名：优先使用EKP的fd_login_name，其次使用loginName，最后使用ID
+    const loginName = ekpData.fd_login_name || ekpData.loginName || ekpData.id;
+
+    // 部门ID：优先使用fd_parentid（父级ID），如果不存在则为undefined
+    const deptId = ekpData.fd_parentid || undefined;
+
+    console.log('[mapToOrgPerson] 人员映射:', {
+      name: ekpData.name,
+      fd_login_name: ekpData.fd_login_name,
+      loginName: ekpData.loginName,
+      finalLoginName: loginName,
+      fd_parentid: ekpData.fd_parentid,
+      deptId: deptId
+    });
+
     return {
       fd_id: ekpData.id,
       fd_name: ekpData.name,
-      fd_login_name: ekpData.loginName || ekpData.id, // 使用ID作为默认登录名
+      fd_login_name: loginName, // 优先使用EKP的fd_login_name
       fd_password: defaultPassword || '123456', // 使用默认密码
       fd_no: ekpData.no || undefined,
       fd_order: ekpData.order ? parseInt(ekpData.order, 10) : undefined,
       fd_keyword: ekpData.keyword || undefined,
-      fd_dept_id: ekpData.fd_parentid || undefined,
+      fd_dept_id: deptId, // 使用fd_parentid作为部门ID
       fd_post_id: ekpData.posts && ekpData.posts.length > 0 ? ekpData.posts[0] : undefined,
       fd_post_ids: ekpData.posts || [],
       fd_email: ekpData.email || undefined,
