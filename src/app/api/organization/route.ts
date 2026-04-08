@@ -227,8 +227,9 @@ async function deleteOrgElement(type: string, id: string) {
 // 获取树形数据
 async function getTreeData(type: number) {
   // 查询机构和部门数据（不查询人员和岗位）
+  // 添加 fd_hierarchy_id 字段用于解析层级关系
   let query = `
-    SELECT fd_id, fd_org_type, fd_name, fd_parentid, fd_parentorgid, fd_persons_number
+    SELECT fd_id, fd_org_type, fd_name, fd_parentid, fd_parentorgid, fd_persons_number, fd_hierarchy_id
     FROM sys_org_element
     WHERE fd_is_available = 1 AND fd_is_abandon = 0
   `;
@@ -257,6 +258,51 @@ async function getTreeData(type: number) {
   return NextResponse.json({ success: true, data: treeData });
 }
 
+// 解析层级路径 fd_hierarchy_id
+// 支持两种格式:
+// 1. /id1/id2/id3/ (用 '/' 分隔，当前数据库格式)
+// 2. xid1xidx2xidx3x (用 'x' 分隔，EKP原始格式)
+function parseHierarchyId(hierarchyId: string | null | undefined): string[] {
+  if (!hierarchyId || typeof hierarchyId !== 'string') {
+    return [];
+  }
+  
+  // 尝试用 '/' 分隔（当前数据库格式，如 /179c16fb1505a52647dab5d44539290c）
+  if (hierarchyId.startsWith('/')) {
+    const parts = hierarchyId.split('/').filter(part => part.trim() !== '');
+    return parts;
+  }
+  
+  // 尝试用 'x' 分隔（EKP原始格式，如 xid1xidx2xidx3x）
+  if (hierarchyId.includes('x')) {
+    const parts = hierarchyId.split('x').filter(part => part.trim() !== '');
+    return parts;
+  }
+  
+  return [];
+}
+
+// 从层级路径获取直接父级ID（最后一级的前一个）
+function getParentIdFromHierarchy(hierarchyId: string | null | undefined, currentId: string): string | undefined {
+  const levels = parseHierarchyId(hierarchyId);
+  if (levels.length === 0) {
+    return undefined;
+  }
+  
+  // 找到当前ID在路径中的位置
+  const currentIndex = levels.indexOf(currentId);
+  
+  if (currentIndex > 0) {
+    // 返回上一级作为父级
+    return levels[currentIndex - 1];
+  } else if (currentIndex === -1 && levels.length > 0) {
+    // 当前ID不在路径中（可能是根节点），返回最后一级作为父级
+    return levels[levels.length - 1];
+  }
+  
+  return undefined;
+}
+
 // 构建树形结构（只包含机构和部门）
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildTree(flatData: any[], rootType?: number): any[] {
@@ -272,6 +318,7 @@ function buildTree(flatData: any[], rootType?: number): any[] {
       name: item.fd_name,
       type: item.fd_org_type,
       parentId: item.fd_parentid || item.fd_parentorgid,
+      hierarchyId: item.fd_hierarchy_id,
       children: [],
       personCount: item.fd_persons_number || 0,
     });
@@ -286,22 +333,42 @@ function buildTree(flatData: any[], rootType?: number): any[] {
       console.log('[buildTree] 添加根节点（机构）:', item.fd_name, item.fd_id);
       roots.push(node);
     }
-    // 部门（type=2）的父节点是 fd_parentorgid（可以是机构或另一个部门）
+    // 部门（type=2）的父节点查找逻辑
     else if (item.fd_org_type === 2) {
-      const parentId = item.fd_parentorgid;
+      let parentId = item.fd_parentorgid;
+      
+      // 如果没有直接的父机构ID，尝试从层级路径解析
+      if (!parentId && item.fd_hierarchy_id) {
+        const parentFromHierarchy = getParentIdFromHierarchy(item.fd_hierarchy_id, item.fd_id);
+        if (parentFromHierarchy) {
+          parentId = parentFromHierarchy;
+          console.log('[buildTree] 从层级路径解析部门父节点:', item.fd_name, '-> 父节点ID:', parentId, '层级路径:', item.fd_hierarchy_id);
+        }
+      }
+      
       if (parentId && map.has(parentId)) {
         const parent = map.get(parentId);
         parent.children.push(node);
         console.log('[buildTree] 添加子节点（部门）:', item.fd_name, '-> 父节点:', parent.name);
       } else {
         // 如果没有找到父节点，作为根节点
-        console.warn('[buildTree] 部门未找到父节点，作为根节点:', item.fd_name, 'parentId:', parentId);
+        console.warn('[buildTree] 部门未找到父节点，作为根节点:', item.fd_name, 'parentId:', parentId, 'hierarchyId:', item.fd_hierarchy_id);
         roots.push(node);
       }
     }
     // 岗位（type=3）的父节点是 fd_parentid（上级部门）
     else if (item.fd_org_type === 3) {
-      const parentId = item.fd_parentid;
+      let parentId = item.fd_parentid;
+      
+      // 如果没有直接的父ID，尝试从层级路径解析
+      if (!parentId && item.fd_hierarchy_id) {
+        const parentFromHierarchy = getParentIdFromHierarchy(item.fd_hierarchy_id, item.fd_id);
+        if (parentFromHierarchy) {
+          parentId = parentFromHierarchy;
+          console.log('[buildTree] 从层级路径解析岗位父节点:', item.fd_name, '-> 父节点ID:', parentId);
+        }
+      }
+      
       if (parentId && map.has(parentId)) {
         const parent = map.get(parentId);
         parent.children.push(node);
