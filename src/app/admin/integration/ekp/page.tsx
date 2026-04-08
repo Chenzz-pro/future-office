@@ -36,9 +36,11 @@ import {
   Info,
   Table,
   ArrowUpRight,
+  Users,
 } from 'lucide-react';
 import FieldMappingTable from '@/components/field-mapping-table';
 import EKPInterfacesPanel from './interfaces-panel';
+import UserBindingsPanel from './user-bindings-panel';
 
 interface EKPConfig {
   id?: string;
@@ -251,6 +253,10 @@ export default function EKPPage() {
           <TabsTrigger value="interfaces">
             <Database className="w-4 h-4 mr-2" />
             接口管理
+          </TabsTrigger>
+          <TabsTrigger value="bindings">
+            <Users className="w-4 h-4 mr-2" />
+            用户绑定
           </TabsTrigger>
           <TabsTrigger value="advanced">
             <Settings className="w-4 h-4 mr-2" />
@@ -500,6 +506,11 @@ export default function EKPPage() {
         {/* 接口管理 */}
         <TabsContent value="interfaces" className="space-y-4">
           <EKPInterfacesPanel />
+        </TabsContent>
+
+        {/* 用户绑定 */}
+        <TabsContent value="bindings" className="space-y-4">
+          <UserBindingsPanel />
         </TabsContent>
 
         {/* 高级配置 */}
