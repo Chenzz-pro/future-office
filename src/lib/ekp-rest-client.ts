@@ -85,6 +85,19 @@ export const EKP_REST_PATHS = {
     addReview: '/api/km-review/kmReviewRestService/addReview',
     approve: '/api/km-review/kmReviewRestService/approveProcess',
   },
+  // 组织架构服务（蓝凌标准REST接口）
+  organization: {
+    // 获取组织树（机构+部门）
+    orgTree: '/api/sys/organization/orgTree',
+    // 获取人员列表
+    person: '/api/sys/organization/person',
+    // 获取人员详细信息
+    personInfo: '/api/sys/organization/personInfo',
+    // 获取组织元素（机构、部门、岗位）
+    element: '/api/sys/organization/element',
+    // 获取岗位列表
+    post: '/api/sys/organization/post',
+  },
 };
 
 // ============================================
@@ -415,6 +428,183 @@ export class EKPRestClient {
       };
     }
   }
+
+  // ============================================
+  // 组织架构同步方法
+  // ============================================
+
+  /**
+   * 获取组织树（机构+部门）
+   * @param parentId 父级ID，不传则获取根节点
+   */
+  async getOrgTree(parentId?: string): Promise<EKPResponse<OrgTreeNode[]>> {
+    try {
+      const body: Record<string, unknown> = {};
+      if (parentId) {
+        body.parentId = parentId;
+      }
+
+      const response = await this.post<{ data?: OrgTreeNode[]; list?: OrgTreeNode[] }>(
+        EKP_REST_PATHS.organization.orgTree,
+        body
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足：请检查用户是否有访问组织架构的权限' };
+      }
+
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '服务不存在：请检查EKP系统是否支持组织架构接口' };
+      }
+
+      // 解析返回数据
+      if (response.result) {
+        const data = response.result.data || response.result.list || [];
+        return { success: true, data, msg: `获取成功，共 ${data.length} 条` };
+      }
+
+      return { success: false, data: null, msg: response.text || '获取组织树失败' };
+    } catch (err) {
+      return { success: false, data: null, msg: `获取组织树失败：${err instanceof Error ? err.message : '网络错误'}` };
+    }
+  }
+
+  /**
+   * 获取人员列表
+   * @param deptId 部门ID，不传则获取所有人员
+   * @param page 页码
+   * @param pageSize 每页数量
+   */
+  async getPersonList(deptId?: string, page = 1, pageSize = 100): Promise<EKPResponse<PersonListData>> {
+    try {
+      const body: Record<string, unknown> = {
+        pageno: page,
+        count: pageSize,
+      };
+      if (deptId) {
+        body.deptId = deptId;
+      }
+
+      const response = await this.post<{ count?: number; datas?: PersonInfo[] }>(
+        EKP_REST_PATHS.organization.person,
+        body
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足：请检查用户是否有访问人员信息的权限' };
+      }
+
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '服务不存在：请检查EKP系统是否支持人员接口' };
+      }
+
+      // 解析返回数据
+      if (response.result) {
+        return {
+          success: true,
+          data: {
+            count: response.result.count || 0,
+            persons: response.result.datas || [],
+          },
+          msg: `获取成功，共 ${response.result.count || 0} 条`,
+        };
+      }
+
+      return { success: false, data: null, msg: response.text || '获取人员列表失败' };
+    } catch (err) {
+      return { success: false, data: null, msg: `获取人员列表失败：${err instanceof Error ? err.message : '网络错误'}` };
+    }
+  }
+
+  /**
+   * 获取岗位列表
+   */
+  async getPostList(): Promise<EKPResponse<PostInfo[]>> {
+    try {
+      const response = await this.post<{ data?: PostInfo[]; list?: PostInfo[] }>(
+        EKP_REST_PATHS.organization.post,
+        {}
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      const data = response.result?.data || response.result?.list || [];
+      return { success: true, data, msg: `获取成功，共 ${data.length} 条` };
+    } catch (err) {
+      return { success: false, data: null, msg: `获取岗位列表失败：${err instanceof Error ? err.message : '网络错误'}` };
+    }
+  }
+}
+
+// ============================================
+// 组织架构数据类型
+// ============================================
+
+/**
+ * 组织树节点
+ */
+export interface OrgTreeNode {
+  id: string;
+  fdId?: string;
+  fdName?: string;
+  name?: string;
+  fdOrgType?: number; // 1: 机构, 2: 部门, 3: 岗位
+  type?: number;
+  fdHierarchyId?: string; // 层级路径，格式: x{id1}x{id2}x...
+  fdParentId?: string;
+  fdParentorgid?: string;
+  children?: OrgTreeNode[];
+  fdNo?: string;
+  fdOrder?: number;
+  fdOrgEmail?: string;
+}
+
+/**
+ * 人员信息
+ */
+export interface PersonInfo {
+  fdId?: string;
+  fdName?: string;
+  name?: string;
+  fdLoginName?: string;
+  fdEmail?: string;
+  fdMobile?: string;
+  fdNo?: string;
+  fdRtxAccount?: string;
+  fdDeptId?: string;
+  fdHierarchyId?: string;
+  fdIsLoginEnabled?: number;
+}
+
+/**
+ * 岗位信息
+ */
+export interface PostInfo {
+  id: string;
+  fdId?: string;
+  fdName?: string;
+  name?: string;
+  fdNo?: string;
+  fdOrder?: number;
+  fdParentId?: string;
+}
+
+/**
+ * 人员列表数据
+ */
+export interface PersonListData {
+  count: number;
+  persons: PersonInfo[];
 }
 
 // ============================================

@@ -340,8 +340,8 @@ export const PRESET_TASK_TEMPLATES: PresetTaskTemplateConfig[] = [
     defaultRelatedSystem: 'EKP',
     defaultHandlerConfig: {
       handlerType: 'api',
-      handlerPath: '/api/organization/sync',
-      parameters: { source: 'ekp', type: 'full' },
+      handlerPath: '/api/organization/sync?source=ekp',
+      parameters: { type: 'full', scope: ['organizations', 'departments', 'persons'] },
     },
     suggestedCron: '0 2 * * *', // 每天凌晨2点
     suggestedIntervalMinutes: undefined,
@@ -356,8 +356,8 @@ export const PRESET_TASK_TEMPLATES: PresetTaskTemplateConfig[] = [
     defaultRelatedSystem: 'EKP',
     defaultHandlerConfig: {
       handlerType: 'api',
-      handlerPath: '/api/organization/sync',
-      parameters: { source: 'ekp', type: 'incremental' },
+      handlerPath: '/api/organization/sync?source=ekp',
+      parameters: { type: 'incremental', scope: ['organizations', 'departments', 'persons'] },
     },
     suggestedCron: '*/30 * * * *', // 每30分钟
     suggestedIntervalMinutes: 30,
