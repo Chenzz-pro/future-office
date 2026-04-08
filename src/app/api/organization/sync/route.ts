@@ -228,8 +228,17 @@ async function syncAllElements(
  */
 async function saveOrganization(element: SyncedElement): Promise<boolean> {
   try {
-    const id = element.id || element.lunid;
-    if (!id) return false;
+    // 机构的ID使用lunid（唯一标识），如果没有则尝试用其他字段
+    let id = element.id || element.lunid;
+    if (!id) {
+      // 如果没有唯一ID，尝试用名称生成
+      if (element.name) {
+        id = `org_${element.name}`;
+      } else {
+        console.warn('[Sync] 机构缺少唯一标识字段:', element);
+        return false;
+      }
+    }
 
     // 解析层级路径获取顶级父级
     let parentOrgId: string | null = null;
@@ -244,21 +253,20 @@ async function saveOrganization(element: SyncedElement): Promise<boolean> {
       // 更新
       await dbManager.query(`
         UPDATE sys_org_element SET 
-          fd_name = ?, fd_no = ?, fd_order = ?, fd_hierarchy_id = ?, fd_is_available = ?
+          fd_name = ?, fd_no = ?, fd_order = ?, fd_hierarchy_id = ?
         WHERE fd_id = ?
       `, [
         element.name || '',
         element.no || '',
         element.order || '',
         '', // 机构没有层级路径
-        element.isAvailable !== false ? 1 : 0,
         id,
       ]);
     } else {
       // 插入
       await dbManager.query(`
-        INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid, fd_hierarchy_id, fd_is_available)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid, fd_hierarchy_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [
         id,
         1, // 机构类型
@@ -267,7 +275,6 @@ async function saveOrganization(element: SyncedElement): Promise<boolean> {
         element.order || '',
         parentOrgId,
         '', // 机构没有层级路径
-        element.isAvailable !== false ? 1 : 0,
       ]);
     }
 
@@ -283,8 +290,17 @@ async function saveOrganization(element: SyncedElement): Promise<boolean> {
  */
 async function saveDepartment(element: SyncedElement): Promise<boolean> {
   try {
-    const id = element.id || element.lunid;
-    if (!id) return false;
+    // 部门的ID使用lunid（唯一标识），如果没有则尝试用其他字段
+    let id = element.id || element.lunid;
+    if (!id) {
+      // 如果没有唯一ID，尝试用名称+父级ID组合
+      if (element.name) {
+        id = `dept_${element.name}_${element.parent || 'root'}`;
+      } else {
+        console.warn('[Sync] 部门缺少唯一标识字段:', element);
+        return false;
+      }
+    }
 
     // parent 字段表示父部门ID
     const parentId = element.parent || null;
@@ -299,21 +315,20 @@ async function saveDepartment(element: SyncedElement): Promise<boolean> {
       // 更新
       await dbManager.query(`
         UPDATE sys_org_element SET 
-          fd_name = ?, fd_no = ?, fd_order = ?, fd_parentorgid = ?, fd_is_available = ?
+          fd_name = ?, fd_no = ?, fd_order = ?, fd_parentorgid = ?
         WHERE fd_id = ?
       `, [
         element.name || '',
         element.no || '',
         element.order || '',
         parentId,
-        element.isAvailable !== false ? 1 : 0,
         id,
       ]);
     } else {
       // 插入
       await dbManager.query(`
-        INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid, fd_is_available)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sys_org_element (fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_parentorgid)
+        VALUES (?, ?, ?, ?, ?, ?)
       `, [
         id,
         2, // 部门类型
@@ -321,7 +336,6 @@ async function saveDepartment(element: SyncedElement): Promise<boolean> {
         element.no || '',
         element.order || '',
         parentId,
-        element.isAvailable !== false ? 1 : 0,
       ]);
     }
 
@@ -337,9 +351,22 @@ async function saveDepartment(element: SyncedElement): Promise<boolean> {
  */
 async function savePerson(element: SyncedElement): Promise<boolean> {
   try {
-    // 人员的ID使用lunid（唯一标识）
-    const id = element.id || element.lunid;
-    if (!id) return false;
+    // 人员的ID使用lunid（唯一标识），如果没有则尝试用其他字段组合
+    let id = element.id || element.lunid;
+    if (!id) {
+      // 如果没有唯一ID，尝试用其他字段组合生成
+      // 例如：手机号 + 部门ID
+      if (element.mobileNo) {
+        id = `person_${element.mobileNo}`;
+      } else if (element.rtx) {
+        id = `person_${element.rtx}`;
+      } else if (element.loginName) {
+        id = `person_${element.loginName}`;
+      } else {
+        console.warn('[Sync] 人员缺少唯一标识字段:', element);
+        return false;
+      }
+    }
 
     // parent 字段表示所属部门
     const deptId = element.parent || null;
@@ -378,13 +405,12 @@ async function savePerson(element: SyncedElement): Promise<boolean> {
       });
       const hashedPassword = await hashPassword(password);
 
-      // 插入
+      // 插入（注意：不同数据库表结构可能不同，fd_is_available字段可能不存在）
       await dbManager.query(`
         INSERT INTO sys_org_person (
           fd_id, fd_name, fd_no, fd_login_name, fd_email, fd_mobile, 
-          fd_dept_id, fd_rtx_account, fd_password, fd_is_login_enabled, fd_role,
-          fd_is_available
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          fd_dept_id, fd_rtx_account, fd_password, fd_is_login_enabled, fd_role
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         id,
         element.name || '',
@@ -396,8 +422,7 @@ async function savePerson(element: SyncedElement): Promise<boolean> {
         element.rtx || null,
         hashedPassword,
         1, // fd_is_login_enabled
-        'user', // 默认角色
-        element.isAvailable !== false ? 1 : 0,
+        '00000000-0000-0000-0000-000000000003', // 默认角色ID（普通用户）
       ]);
     }
 
