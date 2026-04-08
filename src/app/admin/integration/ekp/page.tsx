@@ -29,13 +29,15 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Play,
-  Pause,
-  Trash2,
-  Edit,
   Save,
   RefreshCcw,
+  ArrowRight,
+  Clock,
+  Info,
+  Table,
+  ArrowUpRight,
 } from 'lucide-react';
+import FieldMappingTable from '@/components/field-mapping-table';
 
 interface EKPConfig {
   id?: string;
@@ -49,8 +51,6 @@ interface EKPConfig {
 }
 
 interface SyncConfig {
-  autoSync: boolean;
-  syncInterval: number;
   syncScope: string[];
 }
 
@@ -58,6 +58,7 @@ export default function EKPPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'connection');
+  const [syncSubTab, setSyncSubTab] = useState<'config' | 'mapping'>('config');
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -75,9 +76,7 @@ export default function EKPPage() {
   });
 
   const [syncConfig, setSyncConfig] = useState<SyncConfig>({
-    autoSync: true,
-    syncInterval: 60,
-    syncScope: ['organizations', 'persons', 'departments'],
+    syncScope: ['organizations', 'departments', 'persons'],
   });
 
   // 加载配置
@@ -151,7 +150,7 @@ export default function EKPPage() {
       const response = await fetch('/api/organization/sync?source=ekp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type, scope: syncConfig.syncScope }),
       });
       const data = await response.json();
       if (data.success) {
@@ -381,111 +380,140 @@ export default function EKPPage() {
 
         {/* 组织架构同步 */}
         <TabsContent value="sync" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>同步配置</CardTitle>
-              <CardDescription>配置从EKP系统同步组织架构的方式</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Switch
-                    id="autoSync"
-                    checked={syncConfig.autoSync}
-                    onCheckedChange={(checked) => setSyncConfig({ ...syncConfig, autoSync: checked })}
-                  />
-                  <Label htmlFor="autoSync" className="font-medium">启用自动同步</Label>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <RefreshCw className="w-4 h-4" />
-                  每 <Input
-                    className="w-16 h-8 inline-block mx-2 text-center"
-                    type="number"
-                    value={syncConfig.syncInterval}
-                    onChange={(e) => setSyncConfig({ ...syncConfig, syncInterval: parseInt(e.target.value) || 60 })}
-                    disabled={!syncConfig.autoSync}
-                  /> 分钟
-                </div>
-              </div>
+          {/* 子Tab */}
+          <Tabs value={syncSubTab} onValueChange={(v) => setSyncSubTab(v as 'config' | 'mapping')}>
+            <TabsList className="bg-muted/50">
+              <TabsTrigger value="config" className="gap-2">
+                <RefreshCw className="w-4 h-4" />
+                同步配置
+              </TabsTrigger>
+              <TabsTrigger value="mapping" className="gap-2">
+                <Table className="w-4 h-4" />
+                字段映射
+              </TabsTrigger>
+            </TabsList>
 
-              <div className="space-y-2">
-                <Label>同步范围</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'organizations', label: '机构', icon: Building2 },
-                    { key: 'departments', label: '部门', icon: Database },
-                    { key: 'persons', label: '人员', icon: Link2 },
-                  ].map(item => (
-                    <Badge
-                      key={item.key}
-                      variant={syncConfig.syncScope.includes(item.key) ? 'default' : 'outline'}
-                      className="cursor-pointer px-3 py-1"
-                      onClick={() => {
-                        const scope = syncConfig.syncScope.includes(item.key)
-                          ? syncConfig.syncScope.filter(s => s !== item.key)
-                          : [...syncConfig.syncScope, item.key];
-                        setSyncConfig({ ...syncConfig, syncScope: scope });
-                      }}
-                    >
-                      <item.icon className="w-3 h-3 mr-1" />
-                      {item.label}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+            {/* 同步配置子Tab */}
+            <TabsContent value="config" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>同步配置</CardTitle>
+                  <CardDescription>配置从EKP系统同步组织架构的方式</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>同步范围</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: 'organizations', label: '机构', icon: Building2 },
+                        { key: 'departments', label: '部门', icon: Database },
+                        { key: 'persons', label: '人员', icon: Link2 },
+                      ].map(item => (
+                        <Badge
+                          key={item.key}
+                          variant={syncConfig.syncScope.includes(item.key) ? 'default' : 'outline'}
+                          className="cursor-pointer px-3 py-1"
+                          onClick={() => {
+                            const scope = syncConfig.syncScope.includes(item.key)
+                              ? syncConfig.syncScope.filter(s => s !== item.key)
+                              : [...syncConfig.syncScope, item.key];
+                            setSyncConfig({ ...syncConfig, syncScope: scope });
+                          }}
+                        >
+                          <item.icon className="w-3 h-3 mr-1" />
+                          {item.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" onClick={() => handleSync('full')} disabled={syncing}>
-                  {syncing ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                  )}
-                  全量同步
-                </Button>
-                <Button variant="outline" onClick={() => handleSync('incremental')} disabled={syncing}>
-                  {syncing ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCcw className="w-4 h-4 mr-2" />
-                  )}
-                  增量同步
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="flex gap-2 pt-4">
+                    <Button variant="outline" onClick={() => handleSync('full')} disabled={syncing}>
+                      {syncing ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      全量同步
+                    </Button>
+                    <Button variant="outline" onClick={() => handleSync('incremental')} disabled={syncing}>
+                      {syncing ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCcw className="w-4 h-4 mr-2" />
+                      )}
+                      增量同步
+                    </Button>
+                  </div>
 
-          {/* 同步历史 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>同步历史</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center text-muted-foreground py-8">
-                暂无同步历史记录
-              </div>
-            </CardContent>
-          </Card>
+                  {/* 提示信息 */}
+                  <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg mt-4">
+                    <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium mb-1">定时同步说明</p>
+                      <p>如需定时执行组织架构同步，请前往「定时任务」模块创建定时任务。</p>
+                      <Button 
+                        variant="link" 
+                        className="text-blue-600 p-0 h-auto text-sm"
+                        onClick={() => router.push('/admin/scheduler/tasks')}
+                      >
+                        <Clock className="w-4 h-4 mr-1" />
+                        前往定时任务管理
+                        <ArrowRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 同步历史 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>同步历史</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center text-muted-foreground py-8">
+                    暂无同步历史记录
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* 字段映射子Tab */}
+            <TabsContent value="mapping" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>字段映射表</CardTitle>
+                  <CardDescription>
+                    展示EKP系统字段与本地数据库表字段的映射关系
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <FieldMappingTable />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* 接口管理 */}
         <TabsContent value="interfaces" className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>EKP接口列表</CardTitle>
-                  <CardDescription>管理EKP系统的REST接口配置</CardDescription>
-                </div>
-                <Button onClick={() => router.push('/admin/integration/ekp/interfaces')}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  添加接口
-                </Button>
-              </div>
+              <CardTitle>EKP接口管理中心</CardTitle>
+              <CardDescription>管理EKP系统的官方REST接口</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center text-muted-foreground py-8">
-                点击上方按钮进入EKP接口管理中心
+              <div className="flex flex-col items-center justify-center py-12">
+                <Database className="w-16 h-16 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium mb-2">EKP接口管理中心</p>
+                <p className="text-muted-foreground text-center mb-6 max-w-md">
+                  在这里管理EKP系统的官方接口配置，包括待办查询、组织架构、文档管理等接口
+                </p>
+                <Button onClick={() => router.push('/admin/integration/ekp/interfaces')}>
+                  <ArrowUpRight className="w-4 h-4 mr-2" />
+                  进入接口管理中心
+                </Button>
               </div>
             </CardContent>
           </Card>
