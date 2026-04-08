@@ -103,6 +103,7 @@ export interface OrgElementDTO {
   fd_super_leaderid?: string;
   fd_parentorgid?: string;
   fd_parentid?: string;
+  fd_hierarchy_id?: string; // EKP返回的层级路径（x{id1}x{id2}x...格式）
   fd_creator_id?: string;
   fd_persons_number?: number; // 群组成员数量
 }

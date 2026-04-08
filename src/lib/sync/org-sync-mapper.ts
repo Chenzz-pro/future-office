@@ -136,9 +136,16 @@ export interface EKPOrgElement {
   keyword?: string;
   memo?: string;
   isAvailable?: boolean;
-  fd_parentid?: string;      // 直接父级ID（部分EKP数据可能有）
+  
+  // EKP 原始字段名
+  parent?: string;        // EKP原始字段：直接父级ID
+  hierarchyId?: string;   // EKP原始字段：层级路径 x{id1}x{id2}x{id3}x...
+  
+  // 兼容字段（可能映射后的名称）
+  fd_parentid?: string;      // 直接父级ID
   fd_parentorgid?: string;   // 父机构ID
-  fd_hierarchy_id?: string;  // 层级路径：x{id1}x{id2}x{id3}x...
+  fd_hierarchy_id?: string;  // 层级路径
+  
   thisLeader?: string;
   superLeader?: string;
   members?: string[];
@@ -164,10 +171,14 @@ export class OrgSyncMapper {
   /**
    * 将EKP组织元素映射为本系统组织元素
    * 
+   * EKP返回的字段：
+   * - parent: 直接父级ID（仅 dept/post 有）
+   * - hierarchyId: 层级路径 x{id1}x{id2}x{id3}x...
+   * 
    * 父级关系确定逻辑：
-   * 1. 首先尝试使用 fd_parentid（直接父级）
-   * 2. 如果没有，尝试从 fd_hierarchy_id 解析（层级路径）
-   * 3. 对于机构类型，优先使用 fd_parentorgid
+   * 1. 优先使用 EKP 的 parent 字段
+   * 2. 如果没有 parent，从 hierarchyId 解析
+   * 3. 对于机构类型，从 hierarchyId 获取顶级父级
    */
   async mapToOrgElement(ekpData: EKPOrgElement): Promise<OrgElementDTO> {
     const type = this.mapOrgType(ekpData.type);
@@ -179,40 +190,44 @@ export class OrgSyncMapper {
       isAvailable = false;
     }
 
-    // 确定父级ID
-    let parentId = ekpData.fd_parentid;
+    // EKP 返回的层级路径字段
+    const hierarchyId = ekpData.hierarchyId || ekpData.fd_hierarchy_id;
+    
+    // 确定父级ID - 优先使用 EKP 的 parent 字段
+    let parentId = ekpData.parent || ekpData.fd_parentid;
     let parentOrgId = ekpData.fd_parentorgid;
 
     // 如果没有直接的父级ID，从层级路径解析
-    if (!parentId && ekpData.fd_hierarchy_id) {
+    if (!parentId && hierarchyId) {
       // 从层级路径获取直接父级
-      const parentFromHierarchy = getParentIdFromHierarchy(ekpData.fd_hierarchy_id, ekpData.id);
+      const parentFromHierarchy = getParentIdFromHierarchy(hierarchyId, ekpData.id);
       if (parentFromHierarchy && parentFromHierarchy !== ekpData.id) {
         parentId = parentFromHierarchy;
-        console.log(`[mapToOrgElement] 从层级路径解析父级ID: ${parentId}, 层级路径: ${ekpData.fd_hierarchy_id}`);
+        console.log(`[mapToOrgElement] 从层级路径解析父级ID: ${parentId}, 层级路径: ${hierarchyId}`);
       }
     }
 
     // 如果是机构类型，设置父机构ID
-    if (type === 1 && !parentOrgId) {
-      // 从层级路径获取顶级父级
-      const topParent = getTopParentIdFromHierarchy(ekpData.fd_hierarchy_id);
+    if (type === 1 && !parentOrgId && hierarchyId) {
+      // 从层级路径获取顶级父级（机构是根节点，parentOrgId 通常为空）
+      const topParent = getTopParentIdFromHierarchy(hierarchyId);
       if (topParent && topParent !== ekpData.id) {
         parentOrgId = topParent;
       }
     }
 
     // 解析层级深度
-    const hierarchyDepth = getHierarchyDepth(ekpData.fd_hierarchy_id);
+    const hierarchyDepth = getHierarchyDepth(hierarchyId);
 
     console.log('[mapToOrgElement] 组织元素映射:', {
       id: ekpData.id,
       name: ekpData.name,
       type: ekpData.type,
       fd_org_type: type,
+      parent: ekpData.parent,
+      hierarchyId: hierarchyId,
       fd_parentid: parentId,
       fd_parentorgid: parentOrgId,
-      fd_hierarchy_id: ekpData.fd_hierarchy_id,
       hierarchyDepth: hierarchyDepth,
       isAvailable: isAvailable
     });
@@ -228,6 +243,7 @@ export class OrgSyncMapper {
       fd_memo: ekpData.memo || undefined,
       fd_parentid: parentId,
       fd_parentorgid: parentOrgId,
+      fd_hierarchy_id: hierarchyId, // 保存 EKP 返回的完整层级路径
       fd_this_leaderid: ekpData.thisLeader || undefined,
       fd_super_leaderid: ekpData.superLeader || undefined,
       // 群组成员特殊处理

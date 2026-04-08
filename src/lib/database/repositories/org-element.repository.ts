@@ -23,7 +23,7 @@ export class OrgElementRepository {
     const id = dto.fd_id || crypto.randomUUID();
     const now = new Date();
 
-    // 只插入核心字段，避免字段数不匹配
+    // 插入核心字段，包括 fd_hierarchy_id
     const sql = `
       INSERT INTO ${this.tableName} (
         fd_id,
@@ -42,9 +42,10 @@ export class OrgElementRepository {
         fd_super_leaderid,
         fd_parentorgid,
         fd_parentid,
+        fd_hierarchy_id,
         fd_create_time,
         fd_alter_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     await dbManager.query(sql, [
@@ -64,12 +65,10 @@ export class OrgElementRepository {
       dto.fd_super_leaderid || null,
       dto.fd_parentorgid || null,
       dto.fd_parentid || null,
+      dto.fd_hierarchy_id || null, // 保存 EKP 返回的层级路径
       now,
       now
     ]);
-
-    // 更新层级ID
-    await this.updateHierarchyId(id);
 
     // 更新父级人员数量
     if (dto.fd_parentid) {
@@ -141,6 +140,10 @@ export class OrgElementRepository {
       fields.push('fd_parentid = ?');
       values.push(dto.fd_parentid);
     }
+    if (dto.fd_hierarchy_id !== undefined) {
+      fields.push('fd_hierarchy_id = ?');
+      values.push(dto.fd_hierarchy_id);
+    }
 
     if (fields.length === 0) {
       return;
@@ -153,9 +156,6 @@ export class OrgElementRepository {
     values.push(id);
 
     await dbManager.query(sql, values);
-
-    // 更新层级ID
-    await this.updateHierarchyId(id);
   }
 
   /**

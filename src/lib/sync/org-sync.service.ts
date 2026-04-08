@@ -82,13 +82,16 @@ export class OrgSyncService {
       // 初始化同步配置（确保人员可以同步）
       await this.initSyncConfig();
 
-      // 调用EKP接口获取全部数据
-      console.log(`[全量同步] 开始调用EKP接口 org.getElementsBaseInfo`);
+      // 调用EKP接口获取全部数据（使用 getUpdatedElements 获取完整字段）
+      console.log(`[全量同步] 开始调用EKP接口 org.getUpdatedElements`);
       const ekpResult = await callEKPInterface<{
         returnState: number;
         message: EKPOrgElement[];
         count: number;
-      }>('org.getElementsBaseInfo');
+      }>('org.getUpdatedElements', {
+        returnOrgType: JSON.stringify([{ type: 'org' }, { type: 'dept' }, { type: 'post' }, { type: 'group' }, { type: 'person' }]),
+        count: 500
+      });
 
       console.log(`[全量同步] EKP接口返回:`, JSON.stringify(ekpResult));
 
