@@ -38,6 +38,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import FieldMappingTable from '@/components/field-mapping-table';
+import EKPInterfacesPanel from './interfaces-panel';
 
 interface EKPConfig {
   id?: string;
@@ -498,25 +499,7 @@ export default function EKPPage() {
 
         {/* 接口管理 */}
         <TabsContent value="interfaces" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>EKP接口管理中心</CardTitle>
-              <CardDescription>管理EKP系统的官方REST接口</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-12">
-                <Database className="w-16 h-16 text-muted-foreground mb-4" />
-                <p className="text-lg font-medium mb-2">EKP接口管理中心</p>
-                <p className="text-muted-foreground text-center mb-6 max-w-md">
-                  在这里管理EKP系统的官方接口配置，包括待办查询、组织架构、文档管理等接口
-                </p>
-                <Button onClick={() => router.push('/admin/integration/ekp/interfaces')}>
-                  <ArrowUpRight className="w-4 h-4 mr-2" />
-                  进入接口管理中心
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <EKPInterfacesPanel />
         </TabsContent>
 
         {/* 高级配置 */}
