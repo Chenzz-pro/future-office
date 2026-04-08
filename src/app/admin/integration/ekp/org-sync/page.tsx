@@ -125,33 +125,48 @@ export default function OrgSyncPage() {
 
   // 轮询同步进度
   useEffect(() => {
-    if (syncing && syncStatus?.runningSync) {
+    if (syncing) {
       const interval = setInterval(async () => {
         try {
-          const response = await fetch('/api/org-sync/logs/' + syncStatus.runningSync.id);
-          const result = await response.json();
-          if (result.success && result.data) {
-            const log = result.data;
-            const processed = log.insert_count + log.update_count + log.delete_count;
-            const percentage = log.total_count > 0 ? Math.round((processed / log.total_count) * 100) : 0;
+          // 获取最新的同步状态
+          const statusResponse = await fetch('/api/org-sync?action=status');
+          const statusResult = await statusResponse.json();
 
-            setSyncProgress({
-              percentage,
-              processed,
-              total: log.total_count || 0,
-              insert: log.insert_count || 0,
-              update: log.update_count || 0,
-              delete: log.delete_count || 0,
-              error: log.error_count || 0
-            });
+          if (statusResult.success && statusResult.data.isRunning && statusResult.data.runningSync) {
+            const response = await fetch('/api/org-sync/logs/' + statusResult.data.runningSync.id);
+            const result = await response.json();
 
-            // 如果同步完成或失败，停止轮询
-            if (log.status === 'completed' || log.status === 'failed' || log.status === 'cancelled') {
-              setSyncProgress(null);
-              setSyncing(false);
-              setSyncingType(null);
-              loadData();
+            if (result.success && result.data) {
+              const log = result.data;
+              const processed = log.insert_count + log.update_count + log.delete_count;
+              const percentage = log.total_count > 0 ? Math.round((processed / log.total_count) * 100) : 0;
+
+              setSyncProgress({
+                percentage,
+                processed,
+                total: log.total_count || 0,
+                insert: log.insert_count || 0,
+                update: log.update_count || 0,
+                delete: log.delete_count || 0,
+                error: log.error_count || 0
+              });
+
+              // 如果同步完成或失败，停止轮询
+              if (log.status === 'completed' || log.status === 'failed' || log.status === 'cancelled') {
+                console.log('[OrgSync] 同步任务结束，状态:', log.status);
+                setSyncProgress(null);
+                setSyncing(false);
+                setSyncingType(null);
+                loadData();
+              }
             }
+          } else {
+            // 同步任务不存在或已结束，停止轮询
+            console.log('[OrgSync] 同步任务已结束或不存在');
+            setSyncProgress(null);
+            setSyncing(false);
+            setSyncingType(null);
+            loadData();
           }
         } catch (error) {
           console.error('获取同步进度失败:', error);
@@ -160,7 +175,7 @@ export default function OrgSyncPage() {
 
       return () => clearInterval(interval);
     }
-  }, [syncing, syncStatus?.runningSync]);
+  }, [syncing]);
 
   // 加载数据
   useEffect(() => {
@@ -194,6 +209,12 @@ export default function OrgSyncPage() {
 
       if (status.success) {
         setSyncStatus(status.data);
+        // 恢复正在运行的同步任务状态
+        if (status.data.isRunning && status.data.runningSync) {
+          console.log('[OrgSync] 检测到正在运行的同步任务，恢复状态:', status.data.runningSync.id);
+          setSyncing(true);
+          setSyncingType(status.data.runningSync.sync_type as 'full' | 'incremental');
+        }
       }
       if (system.success) {
         setSystemStatus(system.data);
