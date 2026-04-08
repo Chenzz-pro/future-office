@@ -135,14 +135,24 @@
 | id / lunid | fd_id | 唯一键 |
 | name | fd_name | 名称 |
 | type | fd_org_type | 类型（1=机构, 2=部门, 3=岗位, 4=群组） |
-| parent | fd_parentid | 父节点 |
-| thisLeader | fd_this_leaderid | 领导 |
+| parent | fd_parentid | 直接父级ID（EKP原始字段） |
+| hierarchyId | fd_hierarchy_id | 层级路径 x{id1}x{id2}x... |
+| fd_hierarchy_id | fd_hierarchy_id | 层级路径（兼容字段） |
+| thisLeader | fd_this_leaderid | 本级领导 |
 | superLeader | fd_super_leaderid | 上级领导 |
 | no | fd_no | 编号 |
 | order | fd_order | 排序 |
 | keyword | fd_keyword | 关键字 |
 | isAvailable | fd_is_available | 是否有效 |
 | memo | fd_memo | 说明 |
+| orgEmail | fd_org_email | 机构/部门邮箱 |
+| namePinyin | fd_name_pinyin | 拼音名称 |
+| nameSimplePinyin | fd_name_simple_pinyin | 名称简拼 |
+| isExternal | fd_is_external | 是否外部组织 |
+| isBusiness | fd_is_business | 是否业务相关 |
+| importInfo | fd_import_info | 导入信息 |
+| creatorId | fd_creator_id | 创建者ID |
+| members | fd_persons_number | 群组成员数量 |
 
 ### 人员映射（sys_org_person）
 
@@ -150,9 +160,11 @@
 |---------|-----------|------|
 | id / lunid | fd_id | 唯一键 |
 | name | fd_name | 姓名 |
-| loginName | fd_login_name | 登录名 |
+| fd_hierarchy_id | fd_dept_id | 层级路径（最后一级作为所属部门） |
+| fd_parentid | fd_dept_id | 所属部门ID |
+| fd_login_name | fd_login_name | 登录名（优先使用） |
+| loginName | fd_login_name | 登录名（兼容字段） |
 | password | fd_password | 默认密码123456 |
-| parent | fd_dept_id | 所属部门 |
 | posts[0] | fd_post_id | 主岗位 |
 | posts | fd_post_ids | 所有岗位（一人多岗） |
 | email | fd_email | 邮箱 |
@@ -163,6 +175,25 @@
 | wechat | fd_wechat | 微信 |
 | shortNo | fd_short_no | 短号 |
 | isAvailable | fd_is_login_enabled | 是否允许登录 |
+| nickname | fd_nickname | 昵称 |
+| position | fd_position | 职务 |
+| isBusinessRelated | fd_is_business_related | 是否业务相关 |
+| userType | fd_user_type | 用户类型 (internal/external) |
+| staffingLevelId | fd_staffing_level_id | 员工级别ID |
+| creatorId | fd_creator_id | 创建者ID |
+
+### 层级路径 (fd_hierarchy_id) 解析规则
+
+- 格式: `x{id1}x{id2}x{id3}x...`
+- 以 'x' 开头和分隔
+- 依次表示一级、二级、三级...
+- 可以是机构、部门、人员的混合层级
+
+**父级关系确定逻辑：**
+- 机构: 从层级路径获取顶级父级作为 `fd_parentorgid`
+- 部门: 从层级路径获取直接父级作为 `fd_parentid`
+- 岗位: 从层级路径获取直接父级作为 `fd_parentid`
+- 人员: 从层级路径获取最后一级作为 `fd_dept_id`（所属部门）
 
 ## 🚀 开发步骤
 

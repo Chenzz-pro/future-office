@@ -21,6 +21,8 @@ export const organizationMapping = [
   { ekpField: 'lunid', localField: 'fd_id', description: '逻辑唯一ID（映射到fd_id）', required: true },
   { ekpField: 'name', localField: 'fd_name', description: '机构名称', required: true },
   { ekpField: 'type', localField: 'fd_org_type', description: '组织类型（1=机构）', required: true, transform: "type === 'org' ? 1 : 2" },
+  { ekpField: 'fd_hierarchy_id', localField: 'fd_hierarchy_id', description: '层级路径（完整路径）', required: false },
+  { ekpField: 'parent', localField: 'fd_parentorgid', description: '父机构ID（EKP原始字段）', required: false },
   { ekpField: 'fd_hierarchy_id', localField: 'fd_parentorgid', description: '层级路径（第一级作为父机构）', required: false, transform: "解析层级路径第一级作为fd_parentorgid" },
   { ekpField: 'fd_parentorgid', localField: 'fd_parentorgid', description: '父机构ID（直接指定）', required: false },
   { ekpField: 'no', localField: 'fd_no', description: '机构编号', required: false },
@@ -30,6 +32,14 @@ export const organizationMapping = [
   { ekpField: 'isAvailable', localField: 'fd_is_available', description: '是否可用', required: false, transform: "支持 'true'/'false', '0'/'1', boolean 类型" },
   { ekpField: 'thisLeader', localField: 'fd_this_leaderid', description: '本级领导ID', required: false },
   { ekpField: 'superLeader', localField: 'fd_super_leaderid', description: '上级领导ID', required: false },
+  // 新增字段
+  { ekpField: 'orgEmail', localField: 'fd_org_email', description: '机构邮箱', required: false },
+  { ekpField: 'namePinyin', localField: 'fd_name_pinyin', description: '拼音名称', required: false },
+  { ekpField: 'nameSimplePinyin', localField: 'fd_name_simple_pinyin', description: '名称简拼', required: false },
+  { ekpField: 'isExternal', localField: 'fd_is_external', description: '是否外部组织', required: false },
+  { ekpField: 'isBusiness', localField: 'fd_is_business', description: '是否业务相关', required: false },
+  { ekpField: 'importInfo', localField: 'fd_import_info', description: '导入信息', required: false },
+  { ekpField: 'creatorId', localField: 'fd_creator_id', description: '创建者ID', required: false },
 ];
 
 // ============================================
@@ -40,6 +50,8 @@ export const departmentMapping = [
   { ekpField: 'lunid', localField: 'fd_id', description: '逻辑唯一ID（映射到fd_id）', required: true },
   { ekpField: 'name', localField: 'fd_name', description: '部门名称', required: true },
   { ekpField: 'type', localField: 'fd_org_type', description: '组织类型（2=部门）', required: true, transform: "type === 'dept' ? 2 : 2" },
+  { ekpField: 'fd_hierarchy_id', localField: 'fd_hierarchy_id', description: '层级路径（完整路径）', required: false },
+  { ekpField: 'parent', localField: 'fd_parentid', description: '直接父级ID（EKP原始字段）', required: false },
   { ekpField: 'fd_hierarchy_id', localField: 'fd_parentid', description: '层级路径（直接父级作为fd_parentid）', required: false, transform: "解析层级路径倒数第一/二级作为fd_parentid" },
   { ekpField: 'fd_parentid', localField: 'fd_parentid', description: '父部门ID（直接指定）', required: false },
   { ekpField: 'fd_parentorgid', localField: 'fd_parentorgid', description: '父机构ID', required: false },
@@ -50,6 +62,14 @@ export const departmentMapping = [
   { ekpField: 'isAvailable', localField: 'fd_is_available', description: '是否可用', required: false, transform: "支持 'true'/'false', '0'/'1', boolean 类型" },
   { ekpField: 'thisLeader', localField: 'fd_this_leaderid', description: '本级领导ID', required: false },
   { ekpField: 'superLeader', localField: 'fd_super_leaderid', description: '上级领导ID', required: false },
+  // 新增字段
+  { ekpField: 'orgEmail', localField: 'fd_org_email', description: '部门邮箱', required: false },
+  { ekpField: 'namePinyin', localField: 'fd_name_pinyin', description: '拼音名称', required: false },
+  { ekpField: 'nameSimplePinyin', localField: 'fd_name_simple_pinyin', description: '名称简拼', required: false },
+  { ekpField: 'isExternal', localField: 'fd_is_external', description: '是否外部组织', required: false },
+  { ekpField: 'isBusiness', localField: 'fd_is_business', description: '是否业务相关', required: false },
+  { ekpField: 'importInfo', localField: 'fd_import_info', description: '导入信息', required: false },
+  { ekpField: 'creatorId', localField: 'fd_creator_id', description: '创建者ID', required: false },
 ];
 
 // ============================================
@@ -60,6 +80,8 @@ export const positionMapping = [
   { ekpField: 'lunid', localField: 'fd_id', description: '逻辑唯一ID（映射到fd_id）', required: true },
   { ekpField: 'name', localField: 'fd_name', description: '岗位名称', required: true },
   { ekpField: 'type', localField: 'fd_org_type', description: '组织类型（3=岗位）', required: true, transform: "type === 'post' ? 3 : 3" },
+  { ekpField: 'fd_hierarchy_id', localField: 'fd_hierarchy_id', description: '层级路径（完整路径）', required: false },
+  { ekpField: 'parent', localField: 'fd_parentid', description: '直接父级ID（EKP原始字段）', required: false },
   { ekpField: 'fd_hierarchy_id', localField: 'fd_parentid', description: '层级路径（直接父级作为fd_parentid）', required: false, transform: "解析层级路径最后一级作为fd_parentid" },
   { ekpField: 'fd_parentid', localField: 'fd_parentid', description: '上级ID（直接指定）', required: false },
   { ekpField: 'no', localField: 'fd_no', description: '岗位编号', required: false },
@@ -68,6 +90,15 @@ export const positionMapping = [
   { ekpField: 'memo', localField: 'fd_memo', description: '备注', required: false },
   { ekpField: 'isAvailable', localField: 'fd_is_available', description: '是否可用', required: false, transform: "支持 'true'/'false', '0'/'1', boolean 类型" },
   { ekpField: 'members', localField: 'fd_persons_number', description: '群组成员数量', required: false, transform: 'members?.length || 0' },
+  // 新增字段
+  { ekpField: 'thisLeader', localField: 'fd_this_leaderid', description: '本级领导ID', required: false },
+  { ekpField: 'superLeader', localField: 'fd_super_leaderid', description: '上级领导ID', required: false },
+  { ekpField: 'namePinyin', localField: 'fd_name_pinyin', description: '拼音名称', required: false },
+  { ekpField: 'nameSimplePinyin', localField: 'fd_name_simple_pinyin', description: '名称简拼', required: false },
+  { ekpField: 'isExternal', localField: 'fd_is_external', description: '是否外部组织', required: false },
+  { ekpField: 'isBusiness', localField: 'fd_is_business', description: '是否业务相关', required: false },
+  { ekpField: 'importInfo', localField: 'fd_import_info', description: '导入信息', required: false },
+  { ekpField: 'creatorId', localField: 'fd_creator_id', description: '创建者ID', required: false },
 ];
 
 // ============================================
@@ -97,6 +128,13 @@ export const personMapping = [
   { ekpField: 'memo', localField: 'fd_memo', description: '备注', required: false },
   { ekpField: 'staffingLevelName', localField: 'fd_staffing_level_name', description: '职务级别名称', required: false },
   { ekpField: 'staffingLevelValue', localField: 'fd_staffing_level_id', description: '职务级别值', required: false },
+  // 新增字段
+  { ekpField: 'nickname', localField: 'fd_nickname', description: '昵称', required: false },
+  { ekpField: 'position', localField: 'fd_position', description: '职务', required: false },
+  { ekpField: 'isBusinessRelated', localField: 'fd_is_business_related', description: '是否业务相关', required: false },
+  { ekpField: 'userType', localField: 'fd_user_type', description: '用户类型 (internal/external)', required: false },
+  { ekpField: 'creatorId', localField: 'fd_creator_id', description: '创建者ID', required: false },
+  { ekpField: 'staffingLevelId', localField: 'fd_staffing_level_id', description: '员工级别ID', required: false },
 ];
 
 // ============================================

@@ -106,6 +106,8 @@ export interface OrgElementDTO {
   fd_hierarchy_id?: string; // EKP返回的层级路径（x{id1}x{id2}x...格式）
   fd_creator_id?: string;
   fd_persons_number?: number; // 群组成员数量
+  fd_name_pinyin?: string; // 拼音名称
+  fd_name_simple_pinyin?: string; // 名称简拼
 }
 
 // ============================================

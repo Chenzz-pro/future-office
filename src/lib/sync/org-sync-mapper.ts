@@ -6,7 +6,8 @@
 import {
   OrgElementDTO,
   OrgPersonDTO,
-  OrgElementType
+  OrgElementType,
+  UserType
 } from '@/types/org-structure';
 import { hashPassword } from '../password/password-utils';
 import { orgSyncConfigRepository } from '../database/repositories/org-sync-config.repository';
@@ -164,6 +165,28 @@ export interface EKPOrgElement {
   shortNo?: string;
   staffingLevelName?: string;
   staffingLevelValue?: string;
+  
+  // 机构/部门/岗位额外字段
+  orgEmail?: string;           // 机构/部门邮箱
+  namePinyin?: string;          // 名称拼音
+  nameSimplePinyin?: string;   // 名称简拼
+  isExternal?: boolean;         // 是否外部组织
+  isBusiness?: boolean;         // 是否业务相关
+  importInfo?: string;          // 导入信息
+  creatorId?: string;           // 创建者ID
+  createTime?: string;          // 创建时间
+  alterTime?: string;          // 修改时间
+  
+  // 人员额外字段
+  nickname?: string;            // 昵称
+  position?: string;            // 职务
+  defaultLanguage?: string;     // 默认语言
+  doubleValidation?: boolean;   // 双因子验证
+  isBusinessRelated?: boolean; // 是否业务相关
+  userType?: string;           // 用户类型 (internal/external)
+  dynamicPassword?: string;     // 动态密码
+  staffingLevelId?: string;    // 员工级别ID
+  
   customProps?: Record<string, string>;
 }
 
@@ -246,6 +269,13 @@ export class OrgSyncMapper {
       fd_hierarchy_id: hierarchyId, // 保存 EKP 返回的完整层级路径
       fd_this_leaderid: ekpData.thisLeader || undefined,
       fd_super_leaderid: ekpData.superLeader || undefined,
+      fd_org_email: ekpData.orgEmail || undefined,
+      fd_name_pinyin: ekpData.namePinyin || undefined,
+      fd_name_simple_pinyin: ekpData.nameSimplePinyin || undefined,
+      fd_is_external: ekpData.isExternal || false,
+      fd_is_business: ekpData.isBusiness || false,
+      fd_import_info: ekpData.importInfo || undefined,
+      fd_creator_id: ekpData.creatorId || undefined,
       // 群组成员特殊处理
       fd_persons_number: type === 3 ? ekpData.members?.length || 0 : undefined
     };
@@ -315,6 +345,7 @@ export class OrgSyncMapper {
     return {
       fd_id: ekpData.id,
       fd_name: ekpData.name,
+      fd_nickname: ekpData.nickname || undefined,
       fd_login_name: loginName, // 优先使用EKP的fd_login_name
       fd_password: defaultPassword || '123456', // 使用默认密码
       fd_no: ekpData.no || undefined,
@@ -330,8 +361,13 @@ export class OrgSyncMapper {
       fd_gender: this.mapGender(ekpData.sex),
       fd_wechat: ekpData.wechat || undefined,
       fd_short_no: ekpData.shortNo || undefined,
+      fd_position: ekpData.position || undefined,
       fd_is_login_enabled: isAvailable, // 使用处理后的可用性状态
-      fd_memo: ekpData.memo || undefined
+      fd_is_business_related: ekpData.isBusinessRelated ?? true,
+      fd_user_type: (ekpData.userType as UserType) || 'internal',
+      fd_memo: ekpData.memo || undefined,
+      fd_staffing_level_id: ekpData.staffingLevelId || undefined,
+      fd_creator_id: ekpData.creatorId || undefined,
     };
   }
 
