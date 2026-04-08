@@ -53,6 +53,23 @@ export interface SyncLog {
   updated_at: Date;
 }
 
+/**
+ * 安全解析JSON，处理无效字符串
+ */
+function safeParseJSON(value: any, defaultValue: any = null): any {
+  if (!value) {
+    return defaultValue;
+  }
+  if (typeof value !== 'string') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return defaultValue;
+  }
+}
+
 export class OrgSyncLogRepository {
   private tableName = 'org_sync_logs';
 
@@ -272,8 +289,8 @@ export class OrgSyncLogRepository {
       begin_time_stamp: row.begin_time_stamp,
       end_time_stamp: row.end_time_stamp,
       next_time_stamp: row.next_time_stamp,
-      org_scope: row.org_scope ? JSON.parse(row.org_scope) : null,
-      return_org_type: row.return_org_type ? JSON.parse(row.return_org_type) : null,
+      org_scope: safeParseJSON(row.org_scope, null),
+      return_org_type: safeParseJSON(row.return_org_type, null),
       total_count: row.total_count,
       org_count: row.org_count,
       dept_count: row.dept_count,
@@ -285,7 +302,7 @@ export class OrgSyncLogRepository {
       delete_count: row.delete_count,
       error_count: row.error_count,
       error_message: row.error_message,
-      error_details: row.error_details ? JSON.parse(row.error_details) : null,
+      error_details: safeParseJSON(row.error_details, null),
       triggered_by: row.triggered_by,
       operator_id: row.operator_id,
       operator_name: row.operator_name,
