@@ -207,6 +207,8 @@ export default function OrgSyncPage() {
         alertsRes.json()
       ]);
 
+      console.log('[OrgSync] API返回数据:', { status, system, logs, alertData });
+
       if (status.success) {
         setSyncStatus(status.data);
         // 恢复正在运行的同步任务状态
@@ -220,6 +222,7 @@ export default function OrgSyncPage() {
         setSystemStatus(system.data);
       }
       if (logs.success) {
+        console.log('[OrgSync] 同步日志数量:', logs.data.list?.length || 0);
         setSyncLogs(logs.data.list || []);
         calculateStats(logs.data.list || []);
       }

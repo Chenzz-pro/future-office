@@ -100,6 +100,12 @@ export class OrgSyncService {
         // 打印前5条数据，用于调试
         if (ekpData.length > 0) {
           console.log(`[全量同步] 前5条EKP数据:`, JSON.stringify(ekpData.slice(0, 5), null, 2));
+
+          // 检查第一条数据是否有 parent 字段
+          const firstItem = ekpData[0];
+          console.log(`[全量同步] 第一条数据的所有字段:`, Object.keys(firstItem));
+          console.log(`[全量同步] 第一条数据的 parent 字段:`, firstItem.parent);
+          console.log(`[全量同步] 第一条数据的完整数据:`, JSON.stringify(firstItem, null, 2));
         }
 
         // 统计各类型数量
