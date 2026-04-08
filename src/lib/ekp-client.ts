@@ -26,6 +26,7 @@ export async function createEKPClient(): Promise<EKPRestClient | null> {
     const configs = await dbManager.query(`
       SELECT ekp_address, username, password, config
       FROM ekp_configs
+      WHERE user_id = '00000000-0000-0000-0000-000000000000'
       LIMIT 1
     `);
 
@@ -138,6 +139,7 @@ export async function callEKPInterface<T = unknown>(
     const configs = await dbManager.query(`
       SELECT ekp_address, username, password, config
       FROM ekp_configs
+      WHERE user_id = '00000000-0000-0000-0000-000000000000'
       LIMIT 1
     `);
 
