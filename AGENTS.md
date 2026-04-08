@@ -431,6 +431,22 @@ console.log('二开接口:', stats.custom);
 - `custom-interfaces-table.tsx` - 二开接口表格
 - `interface-form-dialog.tsx` - 接口添加/编辑对话框
 - `interface-test-dialog.tsx` - 接口测试对话框
+- `field-mapping-table.tsx` - 字段映射表展示组件
+
+### 字段映射表
+组织架构同步的字段映射表用于展示 EKP 系统字段与本地数据库表字段的映射关系。
+
+**文件位置：** `src/components/field-mapping-table.tsx`
+
+**配置位置：** `src/lib/sync/field-mapping-config.ts`
+
+**功能特点：**
+- 展示机构、部门、岗位、人员四种类型的字段映射
+- 每个字段包含：EKP字段名、本地字段名、描述、是否必填、转换规则
+- 提供统一的对话框展示，便于用户理解同步逻辑
+
+**使用方式：**
+- 在 `/admin/integration/ekp/org-sync` 页面的"字段映射" Tab中查看
 
 ### 权限要求
 - 只有 `admin` 角色的用户才能访问 EKP接口管理中心

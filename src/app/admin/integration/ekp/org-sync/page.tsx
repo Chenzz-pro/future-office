@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { FieldMappingTable } from '@/components/field-mapping-table';
 import {
   Play,
   RefreshCw,
@@ -32,7 +33,8 @@ import {
   Users,
   Settings,
   AlertTriangle,
-  XCircle
+  XCircle,
+  Table as TableIcon
 } from 'lucide-react';
 
 interface SyncStatus {
@@ -581,6 +583,10 @@ export default function OrgSyncPage() {
           <TabsTrigger value="sync">同步操作</TabsTrigger>
           <TabsTrigger value="logs">同步历史</TabsTrigger>
           <TabsTrigger value="monitor">监控告警</TabsTrigger>
+          <TabsTrigger value="mapping">
+            <TableIcon className="w-4 h-4 mr-1" />
+            字段映射
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="sync" className="space-y-4">
@@ -833,6 +839,23 @@ export default function OrgSyncPage() {
                   ))
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="mapping" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TableIcon className="w-5 h-5" />
+                EKP 组织架构字段映射表
+              </CardTitle>
+              <CardDescription>
+                展示 EKP 系统字段与本地数据库表字段的映射关系，帮助理解数据同步逻辑
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FieldMappingTable />
             </CardContent>
           </Card>
         </TabsContent>
