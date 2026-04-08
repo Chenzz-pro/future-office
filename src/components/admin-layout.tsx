@@ -78,6 +78,7 @@ const menuItems: MenuItem[] = [
     path: '/admin/integration',
     subItems: [
       { id: 'int-overview', label: '集成概览', path: '/admin/integration' },
+      { id: 'int-api', label: 'API管理', path: '/admin/integration/api' },
       { id: 'int-llm', label: 'AI服务配置', path: '/admin/integration/llm' },
       { id: 'int-ekp', label: '蓝凌EKP', path: '/admin/integration/ekp' },
       { id: 'int-dingtalk', label: '钉钉', path: '/admin/integration/dingtalk' },
