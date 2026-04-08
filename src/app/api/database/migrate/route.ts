@@ -6,6 +6,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
 
+/**
+ * GET /api/database/migrate - 获取迁移状态（预留接口，暂未实现）
+ */
+export async function GET(request: NextRequest) {
+  try {
+    return NextResponse.json({
+      success: false,
+      message: 'GET 方法未实现，请使用 POST 方法执行迁移',
+      error: 'Method Not Allowed'
+    }, { status: 405 });
+  } catch (error) {
+    console.error('[API:Migration] GET 请求失败:', error);
+    return NextResponse.json({
+      success: false,
+      message: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/database/migrate - 执行数据库迁移
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
