@@ -90,11 +90,19 @@ export default function EKPPage() {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/ekp?action=getConfig');
+      const response = await fetch('/api/admin/ekp-configs');
       if (response.ok) {
         const data = await response.json();
-        if (data.config) {
-          setConfig(data.config);
+        if (data.success && data.data) {
+          setConfig({
+            name: data.data.name || '蓝凌EKP',
+            url: data.data.baseUrl || '',
+            username: data.data.username || '',
+            password: data.data.password || '',
+            apiPath: data.data.apiPath || '/api/sys-notify/sysNotifyTodoRestService/getTodo',
+            authType: 'basic',
+            enabled: data.data.enabled ?? true,
+          });
         }
       }
     } catch (error) {
@@ -106,16 +114,23 @@ export default function EKPPage() {
   const handleSaveConfig = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/ekp?action=saveConfig', {
+      const response = await fetch('/api/admin/ekp-configs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({
+          baseUrl: config.url,
+          username: config.username,
+          password: config.password,
+          apiPath: config.apiPath,
+          serviceId: '',
+          enabled: config.enabled,
+        }),
       });
       const data = await response.json();
       if (data.success) {
         alert('配置保存成功');
       } else {
-        alert('配置保存失败: ' + data.message);
+        alert('配置保存失败: ' + data.error);
       }
     } catch (error) {
       console.error('保存配置失败:', error);
