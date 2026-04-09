@@ -233,7 +233,11 @@ export default function EKPBingdingPage() {
           <CardFooter>
             <Button
               className="w-full"
-              onClick={() => window.location.href = '/login'}
+              onClick={() => {
+                // 保存当前页面 URL，登录后可以返回
+                sessionStorage.setItem('login-redirect', window.location.href);
+                window.location.href = '/login';
+              }}
             >
               前往登录
             </Button>

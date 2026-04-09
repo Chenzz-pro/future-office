@@ -511,7 +511,11 @@ export function AIFormConsole({
               {formUrl ? (
                 <iframe
                   ref={iframeRef}
-                  src={formUrl.startsWith('/') ? `/api/ekp-proxy${formUrl}` : `/api/ekp-proxy/${formUrl}`}
+                  src={(() => {
+                    // 清理 formUrl 中的双斜杠
+                    const cleanPath = formUrl.replace(/\/+/g, '/').replace(/^\//, '');
+                    return `/api/ekp-proxy/${cleanPath}`;
+                  })()}
                   className="w-full h-full border-0"
                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
                   onLoad={handleIframeLoad}
