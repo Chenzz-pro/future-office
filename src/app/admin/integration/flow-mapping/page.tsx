@@ -14,7 +14,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -59,39 +58,46 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 // ============================================
-// 类型定义
+// 类型定义（与 API 返回格式匹配）
 // ============================================
 
 interface FlowMapping {
   id: string;
   businessType: string;
-  businessTypeName: string;
-  businessKeywords: string[];
+  businessName: string;
+  keywords: string[];
   flowTemplateId?: string;
   flowTemplateName?: string;
-  formUrl?: string;
-  formCode?: string;
-  formVersion?: string;
-  fieldMappings?: Record<string, string>;
-  category?: string;
+  formTemplateId?: string;
+  formTemplateUrl?: string;
+  fieldMappings?: FieldMapping[];
   enabled: boolean;
   isSystem: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
+interface FieldMapping {
+  ekpField: string;
+  localField: string;
+  label: string;
+  required?: boolean;
+}
+
+interface BusinessTypeOption {
+  value: string;
+  label: string;
+}
+
 interface FlowMappingFormData {
   businessType: string;
-  businessTypeName: string;
+  businessName: string;
   businessKeywords: string;
   flowTemplateId: string;
   flowTemplateName: string;
-  launchEndpoint: string;
-  formUrl: string;
-  formCode: string;
-  formVersion?: string;
+  formTemplateId: string;
+  formTemplateUrl: string;
   fieldMappings: string;
-  category: string;
   enabled: boolean;
 }
 
@@ -101,16 +107,13 @@ interface FlowMappingFormData {
 
 const DEFAULT_FORM_DATA: FlowMappingFormData = {
   businessType: '',
-  businessTypeName: '',
+  businessName: '',
   businessKeywords: '',
   flowTemplateId: '',
   flowTemplateName: '',
-  launchEndpoint: '/km/review/restservice/kmReviewRestService/launch',
-  formUrl: '',
-  formCode: '',
-  formVersion: '',
+  formTemplateId: '',
+  formTemplateUrl: '',
   fieldMappings: '',
-  category: 'hr',
   enabled: true,
 };
 
@@ -121,10 +124,9 @@ const DEFAULT_FORM_DATA: FlowMappingFormData = {
 export default function FlowMappingPage() {
   // 状态
   const [mappings, setMappings] = useState<FlowMapping[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [filterCategory, setFilterCategory] = useState<string>('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<FlowMapping | null>(null);
   const [saving, setSaving] = useState(false);
@@ -140,14 +142,13 @@ export default function FlowMappingPage() {
     try {
       const params = new URLSearchParams();
       if (searchKeyword) params.set('keyword', searchKeyword);
-      if (filterCategory) params.set('category', filterCategory);
 
       const response = await fetch(`/api/admin/flow-mappings?${params}`);
       const result = await response.json();
 
       if (result.success) {
-        setMappings(result.data.mappings);
-        setCategories(result.data.categories || []);
+        setMappings(result.data.mappings || []);
+        setBusinessTypes(result.data.businessTypes || []);
       } else {
         toast.error(result.error || '加载失败');
       }
@@ -157,7 +158,7 @@ export default function FlowMappingPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchKeyword, filterCategory]);
+  }, [searchKeyword]);
 
   useEffect(() => {
     loadData();
@@ -191,18 +192,15 @@ export default function FlowMappingPage() {
       setEditingMapping(mapping);
       form.reset({
         businessType: mapping.businessType,
-        businessTypeName: mapping.businessTypeName,
-        businessKeywords: mapping.businessKeywords.join(', '),
+        businessName: mapping.businessName,
+        businessKeywords: mapping.keywords.join(', '),
         flowTemplateId: mapping.flowTemplateId || '',
         flowTemplateName: mapping.flowTemplateName || '',
-        launchEndpoint: '/km/review/restservice/kmReviewRestService/launch',
-        formUrl: mapping.formUrl || '',
-        formCode: mapping.formCode || '',
-        formVersion: mapping.formVersion || '',
+        formTemplateId: mapping.formTemplateId || '',
+        formTemplateUrl: mapping.formTemplateUrl || '',
         fieldMappings: mapping.fieldMappings 
-          ? JSON.stringify(mapping.fieldMappings, null, 2)
+          ? JSON.stringify({ fields: mapping.fieldMappings }, null, 2)
           : '',
-        category: mapping.category || 'hr',
         enabled: mapping.enabled,
       });
     } else {
@@ -217,10 +215,11 @@ export default function FlowMappingPage() {
     setSaving(true);
     try {
       // 解析字段映射
-      let fieldMappings: Record<string, string> = {};
+      let fieldMappings: FieldMapping[] = [];
       if (data.fieldMappings) {
         try {
-          fieldMappings = JSON.parse(data.fieldMappings);
+          const parsed = JSON.parse(data.fieldMappings);
+          fieldMappings = parsed.fields || [];
         } catch {
           toast.error('字段映射 JSON 格式错误');
           setSaving(false);
@@ -229,23 +228,26 @@ export default function FlowMappingPage() {
       }
 
       const payload = {
-        ...data,
-        businessKeywords: data.businessKeywords.split(',').map(k => k.trim()).filter(Boolean),
+        businessType: data.businessType,
+        businessName: data.businessName,
+        keywords: data.businessKeywords.split(',').map(k => k.trim()).filter(Boolean),
+        flowTemplateId: data.flowTemplateId || undefined,
+        flowTemplateName: data.flowTemplateName || undefined,
+        formTemplateId: data.formTemplateId || undefined,
+        formTemplateUrl: data.formTemplateUrl || undefined,
         fieldMappings,
+        enabled: data.enabled,
       };
 
-      const url = editingMapping 
-        ? `/api/admin/flow-mappings?id=${editingMapping.id}`
-        : '/api/admin/flow-mappings';
-      
       const method = editingMapping ? 'PUT' : 'POST';
+      const body = editingMapping 
+        ? { id: editingMapping.id, ...payload }
+        : payload;
 
-      const response = await fetch(url, {
+      const response = await fetch('/api/admin/flow-mappings', {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(editingMapping ? { id: editingMapping.id, ...payload } : payload),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
 
       const result = await response.json();
@@ -319,7 +321,7 @@ export default function FlowMappingPage() {
         <div>
           <h1 className="text-2xl font-bold">流程映射管理</h1>
           <p className="text-muted-foreground">
-            管理业务类型到 EKP 流程模板的映射关系
+            管理业务类型到 EKP 流程模板的映射关系，支持 AI 自然语言填表
           </p>
         </div>
         <div className="flex gap-2">
@@ -342,23 +344,13 @@ export default function FlowMappingPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="搜索业务类型、名称、表单编码..."
+                  placeholder="搜索业务类型、名称..."
                   value={searchKeyword}
                   onChange={(e) => setSearchKeyword(e.target.value)}
                   className="pl-9"
                 />
               </div>
             </div>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-3 py-2 border rounded-md text-sm"
-            >
-              <option value="">全部分类</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -385,9 +377,8 @@ export default function FlowMappingPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>业务类型</TableHead>
-                  <TableHead>表单编码</TableHead>
+                  <TableHead>表单模板ID</TableHead>
                   <TableHead>流程模板</TableHead>
-                  <TableHead>分类</TableHead>
                   <TableHead>关键词</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead className="text-right">操作</TableHead>
@@ -398,13 +389,13 @@ export default function FlowMappingPage() {
                   <TableRow key={mapping.id}>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{mapping.businessTypeName}</div>
+                        <div className="font-medium">{mapping.businessName}</div>
                         <div className="text-xs text-muted-foreground">{mapping.businessType}</div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                        {mapping.formCode || '-'}
+                        {mapping.formTemplateId || '-'}
                       </code>
                     </TableCell>
                     <TableCell>
@@ -418,18 +409,15 @@ export default function FlowMappingPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{mapping.category || '-'}</Badge>
-                    </TableCell>
-                    <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {mapping.businessKeywords.slice(0, 3).map((kw, i) => (
+                        {mapping.keywords.slice(0, 3).map((kw, i) => (
                           <Badge key={i} variant="secondary" className="text-xs">
                             {kw}
                           </Badge>
                         ))}
-                        {mapping.businessKeywords.length > 3 && (
+                        {mapping.keywords.length > 3 && (
                           <Badge variant="secondary" className="text-xs">
-                            +{mapping.businessKeywords.length - 3}
+                            +{mapping.keywords.length - 3}
                           </Badge>
                         )}
                       </div>
@@ -518,7 +506,7 @@ export default function FlowMappingPage() {
 
                   <FormField
                     control={form.control}
-                    name="businessTypeName"
+                    name="businessName"
                     rules={{ required: '业务类型名称不能为空' }}
                     render={({ field }) => (
                       <FormItem>
@@ -542,29 +530,6 @@ export default function FlowMappingPage() {
                         <Input placeholder="请假,休假,事假,病假,年假" {...field} />
                       </FormControl>
                       <FormDescription>用于 AI 自动识别用户意图</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>分类</FormLabel>
-                      <FormControl>
-                        <select
-                          {...field}
-                          className="w-full px-3 py-2 border rounded-md text-sm"
-                        >
-                          <option value="hr">人力资源</option>
-                          <option value="finance">财务</option>
-                          <option value="office">行政</option>
-                          <option value="procurement">采购</option>
-                          <option value="other">其他</option>
-                        </select>
-                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -609,23 +574,6 @@ export default function FlowMappingPage() {
                     )}
                   />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="launchEndpoint"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>发起接口路径</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="/km/review/restservice/kmReviewRestService/launch" 
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
 
               <Separator />
@@ -637,39 +585,23 @@ export default function FlowMappingPage() {
                   表单信息
                 </h3>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="formCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>表单编码</FormLabel>
-                        <FormControl>
-                          <Input placeholder="leave_form" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="formVersion"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>表单版本</FormLabel>
-                        <FormControl>
-                          <Input placeholder="v1.0" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="formTemplateId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>表单模板ID</FormLabel>
+                      <FormControl>
+                        <Input placeholder="leave_form_001" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
-                  name="formUrl"
+                  name="formTemplateUrl"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>表单URL</FormLabel>
@@ -703,50 +635,23 @@ export default function FlowMappingPage() {
                       <FormControl>
                         <Textarea
                           placeholder={`{
-  "leaveType": "fd_leave_type",
-  "startTime": "fd_start_time",
-  "endTime": "fd_end_time",
-  "days": "fd_days",
-  "reason": "fd_reason"
+  "fields": [
+    { "ekpField": "fd_leave_type", "localField": "leaveType", "label": "请假类型" },
+    { "ekpField": "fd_start_time", "localField": "startTime", "label": "开始时间" }
+  ]
 }`}
-                          className="font-mono text-xs h-40"
                           {...field}
+                          className="font-mono text-xs h-40"
                         />
                       </FormControl>
                       <FormDescription>
-                        AI 字段名 → EKP 字段名 的映射关系
+                        定义 AI 字段名与 EKP 字段名的映射关系
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-
-              <Separator />
-
-              {/* 状态 */}
-              <FormField
-                control={form.control}
-                name="enabled"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between">
-                    <div className="space-y-0.5">
-                      <FormLabel>启用状态</FormLabel>
-                      <FormDescription>
-                        禁用后 AI 将不会识别此业务类型
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <input
-                        type="checkbox"
-                        checked={field.value}
-                        onChange={field.onChange}
-                        className="w-5 h-5"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
