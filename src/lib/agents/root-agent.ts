@@ -230,19 +230,16 @@ export class RootAgent {
 
     // 2. 基础功能权限检查（只检查用户是否有权限访问该Agent功能）
     // 注意：这里不做业务数据权限，业务权限由业务Agent自己校验
+    // 业务规则可以控制更细粒度的权限（如只有特定角色才能审批）
 
     // 2.1 检查是否需要登录
     if (!userContext.userId) {
       return { granted: false, reason: '请先登录' };
     }
 
-    // 2.2 检查角色权限（路由级别）
-    // 某些Agent可能需要特定角色才能访问
-    if (intentResult.agentId === 'approval-agent' && !['admin', 'manager'].includes(userContext.role || '')) {
-      return { granted: false, reason: '您没有权限使用审批功能' };
-    }
-
-    console.log('[RootAgent] 路由权限校验通过，将请求转发给业务Agent进行业务权限校验');
+    // 2.2 RootAgent 只做基础的路由权限检查（确保用户已登录）
+    // 具体的业务权限（如查询/审批）由业务Agent的业务规则控制
+    console.log('[RootAgent] 路由权限校验通过（已登录），业务权限由业务Agent校验');
     return { granted: true };
   }
 
