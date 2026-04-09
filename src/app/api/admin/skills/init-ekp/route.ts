@@ -1,9 +1,11 @@
 /**
  * 初始化EKP待办服务技能
+ * 只保留一个技能：ekp_notify（EKP待办服务）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
+import { randomUUID } from 'crypto';
 
 /**
  * POST /api/admin/skills/init-ekp
@@ -11,197 +13,90 @@ import { dbManager } from '@/lib/database/manager';
  */
 export async function POST(request: NextRequest) {
   try {
-    // EKP待办服务相关技能
-    const ekpSkills = [
-      // 1. EKP待办服务（综合技能）
-      {
-        id: '10000000-0000-0000-0000-000000000001',
-        code: 'ekp.notify',
-        name: 'EKP待办服务',
-        description: '蓝凌EKP待办REST服务，支持发送、删除、已办、查询、更新待办等7个接口操作',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService',
-          method: 'POST',
-          actions: ['getTodoCount', 'getTodo', 'sendTodo', 'deleteTodo', 'setTodoDone', 'updateTodo', 'getTodoTargets']
-        },
-        enabled: true
+    // EKP待办服务技能（单一技能，包含7个操作）
+    const ekpSkill = {
+      id: '10000000-0000-0000-0000-000000000001',
+      code: 'ekp_notify',
+      name: 'EKP待办服务',
+      description: '蓝凌EKP待办REST服务，支持发送、删除、已办、查询、更新待办等7个接口操作',
+      category: 'ekp',
+      apiConfig: {
+        baseUrl: '',
+        path: '/api/sys-notify/sysNotifyTodoRestService',
+        method: 'POST',
+        // 7个操作：getTodoCount, getTodo, sendTodo, deleteTodo, setTodoDone, updateTodo, getTodoTargets
+        actions: ['getTodoCount', 'getTodo', 'sendTodo', 'deleteTodo', 'setTodoDone', 'updateTodo', 'getTodoTargets']
       },
-      // 2. 获取待办数量
-      {
-        id: '10000000-0000-0000-0000-000000000002',
-        code: 'ekp.todo.count',
-        name: '获取待办数量',
-        description: '获取指定用户的待办数量，支持按类型筛选',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService/getTodoCount',
-          method: 'POST',
-          params: ['target', 'types']
-        },
-        enabled: true
-      },
-      // 3. 获取待办列表
-      {
-        id: '10000000-0000-0000-0000-000000000003',
-        code: 'ekp.todo.list',
-        name: '获取待办列表',
-        description: '获取指定用户的待办事项列表，支持分页和多种筛选条件',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService/getTodo',
-          method: 'POST',
-          params: ['targets', 'type', 'otherCond', 'rowSize', 'pageNo']
-        },
-        enabled: true
-      },
-      // 4. 发送待办
-      {
-        id: '10000000-0000-0000-0000-000000000004',
-        code: 'ekp.todo.send',
-        name: '发送待办',
-        description: '向指定人员发送待办通知',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService/sendTodo',
-          method: 'POST',
-          params: ['modelName', 'modelId', 'subject', 'link', 'mobileLink', 'padLink', 'type', 'targets', 'createTime']
-        },
-        enabled: true
-      },
-      // 5. 删除待办
-      {
-        id: '10000000-0000-0000-0000-000000000005',
-        code: 'ekp.todo.delete',
-        name: '删除待办',
-        description: '删除指定的待办事项',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService/deleteTodo',
-          method: 'POST',
-          params: ['modelName', 'modelId', 'optType', 'type']
-        },
-        enabled: true
-      },
-      // 6. 设为已办
-      {
-        id: '10000000-0000-0000-0000-000000000006',
-        code: 'ekp.todo.done',
-        name: '设为已办',
-        description: '将待办标记为已处理状态',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService/setTodoDone',
-          method: 'POST',
-          params: ['modelName', 'modelId', 'optType', 'type']
-        },
-        enabled: true
-      },
-      // 7. 更新待办
-      {
-        id: '10000000-0000-0000-0000-000000000007',
-        code: 'ekp.todo.update',
-        name: '更新待办',
-        description: '更新已存在的待办信息',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService/updateTodo',
-          method: 'POST',
-          params: ['modelName', 'modelId', 'subject', 'link', 'mobileLink', 'padLink', 'type', 'level']
-        },
-        enabled: true
-      },
-      // 8. 获取待办接收人
-      {
-        id: '10000000-0000-0000-0000-000000000008',
-        code: 'ekp.todo.targets',
-        name: '获取待办接收人',
-        description: '获取指定待办的所有接收人列表',
-        category: 'ekp',
-        apiConfig: {
-          baseUrl: '',
-          path: '/api/sys-notify/sysNotifyTodoRestService/getTodoTargets',
-          method: 'POST',
-          params: ['fdId']
-        },
-        enabled: true
-      }
+      enabled: true
+    };
+
+    // 1. 清理所有旧技能（旧版简化技能和EKP子技能）
+    const oldSkillCodes = [
+      // 旧版简化技能
+      'todo.approve', 'todo.list', 'todo.reject',
+      'schedule.create', 'schedule.list',
+      'meeting.create', 'meeting.list',
+      'data.query', 'report.generate',
+      // EKP子技能（注意旧code使用点号分隔）
+      'ekp.todo.count', 'ekp.todo.list', 'ekp.todo.send',
+      'ekp.todo.delete', 'ekp.todo.done', 'ekp.todo.update', 'ekp.todo.targets',
+      // 旧版 ekp.notify
+      'ekp.notify'
     ];
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-
-    for (const skill of ekpSkills) {
-      // 检查是否已存在
-      const existingResult = await dbManager.query(
-        'SELECT id FROM skills WHERE code = ?',
-        [skill.code]
-      );
-
-      if (existingResult.rows.length > 0) {
-        // 更新
-        await dbManager.query(`
-          UPDATE skills 
-          SET name = ?, description = ?, category = ?, api_config = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE code = ?
-        `, [skill.name, skill.description, skill.category, JSON.stringify(skill.apiConfig), skill.enabled, skill.code]);
-        updatedCount++;
-      } else {
-        // 插入
-        await dbManager.query(`
-          INSERT INTO skills (id, code, name, description, category, api_config, enabled)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [skill.id, skill.code, skill.name, skill.description, skill.category, JSON.stringify(skill.apiConfig), skill.enabled]);
-        insertedCount++;
+    let deletedCount = 0;
+    for (const code of oldSkillCodes) {
+      const result = await dbManager.query('DELETE FROM skills WHERE code = ?', [code]);
+      if (result.affectedRows > 0) {
+        deletedCount++;
       }
     }
 
-    // 为ApprovalAgent添加EKP待办服务相关技能
-    const agentSkills = [
-      { id: '10000000-0000-0000-0000-000000000001', agentType: 'approval', skillId: 'ekp.todo.count' },
-      { id: '10000000-0000-0000-0000-000000000002', agentType: 'approval', skillId: 'ekp.todo.list' },
-      { id: '10000000-0000-0000-0000-000000000003', agentType: 'approval', skillId: 'ekp.todo.done' },
-      { id: '10000000-0000-0000-0000-000000000004', agentType: 'approval', skillId: 'ekp.todo.delete' },
-      { id: '10000000-0000-0000-0000-000000000005', agentType: 'approval', skillId: 'ekp.notify' }
-    ];
+    // 2. 插入或更新EKP待办服务技能（使用REPLACE INTO避免重复主键问题）
+    await dbManager.query(`
+      REPLACE INTO skills (id, code, name, description, category, api_config, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [ekpSkill.id, ekpSkill.code, ekpSkill.name, ekpSkill.description, ekpSkill.category, JSON.stringify(ekpSkill.apiConfig), ekpSkill.enabled]);
 
-    let agentSkillCount = 0;
-    for (const agentSkill of agentSkills) {
-      // 检查是否已存在
-      const existingAgentSkill = await dbManager.query(
-        'SELECT id FROM agents_skills WHERE agent_type = ? AND skill_id = ?',
-        [agentSkill.agentType, agentSkill.skillId]
-      );
+    // 3. 确保 agents_skills 表存在
+    await dbManager.query(`
+      CREATE TABLE IF NOT EXISTS agents_skills (
+        id VARCHAR(36) PRIMARY KEY COMMENT '关联ID',
+        agent_type VARCHAR(50) NOT NULL COMMENT 'Agent类型',
+        skill_id VARCHAR(100) NOT NULL COMMENT '技能ID（关联skills.code）',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+        UNIQUE KEY uk_agent_skill (agent_type, skill_id)
+      )
+    `);
 
-      if (existingAgentSkill.rows.length === 0) {
-        await dbManager.query(`
-          INSERT INTO agents_skills (id, agent_type, skill_id)
-          VALUES (?, ?, ?)
-        `, [agentSkill.id, agentSkill.agentType, agentSkill.skillId]);
-        agentSkillCount++;
-      }
+    // 4. 更新审批智能体技能关联（只关联ekp_notify）
+    // 先删除审批智能体的所有旧技能关联
+    await dbManager.query('DELETE FROM agents_skills WHERE agent_type = ?', ['approval-agent']);
+
+    // 添加新的技能关联（使用随机UUID作为ID）
+    await dbManager.query(`
+      INSERT INTO agents_skills (id, agent_type, skill_id)
+      VALUES (?, ?, ?)
+    `, [randomUUID(), 'approval-agent', 'ekp_notify']);
+
+    // 清理其他智能体的旧技能关联
+    for (const agentType of ['assistant-agent', 'data-agent', 'meeting-agent']) {
+      await dbManager.query('DELETE FROM agents_skills WHERE agent_type = ?', [agentType]);
     }
 
     return NextResponse.json({
       success: true,
       message: 'EKP待办服务技能初始化成功',
       data: {
-        skillsInserted: insertedCount,
-        skillsUpdated: updatedCount,
-        agentSkillsAdded: agentSkillCount
+        oldSkillsDeleted: deletedCount,
+        currentSkill: 'ekp_notify',
+        agentSkillsUpdated: '审批智能体已关联 ekp_notify'
       }
     });
   } catch (error) {
     console.error('[API:Admin:Skills:InitEKP] Error:', error);
     return NextResponse.json(
-      { success: false, error: `初始化失败: ${error instanceof Error ? error.message : '未知错误'}` },
+      { success: false, error: `初始化EKP待办服务技能失败: ${error instanceof Error ? error.message : 'Unknown error'}` },
       { status: 500 }
     );
   }
