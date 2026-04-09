@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       const type = searchParams.get('type');
       const parentId = searchParams.get('parentId');
       const keyword = searchParams.get('keyword');
-      return await getOrgList(type || 'department', parentId || '', keyword || '');
+      return await getOrgList(type || 'department', parentId || '', keyword || '', searchParams);
     }
 
     return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
@@ -195,6 +195,12 @@ async function updateOrgElement(type: string, id: string, data: Record<string, u
   if (type === 'person' && data.fd_login_name !== undefined) {
     fields.push('fd_login_name = ?');
     values.push(data.fd_login_name);
+  }
+
+  // 处理人员密码更新
+  if (type === 'person' && data.fd_password !== undefined && data.fd_password) {
+    fields.push('fd_password = ?');
+    values.push(await hashPassword(data.fd_password as string));
   }
 
   if (fields.length === 0) {
@@ -402,7 +408,7 @@ function buildTree(flatData: any[], rootType?: number): any[] {
 }
 
 // 获取组织列表
-async function getOrgList(type: string, parentId: string, keyword: string) {
+async function getOrgList(type: string, parentId: string, keyword: string, searchParams?: URLSearchParams) {
   let tableName = 'sys_org_element';
   let query = '';
   const params: unknown[] = [];
@@ -546,8 +552,27 @@ async function getOrgList(type: string, parentId: string, keyword: string) {
 
   query += ' ORDER BY fd_order ASC, fd_create_time ASC';
 
+  // 获取总记录数
+  const countQuery = query.replace(/SELECT .* FROM/, 'SELECT COUNT(*) as total FROM').replace(/ORDER BY.*$/, '');
+  const countResult = await dbManager.query<{ total: number }>(countQuery, params);
+  const total = countResult.rows[0]?.total || 0;
+
+  // 添加分页
+  const page = parseInt(searchParams?.get('page') || '1');
+  const pageSize = parseInt(searchParams?.get('pageSize') || (type === 'person' ? '50' : '10'));
+  const offset = (page - 1) * pageSize;
+  
+  query += ` LIMIT ${pageSize} OFFSET ${offset}`;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await dbManager.query<any>(query, params);
 
-  return NextResponse.json({ success: true, data: result.rows });
+  return NextResponse.json({ 
+    success: true, 
+    data: result.rows,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize)
+  });
 }

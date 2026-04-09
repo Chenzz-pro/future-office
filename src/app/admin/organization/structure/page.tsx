@@ -19,6 +19,8 @@ import {
   Trash2,
   User,
   X,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { OrgElement, OrgPerson, OrgTreeNode } from '@/types/org-structure';
 import {
@@ -31,7 +33,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 
 export default function OrganizationStructurePage() {
   // 状态管理
@@ -49,6 +67,12 @@ export default function OrganizationStructurePage() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [currentTab, setCurrentTab] = useState<'org' | 'dept' | 'posts' | 'persons'>('org');
 
+  // 分页状态
+  const [orgPagination, setOrgPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 0 });
+  const [deptPagination, setDeptPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 0 });
+  const [postPagination, setPostPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 0 });
+  const [personPagination, setPersonPagination] = useState({ page: 1, pageSize: 50, total: 0, totalPages: 0 });
+
   // 对话框状态
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
@@ -59,6 +83,11 @@ export default function OrganizationStructurePage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<OrgElement | OrgPerson | null>(null);
   const [deleteItemType, setDeleteItemType] = useState<'org' | 'dept' | 'post' | 'person'>('dept');
+
+  // 查看详情对话框状态
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewItem, setViewItem] = useState<OrgElement | OrgPerson | null>(null);
+  const [viewItemType, setViewItemType] = useState<'org' | 'dept' | 'post' | 'person'>('dept');
 
   // 加载树数据
   const loadTreeData = async () => {
@@ -78,11 +107,13 @@ export default function OrganizationStructurePage() {
   };
 
   // 加载子机构列表
-  const loadOrgList = async (parentId: string) => {
+  const loadOrgList = async (parentId: string, page: number = 1) => {
     try {
       const params = new URLSearchParams({
         type: 'organization',
         parentId: parentId,
+        page: page.toString(),
+        pageSize: orgPagination.pageSize.toString(),
         ...(searchKeyword && { keyword: searchKeyword }),
       });
 
@@ -90,6 +121,12 @@ export default function OrganizationStructurePage() {
       const data = await response.json();
       if (data.success) {
         setOrgList(data.data || []);
+        setOrgPagination(prev => ({
+          ...prev,
+          page: data.page,
+          total: data.total,
+          totalPages: data.totalPages,
+        }));
       }
     } catch (error) {
       console.error('加载子机构数据失败:', error);
@@ -98,11 +135,13 @@ export default function OrganizationStructurePage() {
   };
 
   // 加载子部门列表
-  const loadDeptList = async (parentId: string) => {
+  const loadDeptList = async (parentId: string, page: number = 1) => {
     try {
       const params = new URLSearchParams({
         type: 'department',
         parentId: parentId,
+        page: page.toString(),
+        pageSize: deptPagination.pageSize.toString(),
         ...(searchKeyword && { keyword: searchKeyword }),
       });
 
@@ -110,6 +149,12 @@ export default function OrganizationStructurePage() {
       const data = await response.json();
       if (data.success) {
         setDeptList(data.data || []);
+        setDeptPagination(prev => ({
+          ...prev,
+          page: data.page,
+          total: data.total,
+          totalPages: data.totalPages,
+        }));
       }
     } catch (error) {
       console.error('加载子部门数据失败:', error);
@@ -118,11 +163,13 @@ export default function OrganizationStructurePage() {
   };
 
   // 加载岗位列表
-  const loadPostList = async (parentId: string) => {
+  const loadPostList = async (parentId: string, page: number = 1) => {
     try {
       const params = new URLSearchParams({
         type: 'post',
         parentId: parentId,
+        page: page.toString(),
+        pageSize: postPagination.pageSize.toString(),
         ...(searchKeyword && { keyword: searchKeyword }),
       });
 
@@ -130,6 +177,12 @@ export default function OrganizationStructurePage() {
       const data = await response.json();
       if (data.success) {
         setPostList(data.data || []);
+        setPostPagination(prev => ({
+          ...prev,
+          page: data.page,
+          total: data.total,
+          totalPages: data.totalPages,
+        }));
       }
     } catch (error) {
       console.error('加载岗位数据失败:', error);
@@ -138,11 +191,13 @@ export default function OrganizationStructurePage() {
   };
 
   // 加载人员列表
-  const loadPersonList = async (parentId: string) => {
+  const loadPersonList = async (parentId: string, page: number = 1) => {
     try {
       const params = new URLSearchParams({
         type: 'person',
         parentId: parentId,
+        page: page.toString(),
+        pageSize: personPagination.pageSize.toString(),
         ...(searchKeyword && { keyword: searchKeyword }),
       });
 
@@ -150,6 +205,12 @@ export default function OrganizationStructurePage() {
       const data = await response.json();
       if (data.success) {
         setPersonList(data.data || []);
+        setPersonPagination(prev => ({
+          ...prev,
+          page: data.page,
+          total: data.total,
+          totalPages: data.totalPages,
+        }));
       }
     } catch (error) {
       console.error('加载人员数据失败:', error);
@@ -226,6 +287,13 @@ export default function OrganizationStructurePage() {
     setDialogMode('create');
     setDialogInitialData(null);
     setDialogOpen(true);
+  };
+
+  // 打开查看详情对话框
+  const handleView = (item: OrgElement | OrgPerson, itemType: 'org' | 'dept' | 'post' | 'person') => {
+    setViewItem(item);
+    setViewItemType(itemType);
+    setViewDialogOpen(true);
   };
 
   // 打开编辑对话框
@@ -411,7 +479,8 @@ export default function OrganizationStructurePage() {
     return (
       <Card
         key={item.fd_id}
-        className="p-4 hover:bg-gray-50 transition-colors"
+        className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+        onClick={() => handleView(item, itemType)}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -453,11 +522,14 @@ export default function OrganizationStructurePage() {
           </div>
 
           {/* 操作按钮 */}
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => handleEdit(item, itemType)}>
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="sm" onClick={() => handleView(item, itemType)} title="查看详情">
+              <Eye className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => handleEdit(item, itemType)} title="编辑">
               <Edit className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleDelete(item, itemType)}>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(item, itemType)} title="删除">
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
@@ -473,7 +545,8 @@ export default function OrganizationStructurePage() {
     return (
       <Card
         key={item.fd_id}
-        className="p-4 hover:bg-gray-50 transition-colors"
+        className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+        onClick={() => handleView(item, itemType)}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -505,11 +578,14 @@ export default function OrganizationStructurePage() {
           </div>
 
           {/* 操作按钮 */}
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => handleEdit(item, itemType)}>
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="sm" onClick={() => handleView(item, itemType)} title="查看详情">
+              <Eye className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => handleEdit(item, itemType)} title="编辑">
               <Edit className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleDelete(item, itemType)}>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(item, itemType)} title="删除">
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
@@ -704,7 +780,46 @@ export default function OrganizationStructurePage() {
                       <p className="text-xs mt-1">点击"新建机构"添加</p>
                     </div>
                   ) : (
-                    orgList.map((item, index) => renderOrgListItem(item, index, 'org'))
+                    <>
+                      {orgList.map((item, index) => renderOrgListItem(item, index, 'org'))}
+                      {orgPagination.totalPages > 1 && (
+                        <div className="mt-4 flex justify-center">
+                          <Pagination>
+                            <PaginationContent>
+                              <PaginationItem>
+                                <PaginationPrevious 
+                                  onClick={() => selectedNode && loadOrgList(selectedNode.id, Math.max(1, orgPagination.page - 1))}
+                                  className={orgPagination.page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                              {Array.from({ length: Math.min(5, orgPagination.totalPages) }, (_, i) => {
+                                const startPage = Math.max(1, Math.min(orgPagination.page - 2, orgPagination.totalPages - 4));
+                                const page = startPage + i;
+                                return (
+                                  <PaginationItem key={page}>
+                                    <PaginationLink 
+                                      onClick={() => selectedNode && loadOrgList(selectedNode.id, page)}
+                                      className={`cursor-pointer ${orgPagination.page === page ? 'bg-blue-100 text-blue-600' : ''}`}
+                                    >
+                                      {page}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                );
+                              })}
+                              <PaginationItem>
+                                <PaginationNext 
+                                  onClick={() => selectedNode && loadOrgList(selectedNode.id, Math.min(orgPagination.totalPages, orgPagination.page + 1))}
+                                  className={orgPagination.page >= orgPagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        </div>
+                      )}
+                      <div className="mt-2 text-center text-sm text-gray-500">
+                        共 {orgPagination.total} 条记录，第 {orgPagination.page}/{orgPagination.totalPages} 页
+                      </div>
+                    </>
                   )}
                 </TabsContent>
 
@@ -717,7 +832,46 @@ export default function OrganizationStructurePage() {
                       <p className="text-xs mt-1">点击"新建部门"添加</p>
                     </div>
                   ) : (
-                    deptList.map((item, index) => renderOrgListItem(item, index, 'dept'))
+                    <>
+                      {deptList.map((item, index) => renderOrgListItem(item, index, 'dept'))}
+                      {deptPagination.totalPages > 1 && (
+                        <div className="mt-4 flex justify-center">
+                          <Pagination>
+                            <PaginationContent>
+                              <PaginationItem>
+                                <PaginationPrevious 
+                                  onClick={() => selectedNode && loadDeptList(selectedNode.id, Math.max(1, deptPagination.page - 1))}
+                                  className={deptPagination.page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                              {Array.from({ length: Math.min(5, deptPagination.totalPages) }, (_, i) => {
+                                const startPage = Math.max(1, Math.min(deptPagination.page - 2, deptPagination.totalPages - 4));
+                                const page = startPage + i;
+                                return (
+                                  <PaginationItem key={page}>
+                                    <PaginationLink 
+                                      onClick={() => selectedNode && loadDeptList(selectedNode.id, page)}
+                                      className={`cursor-pointer ${deptPagination.page === page ? 'bg-blue-100 text-blue-600' : ''}`}
+                                    >
+                                      {page}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                );
+                              })}
+                              <PaginationItem>
+                                <PaginationNext 
+                                  onClick={() => selectedNode && loadDeptList(selectedNode.id, Math.min(deptPagination.totalPages, deptPagination.page + 1))}
+                                  className={deptPagination.page >= deptPagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        </div>
+                      )}
+                      <div className="mt-2 text-center text-sm text-gray-500">
+                        共 {deptPagination.total} 条记录，第 {deptPagination.page}/{deptPagination.totalPages} 页
+                      </div>
+                    </>
                   )}
                 </TabsContent>
 
@@ -729,7 +883,46 @@ export default function OrganizationStructurePage() {
                       <p className="text-sm">该部门暂无岗位</p>
                     </div>
                   ) : (
-                    postList.map((item, index) => renderListItem(item, 'post', index))
+                    <>
+                      {postList.map((item, index) => renderListItem(item, 'post', index))}
+                      {postPagination.totalPages > 1 && (
+                        <div className="mt-4 flex justify-center">
+                          <Pagination>
+                            <PaginationContent>
+                              <PaginationItem>
+                                <PaginationPrevious 
+                                  onClick={() => selectedNode && loadPostList(selectedNode.id, Math.max(1, postPagination.page - 1))}
+                                  className={postPagination.page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                              {Array.from({ length: Math.min(5, postPagination.totalPages) }, (_, i) => {
+                                const startPage = Math.max(1, Math.min(postPagination.page - 2, postPagination.totalPages - 4));
+                                const page = startPage + i;
+                                return (
+                                  <PaginationItem key={page}>
+                                    <PaginationLink 
+                                      onClick={() => selectedNode && loadPostList(selectedNode.id, page)}
+                                      className={`cursor-pointer ${postPagination.page === page ? 'bg-blue-100 text-blue-600' : ''}`}
+                                    >
+                                      {page}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                );
+                              })}
+                              <PaginationItem>
+                                <PaginationNext 
+                                  onClick={() => selectedNode && loadPostList(selectedNode.id, Math.min(postPagination.totalPages, postPagination.page + 1))}
+                                  className={postPagination.page >= postPagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        </div>
+                      )}
+                      <div className="mt-2 text-center text-sm text-gray-500">
+                        共 {postPagination.total} 条记录，第 {postPagination.page}/{postPagination.totalPages} 页
+                      </div>
+                    </>
                   )}
                 </TabsContent>
 
@@ -741,7 +934,46 @@ export default function OrganizationStructurePage() {
                       <p className="text-sm">该部门暂无人员</p>
                     </div>
                   ) : (
-                    personList.map((item, index) => renderListItem(item, 'person', index))
+                    <>
+                      {personList.map((item, index) => renderListItem(item, 'person', index))}
+                      {personPagination.totalPages > 1 && (
+                        <div className="mt-4 flex justify-center">
+                          <Pagination>
+                            <PaginationContent>
+                              <PaginationItem>
+                                <PaginationPrevious 
+                                  onClick={() => selectedNode && loadPersonList(selectedNode.id, Math.max(1, personPagination.page - 1))}
+                                  className={personPagination.page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                              {Array.from({ length: Math.min(5, personPagination.totalPages) }, (_, i) => {
+                                const startPage = Math.max(1, Math.min(personPagination.page - 2, personPagination.totalPages - 4));
+                                const page = startPage + i;
+                                return (
+                                  <PaginationItem key={page}>
+                                    <PaginationLink 
+                                      onClick={() => selectedNode && loadPersonList(selectedNode.id, page)}
+                                      className={`cursor-pointer ${personPagination.page === page ? 'bg-blue-100 text-blue-600' : ''}`}
+                                    >
+                                      {page}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                );
+                              })}
+                              <PaginationItem>
+                                <PaginationNext 
+                                  onClick={() => selectedNode && loadPersonList(selectedNode.id, Math.min(personPagination.totalPages, personPagination.page + 1))}
+                                  className={personPagination.page >= personPagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        </div>
+                      )}
+                      <div className="mt-2 text-center text-sm text-gray-500">
+                        共 {personPagination.total} 条记录，第 {personPagination.page}/{personPagination.totalPages} 页
+                      </div>
+                    </>
                   )}
                 </TabsContent>
               </Tabs>
@@ -749,7 +981,6 @@ export default function OrganizationStructurePage() {
           </div>
         </Card>
       </div>
-
       {/* 新建/编辑对话框 */}
       <OrgElementDialog
         open={dialogOpen}
@@ -768,6 +999,92 @@ export default function OrganizationStructurePage() {
         initialData={dialogInitialData}
         parentId={selectedNode?.id}
       />
+
+      {/* 查看详情对话框 */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewItemType === 'org' && <Building2 className="w-5 h-5 text-blue-600" />}
+              {viewItemType === 'dept' && <Briefcase className="w-5 h-5 text-green-600" />}
+              {viewItemType === 'post' && <Users className="w-5 h-5 text-purple-600" />}
+              {viewItemType === 'person' && <User className="w-5 h-5 text-orange-600" />}
+              {viewItemType === 'org' && '机构详情'}
+              {viewItemType === 'dept' && '部门详情'}
+              {viewItemType === 'post' && '岗位详情'}
+              {viewItemType === 'person' && '人员详情'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-sm text-gray-500">名称</div>
+              <div className="col-span-2 text-sm font-medium">{viewItem?.fd_name}</div>
+            </div>
+            {viewItem?.fd_no && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-sm text-gray-500">编号</div>
+                <div className="col-span-2 text-sm">{viewItem.fd_no}</div>
+              </div>
+            )}
+            {(viewItem as OrgElement)?.fd_org_email && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-sm text-gray-500">邮箱</div>
+                <div className="col-span-2 text-sm">{(viewItem as OrgElement).fd_org_email}</div>
+              </div>
+            )}
+            {viewItem?.fd_order !== undefined && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-sm text-gray-500">排序号</div>
+                <div className="col-span-2 text-sm">{viewItem.fd_order}</div>
+              </div>
+            )}
+            {viewItem?.fd_memo && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-sm text-gray-500">备注</div>
+                <div className="col-span-2 text-sm">{viewItem.fd_memo}</div>
+              </div>
+            )}
+            {/* 人员特有字段 */}
+            {viewItemType === 'person' && (
+              <>
+                {(viewItem as OrgPerson).fd_login_name && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-sm text-gray-500">登录名</div>
+                    <div className="col-span-2 text-sm">{(viewItem as OrgPerson).fd_login_name}</div>
+                  </div>
+                )}
+                {(viewItem as OrgPerson).fd_email && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-sm text-gray-500">邮箱</div>
+                    <div className="col-span-2 text-sm">{(viewItem as OrgPerson).fd_email}</div>
+                  </div>
+                )}
+                {(viewItem as OrgPerson).fd_mobile && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-sm text-gray-500">手机</div>
+                    <div className="col-span-2 text-sm">{(viewItem as OrgPerson).fd_mobile}</div>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-sm text-gray-500">ID</div>
+              <div className="col-span-2 text-xs text-gray-400 break-all">{viewItem?.fd_id}</div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>关闭</Button>
+            <Button
+              onClick={() => {
+                setViewDialogOpen(false);
+                handleEdit(viewItem!, viewItemType);
+              }}
+            >
+              编辑
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 删除确认对话框 */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

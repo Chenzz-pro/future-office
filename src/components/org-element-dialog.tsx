@@ -457,17 +457,50 @@ export function OrgElementDialog({
                 </div>
                 <div className="col-span-2">
                   <Label htmlFor="fd_password">
-                    登录密码 <span className="text-gray-500 text-xs font-normal ml-1">
-                      (留空则自动生成12位随机密码)
-                    </span>
+                    {mode === 'create' ? (
+                      <>
+                        登录密码 <span className="text-gray-500 text-xs font-normal ml-1">
+                          (留空则自动生成12位随机密码)
+                        </span>
+                      </>
+                    ) : (
+                      '重置密码'
+                    )}
                   </Label>
-                  <Input
-                    id="fd_password"
-                    type="password"
-                    value={String(formData.fd_password || '')}
-                    onChange={(e) => setFormData({ ...formData, fd_password: e.target.value })}
-                    placeholder="请输入登录密码（留空自动生成）"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="fd_password"
+                      type="password"
+                      value={String(formData.fd_password || '')}
+                      onChange={(e) => setFormData({ ...formData, fd_password: e.target.value })}
+                      placeholder={mode === 'create' ? '请输入登录密码（留空自动生成）' : '输入新密码留空则不修改'}
+                      className="flex-1"
+                    />
+                    {mode === 'edit' && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // 生成随机密码
+                          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+                          let password = '';
+                          for (let i = 0; i < 12; i++) {
+                            password += chars.charAt(Math.floor(Math.random() * chars.length));
+                          }
+                          setFormData({ ...formData, fd_password: password });
+                        }}
+                        title="生成随机密码"
+                      >
+                        生成
+                      </Button>
+                    )}
+                  </div>
+                  {mode === 'edit' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      输入新密码将覆盖原密码，留空则保持原密码不变
+                    </p>
+                  )}
                 </div>
               </>
             ) : (
