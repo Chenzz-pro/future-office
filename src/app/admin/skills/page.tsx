@@ -56,6 +56,8 @@ import { SKILL_TEMPLATES, type CustomSkill, type SkillCategory, EKP_NOTIFY_SUB_S
 
 interface SkillRecord {
   id: string;
+  code?: string; // 技能代码，用于关联
+  dbId?: string; // 数据库主键
   name: string;
   description: string;
   icon: string;
@@ -174,10 +176,8 @@ export default function SkillsManagement() {
       }
 
       // 合并数据库技能和本地自定义技能
-      // 数据库技能使用 code 作为 ID，已在上面转换好
-      const dbSkillRecords = dbSkillList.map(s => ({ ...s, id: s.code || s.id }));
-
-      setSkills([...dbSkillRecords, ...customSkills]);
+      // loadDbSkills 已经将 id 设置为 code || dbId，无需再次转换
+      setSkills([...dbSkillList, ...customSkills]);
     } catch (error) {
       console.error('加载技能失败:', error);
     } finally {

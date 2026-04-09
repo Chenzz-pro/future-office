@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     let deletedCount = 0;
     for (const code of oldSkillCodes) {
       const result = await dbManager.query('DELETE FROM skills WHERE code = ?', [code]);
-      if (result.affectedRows > 0) {
+      if (result.affectedRows && result.affectedRows > 0) {
         deletedCount++;
       }
     }
