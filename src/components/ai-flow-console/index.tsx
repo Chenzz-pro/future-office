@@ -506,12 +506,12 @@ export function AIFormConsole({
         {showSidebar && (
           <div className="w-1/2 border-r flex flex-col">
             <div className="flex-1 relative bg-muted/30">
-              {/* 代理模式：使用 /ekp-proxy/ 前缀访问 EKP */}
-              {/* 例如：/ekp-proxy/sys/form/main.jsp?fdTemplateId=xxx */}
+              {/* 代理模式：使用 /api/ekp-proxy/ 前缀访问 EKP */}
+              {/* 例如：/api/ekp-proxy/sys/form/main.jsp?fdTemplateId=xxx */}
               {formUrl ? (
                 <iframe
                   ref={iframeRef}
-                  src={formUrl.startsWith('/') ? `/ekp-proxy${formUrl}` : `/ekp-proxy/${formUrl}`}
+                  src={formUrl.startsWith('/') ? `/api/ekp-proxy${formUrl}` : `/api/ekp-proxy/${formUrl}`}
                   className="w-full h-full border-0"
                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
                   onLoad={handleIframeLoad}

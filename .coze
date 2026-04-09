@@ -7,9 +7,9 @@ run = ["bash", "./scripts/nginx-dev.sh"]
 deps = ["git", "nginx"]
 
 [deploy]
-build = ["bash","./scripts/nginx-build.sh"]
-run = ["bash","./scripts/nginx-start.sh"]
-deps = ["git", "nginx"]
+build = ["bash","./scripts/build.sh"]
+run = ["bash","./scripts/start.sh"]
+deps = ["git"]
 
 # 环境变量不再在 .coze 文件中配置空值
 # 生产环境变量将在部署时自动注入
