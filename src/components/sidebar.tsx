@@ -47,6 +47,7 @@ const menuItems = [
 
 const adminMenuItems = [
   { id: 'ekp-integration', label: 'EKP接口管理中心', icon: Database, path: '/admin/integration/ekp' },
+  { id: 'ekp-sso', label: 'EKP单点登录', icon: Shield, path: '/admin/integration/ekp/binding' },
   { id: 'admin-dashboard', label: '管理员后台', icon: Shield, path: '/admin' },
 ];
 
