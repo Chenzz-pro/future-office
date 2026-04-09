@@ -171,108 +171,11 @@ export default function SkillsManagement() {
         setEkpConfig(ekpData.config);
       }
 
-      // 合并预置模板和自定义技能
-      // EKP待办服务 - 支持7个接口操作
-      const ekpNotifyTemplate: SkillRecord = {
-        id: 'ekp-notify',
-        name: 'EKP待办服务',
-        description: '蓝凌EKP待办REST服务，支持发送、删除、已办、查询、更新待办等7个接口操作',
-        icon: 'BellRing',
-        category: '企业服务',
-        enabled: true,
-        apiConfig: {
-          baseUrl: ekpData.config?.baseUrl || '',
-          path: '/api/sys-notify/sysNotifyTodoRestService',
-          method: 'POST',
-          contentType: 'application/json',
-        },
-        authConfig: {
-          type: 'basic',
-          username: ekpData.config?.username || '',
-          password: ekpData.config?.password || '',
-        },
-        requestParams: [
-          { 
-            name: 'action', 
-            label: '操作类型', 
-            type: 'enum', 
-            required: true, 
-            defaultValue: 'getTodoCount',
-            enumOptions: EKP_NOTIFY_SUB_SKILLS.map(s => s.action),
-          },
-        ],
-        responseParsing: {
-          successField: 'returnState',
-          successValue: '2',
-          dataField: 'message',
-        },
-        // EKP待办服务的子技能配置
-        subSkills: EKP_NOTIFY_SUB_SKILLS,
-      };
-      
-      // 兼容旧版EKP待办查询（保留但标记为不推荐）
-      const legacyEkpTodoTemplate: SkillRecord = {
-        id: 'ekp-todo',
-        name: 'EKP待办查询（旧版）',
-        description: '查询蓝凌EKP系统的待办数量（兼容旧版，建议使用EKP待办服务）',
-        icon: 'Bell',
-        category: '企业服务',
-        enabled: false,
-        apiConfig: {
-          baseUrl: ekpData.config?.baseUrl || '',
-          path: ekpData.config?.apiPath || '/api/sys-notify/sysNotifyTodoRestService/getTodo',
-          method: 'POST',
-          contentType: 'application/json',
-        },
-        authConfig: {
-          type: 'basic',
-          username: ekpData.config?.username || '',
-          password: ekpData.config?.password || '',
-        },
-        requestParams: [
-          { name: 'loginName', label: '用户登录名', type: 'string', required: true, defaultValue: ekpData.config?.username || '' },
-          { name: 'type', label: '待办类型', type: 'enum', required: false, defaultValue: '0', enumOptions: ['-1', '0', '1', '2', '3', '13'] },
-        ],
-        bodyTemplate: {
-          targets: '{"LoginName":"{{loginName}}"}',
-          type: '{{type}}',
-        },
-        responseParsing: {
-          successField: 'returnState',
-          successValue: '2',
-          dataField: 'message',
-          countField: 'count',
-        },
-      };
-      
-      const templateSkills: SkillRecord[] = [
-        ekpNotifyTemplate,
-        legacyEkpTodoTemplate,
-        {
-          id: 'ekp-leave',
-          name: 'EKP请假申请',
-          description: '在蓝凌EKP系统发起请假申请',
-          icon: 'Calendar',
-          category: '企业服务',
-          enabled: false,
-          apiConfig: {
-            baseUrl: ekpData.config?.baseUrl || '',
-            path: '/api/km-review/kmReviewRestService/addReview',
-            method: 'POST',
-            contentType: 'application/json',
-          },
-          authConfig: {
-            type: 'basic',
-            username: ekpData.config?.username || '',
-            password: ekpData.config?.password || '',
-          },
-          requestParams: [],
-          bodyTemplate: {},
-          responseParsing: {},
-        },
-      ];
+      // 合并数据库技能和本地自定义技能
+      // 从数据库加载的技能用 'db-' 前缀标识
+      const dbSkillRecords = dbSkillList.map(s => ({ ...s, id: `db-${s.id}` }));
 
-      setSkills([...ekpNotifyTemplate ? [ekpNotifyTemplate, legacyEkpTodoTemplate] : [], ...dbSkillList.map(s => ({ ...s, id: `db-${s.id}` })), ...customSkills]);
+      setSkills([...dbSkillRecords, ...customSkills]);
     } catch (error) {
       console.error('加载技能失败:', error);
     } finally {
