@@ -216,7 +216,8 @@ export default function OrganizationStructurePage() {
 
   // 打开新建对话框
   const handleCreate = (viewType: 'organization' | 'department' | 'position' | 'person') => {
-    if (!selectedNode) {
+    // 机构类型允许在没有选择节点时创建（顶层机构）
+    if (!selectedNode && viewType !== 'organization') {
       alert('请先在左侧选择一个部门');
       return;
     }
@@ -523,10 +524,21 @@ export default function OrganizationStructurePage() {
       <Card className="w-80 flex flex-col overflow-hidden">
         {/* 树形结构头部 */}
         <div className="p-4 border-b bg-gray-50">
-          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-            <Folder className="w-4 h-4" />
-            组织架构树
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Folder className="w-4 h-4" />
+              组织架构树
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleCreate('organization')}
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              title="新建顶层机构"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
 
         {/* 树形结构内容 */}
@@ -536,8 +548,16 @@ export default function OrganizationStructurePage() {
               加载中...
             </div>
           ) : treeData.length === 0 ? (
-            <div className="text-center text-gray-400 text-sm py-8">
-              暂无数据
+            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <p className="text-sm mb-2">暂无机构</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleCreate('organization')}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                新建顶层机构
+              </Button>
             </div>
           ) : (
             <div className="space-y-1">

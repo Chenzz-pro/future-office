@@ -250,8 +250,12 @@ export function OrgElementDialog({
             {mode === 'create' ? `新建${config.label}` : `编辑${config.label}`}
           </DialogTitle>
           <div className="text-sm text-gray-500">
-            当前类型：<span className={`font-medium ${config.color}`}>{config.label}</span>
-            {mode === 'create' && parentId && ' | 所属父级：已选择'}
+            <span className={`font-medium ${config.color}`}>{config.label}</span>
+            {mode === 'create' && (
+              <>
+                {parentId ? ` | 所属父级：已选择` : ' | 顶层机构（无父级）'}
+              </>
+            )}
           </div>
         </DialogHeader>
 
