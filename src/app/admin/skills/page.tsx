@@ -85,7 +85,9 @@ export default function SkillsManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [skills, setSkills] = useState<SkillRecord[]>([]);
+  const [dbSkills, setDbSkills] = useState<SkillRecord[]>([]);
   const [ekpConfig, setEkpConfig] = useState<Record<string, string> | null>(null);
+  const [initEkpLoading, setInitEkpLoading] = useState(false);
 
   // 测试对话框状态
   const [testDialogOpen, setTestDialogOpen] = useState(false);
@@ -103,6 +105,54 @@ export default function SkillsManagement() {
   const [editMode, setEditMode] = useState<'create' | 'edit'>('create');
   const [editSkill, setEditSkill] = useState<Partial<SkillRecord>>({});
 
+  // 加载数据库中的技能列表
+  const loadDbSkills = async () => {
+    try {
+      const response = await fetch('/api/admin/skills?action=list');
+      const data = await response.json();
+      if (data.success && data.data) {
+        // 转换为 SkillRecord 格式
+        const converted: SkillRecord[] = data.data.map((skill: any) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          icon: 'Settings',
+          category: skill.category,
+          enabled: skill.enabled,
+          apiConfig: skill.apiConfig || {},
+        }));
+        setDbSkills(converted);
+        return converted;
+      }
+    } catch (error) {
+      console.error('加载数据库技能失败:', error);
+    }
+    return [];
+  };
+
+  // 初始化EKP待办服务技能到数据库
+  const handleInitEkpSkills = async () => {
+    setInitEkpLoading(true);
+    try {
+      const response = await fetch('/api/admin/skills/init-ekp', {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(`初始化成功！\n新增技能：${data.data.skillsInserted} 个\n更新技能：${data.data.skillsUpdated} 个\n关联到审批Agent：${data.data.agentSkillsAdded} 个`);
+        // 重新加载数据库技能
+        await loadDbSkills();
+      } else {
+        alert(data.error || '初始化失败');
+      }
+    } catch (error) {
+      console.error('初始化EKP技能失败:', error);
+      alert('初始化失败，请检查数据库连接');
+    } finally {
+      setInitEkpLoading(false);
+    }
+  };
+
   // 加载技能列表
   const loadSkills = async () => {
     setLoading(true);
@@ -110,6 +160,9 @@ export default function SkillsManagement() {
       // 从本地存储加载自定义技能
       const stored = localStorage.getItem('custom_skills');
       const customSkills = stored ? JSON.parse(stored) : [];
+      
+      // 从数据库加载技能
+      const dbSkillList = await loadDbSkills();
 
       // 获取EKP配置
       const ekpRes = await fetch('/api/config/ekp');
@@ -219,7 +272,7 @@ export default function SkillsManagement() {
         },
       ];
 
-      setSkills([...templateSkills, ...customSkills]);
+      setSkills([...ekpNotifyTemplate ? [ekpNotifyTemplate, legacyEkpTodoTemplate] : [], ...dbSkillList.map(s => ({ ...s, id: `db-${s.id}` })), ...customSkills]);
     } catch (error) {
       console.error('加载技能失败:', error);
     } finally {
@@ -242,7 +295,8 @@ export default function SkillsManagement() {
   const stats = {
     total: skills.length,
     enabled: skills.filter(s => s.enabled).length,
-    custom: skills.filter(s => !s.id.startsWith('ekp-')).length,
+    custom: skills.filter(s => !s.id.startsWith('ekp-') && !s.id.startsWith('db-')).length,
+    dbSkills: dbSkills.length,
     categories: [...new Set(skills.map(s => s.category))].length,
   };
 
@@ -436,16 +490,31 @@ export default function SkillsManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">技能管理</h1>
-          <p className="text-gray-600 mt-1">管理和配置系统中的自定义技能</p>
+          <p className="text-gray-600 mt-1">管理和配置系统中的自定义技能，支持关联到智能体</p>
         </div>
-        <Button className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          新建技能
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleInitEkpSkills}
+            disabled={initEkpLoading}
+            className="flex items-center gap-2"
+          >
+            {initEkpLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            初始化EKP技能
+          </Button>
+          <Button className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            新建技能
+          </Button>
+        </div>
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600">总技能数</CardTitle>
@@ -463,6 +532,16 @@ export default function SkillsManagement() {
           <CardContent>
             <div className="text-3xl font-bold text-green-600">{stats.enabled}</div>
             <p className="text-xs text-gray-500 mt-1">{Math.round((stats.enabled / stats.total) * 100) || 0}%</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-gray-600">数据库技能</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-600">{stats.dbSkills}</div>
+            <p className="text-xs text-gray-500 mt-1">可关联智能体</p>
           </CardContent>
         </Card>
 
@@ -548,11 +627,14 @@ export default function SkillsManagement() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          skill.id.startsWith('ekp-') ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
+                          skill.id.startsWith('ekp-') ? 'bg-blue-100 text-blue-600' :
+                          skill.id.startsWith('db-') ? 'bg-purple-100 text-purple-600' :
+                          'bg-green-100 text-green-600'
                         }`}>
-                          {skill.id === 'ekp-notify' ? <BellRing className="w-5 h-5" /> :
-                           skill.id === 'ekp-todo' ? <Bell className="w-5 h-5" /> :
+                          {skill.id.startsWith('ekp-notify') ? <BellRing className="w-5 h-5" /> :
+                           skill.id.startsWith('ekp-todo') || skill.id === 'ekp-todo' ? <Bell className="w-5 h-5" /> :
                            skill.id === 'ekp-leave' ? <Calendar className="w-5 h-5" /> :
+                           skill.id.startsWith('db-') ? <Database className="w-5 h-5" /> :
                            <Sparkles className="w-5 h-5" />}
                         </div>
                         <div>
