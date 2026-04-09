@@ -97,8 +97,13 @@ function formatFieldValue(field: string, value: unknown): string {
   }
 
   // 数字格式化
-  if (field.toLowerCase().includes('amount') || field.toLowerCase().includes('days')) {
+  if (field.toLowerCase().includes('amount')) {
     return `${value}元`;
+  }
+  
+  // 天数格式化
+  if (field.toLowerCase().includes('days') || field === 'days') {
+    return `${value}天`;
   }
 
   // 请假类型

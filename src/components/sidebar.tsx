@@ -42,6 +42,7 @@ const menuItems = [
   { id: 'task-center', label: '任务控制中心', icon: LayoutDashboard },
   { id: 'agents', label: '智能体', icon: Bot },
   { id: 'skills', label: '技能', icon: Sparkles },
+  { id: 'ai-flow-console', label: 'AI流程操控台', icon: Bot, path: '/demo/ai-flow-console' },
 ];
 
 const adminMenuItems = [
