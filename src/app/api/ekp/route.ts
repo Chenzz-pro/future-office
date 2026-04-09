@@ -214,16 +214,28 @@ export async function POST(request: NextRequest) {
       }
 
       case 'getTodoCount': {
-        let targetUser = loginName || ekpUsername;
+        // 优先使用 loginName 参数（EKP 认可的标识）
+        // 如果没有 loginName，则使用 userId 查询 fd_login_name
+        let targetUser = loginName;
         
-        if (userId && !loginName) {
+        if (!targetUser && userId) {
           const fetchedLoginName = await getLoginNameByUserId(userId);
           if (fetchedLoginName) {
             targetUser = fetchedLoginName;
           }
         }
+        
+        // 如果都没有，使用配置的默认账号
+        if (!targetUser) {
+          targetUser = ekpUsername;
+        }
 
-        console.log('[EKP API] 查询待办', { userId, targetUser, action: 'getTodoCount' });
+        console.log('[EKP API] 查询待办', { 
+          userId, 
+          loginName, 
+          targetUser, 
+          action: 'getTodoCount' 
+        });
 
         const result = await client.getTodoCount(targetUser, todoType as -1 | 0 | 1 | 2 | 3 | 13 || 0);
 
