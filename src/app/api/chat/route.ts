@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        message: 'RootAgent正在开发中，请稍后再试',
+        content: 'RootAgent正在开发中，请稍后再试',
       },
     });
   } catch (error) {
