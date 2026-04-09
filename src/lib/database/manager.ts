@@ -812,6 +812,26 @@ export class DatabaseManager {
       `);
       console.log('[AutoInit] oneapi_configs 表创建成功');
 
+      // 13. 创建EKP配置表
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS ekp_configs (
+          id VARCHAR(36) PRIMARY KEY COMMENT '配置ID',
+          user_id VARCHAR(36) DEFAULT 'system' COMMENT '用户ID',
+          ekp_address VARCHAR(500) NOT NULL COMMENT 'EKP系统地址',
+          api_path VARCHAR(500) DEFAULT '/api/sys-notify/sysNotifyTodoRestService/getTodo' COMMENT 'API路径',
+          username VARCHAR(100) COMMENT '用户名',
+          password VARCHAR(255) COMMENT '密码',
+          auth_type ENUM('basic', 'oauth', 'none') DEFAULT 'basic' COMMENT '认证类型',
+          config JSON COMMENT '其他配置',
+          is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_user_id (user_id),
+          INDEX idx_is_active (is_active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='EKP配置表'
+      `);
+      console.log('[AutoInit] ekp_configs 表创建成功');
+
       console.log('[AutoInit] ✅ 系统核心表初始化完成');
     } catch (error) {
       console.error('[AutoInit] 系统核心表初始化失败:', error);

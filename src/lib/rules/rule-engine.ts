@@ -333,12 +333,12 @@ export class RuleEngine {
    */
   private async callEKPNotify(action: string, params: Record<string, any>): Promise<any> {
     try {
-      const response = await fetch('/api/ekp?action=' + action, {
+      const response = await fetch('http://localhost:5000/api/ekp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(params),
+        body: JSON.stringify({ action, ...params }),
       });
 
       const result = await response.json();

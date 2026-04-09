@@ -49,9 +49,16 @@ export abstract class BaseBusinessAgent {
         console.log(`[${this.agentType}] 权限规则为空或无效，使用空数组`);
       }
 
-      // 加载业务规则（确保是数组）
-      if (this.config.businessRules && Array.isArray(this.config.businessRules)) {
-        this.businessRules = this.config.businessRules;
+      // 加载业务规则（兼容数组和对象格式）
+      if (this.config.businessRules) {
+        if (Array.isArray(this.config.businessRules)) {
+          this.businessRules = this.config.businessRules;
+        } else if (typeof this.config.businessRules === 'object') {
+          // 兼容对象格式：将对象包装为数组
+          this.businessRules = [this.config.businessRules as BusinessRule];
+        } else {
+          this.businessRules = [];
+        }
         console.log(`[${this.agentType}] 业务规则加载成功:`, this.businessRules.length);
       } else {
         this.businessRules = [];
