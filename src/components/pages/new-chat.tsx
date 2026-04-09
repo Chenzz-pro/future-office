@@ -280,8 +280,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         throw new Error(data.error || '请求失败');
       }
 
-      // 添加助手消息
-      const assistantContent = data.data?.content || '处理完成';
+      // 添加助手消息 - 优先使用 message 字段（RootAgent 返回格式）
+      const assistantContent = data.data?.message || data.data?.content || data.data || '处理完成';
       console.log('[sendMessage] 助手回复内容:', assistantContent);
       console.log('[sendMessage] 助手回复长度:', assistantContent.length);
 
