@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Building2, Briefcase, Users, Shield } from 'lucide-react';
+import { Building2, BriefcaseBusiness, Users, Shield } from 'lucide-react';
 import type { OrgElement, OrgPerson } from '@/types/org-structure';
 
 interface Role {
@@ -234,7 +234,7 @@ export function OrgElementDialog({
 
   const viewConfigs = {
     organization: { label: '机构', icon: Building2, color: 'text-blue-600' },
-    department: { label: '部门', icon: Briefcase, color: 'text-green-600' },
+    department: { label: '部门', icon: BriefcaseBusiness, color: 'text-green-600' },
     position: { label: '岗位', icon: Users, color: 'text-purple-600' },
     person: { label: '人员', icon: Users, color: 'text-orange-600' },
   };

@@ -179,7 +179,7 @@ export const fieldMappings: MappingCategory[] = [
   {
     name: 'department',
     label: '部门',
-    icon: 'Briefcase',
+    icon: 'BriefcaseBusiness',
     color: 'green',
     fields: departmentMapping,
   },

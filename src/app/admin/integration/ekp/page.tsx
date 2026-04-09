@@ -37,7 +37,7 @@ import {
   Table,
   ArrowUpRight,
   Users,
-  Briefcase,
+  BriefcaseBusiness,
   User,
 } from 'lucide-react';
 import FieldMappingTable from '@/components/field-mapping-table';
@@ -430,7 +430,7 @@ export default function EKPPage() {
                     <div className="flex flex-wrap gap-2">
                       {[
                         { key: 'organizations', label: '机构', icon: Building2 },
-                        { key: 'departments', label: '部门', icon: Briefcase },
+                        { key: 'departments', label: '部门', icon: BriefcaseBusiness },
                         { key: 'posts', label: '岗位', icon: Users },
                         { key: 'persons', label: '人员', icon: User },
                       ].map(item => (

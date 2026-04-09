@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   Building2,
-  Briefcase,
+  BriefcaseBusiness,
   Users,
   User,
   GitBranch,
@@ -31,7 +31,7 @@ import { fieldMappings, MappingCategory, FieldMapping } from '@/lib/sync/field-m
 // 图标映射
 const iconMap: Record<string, React.ReactNode> = {
   Building2: <Building2 className="w-4 h-4" />,
-  Briefcase: <Briefcase className="w-4 h-4" />,
+  BriefcaseBusiness: <BriefcaseBusiness className="w-4 h-4" />,
   Users: <Users className="w-4 h-4" />,
   User: <User className="w-4 h-4" />,
   GitBranch: <GitBranch className="w-4 h-4" />,

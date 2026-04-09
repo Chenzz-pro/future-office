@@ -12,7 +12,7 @@ import {
   Folder,
   Building2,
   Users,
-  Briefcase,
+  BriefcaseBusiness,
   Plus,
   RefreshCw,
   Edit,
@@ -441,7 +441,7 @@ export default function OrganizationStructurePage() {
             {node.type === 1 ? (
               <Building2 className="w-4 h-4" />
             ) : (
-              <Briefcase className="w-4 h-4" />
+              <BriefcaseBusiness className="w-4 h-4" />
             )}
           </div>
 
@@ -559,7 +559,7 @@ export default function OrganizationStructurePage() {
                 isOrg ? 'from-blue-500 to-blue-600' : 'from-green-500 to-green-600'
               }`}
             >
-              {isOrg ? <Building2 className="w-5 h-5" /> : <Briefcase className="w-5 h-5" />}
+              {isOrg ? <Building2 className="w-5 h-5" /> : <BriefcaseBusiness className="w-5 h-5" />}
             </div>
 
             {/* 信息 */}
@@ -698,7 +698,7 @@ export default function OrganizationStructurePage() {
                   机构 ({orgList.length})
                 </TabsTrigger>
                 <TabsTrigger value="dept" className="flex items-center gap-1">
-                  <Briefcase className="w-4 h-4" />
+                  <BriefcaseBusiness className="w-4 h-4" />
                   部门 ({deptList.length})
                 </TabsTrigger>
                 <TabsTrigger value="posts" className="flex items-center gap-1">
@@ -827,7 +827,7 @@ export default function OrganizationStructurePage() {
                 <TabsContent value="dept" className="m-0 space-y-2">
                   {deptList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-gray-400">
-                      <Briefcase className="w-12 h-12 mb-3 opacity-30" />
+                      <BriefcaseBusiness className="w-12 h-12 mb-3 opacity-30" />
                       <p className="text-sm">该部门暂无子部门</p>
                       <p className="text-xs mt-1">点击"新建部门"添加</p>
                     </div>
@@ -1006,7 +1006,7 @@ export default function OrganizationStructurePage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {viewItemType === 'org' && <Building2 className="w-5 h-5 text-blue-600" />}
-              {viewItemType === 'dept' && <Briefcase className="w-5 h-5 text-green-600" />}
+              {viewItemType === 'dept' && <BriefcaseBusiness className="w-5 h-5 text-green-600" />}
               {viewItemType === 'post' && <Users className="w-5 h-5 text-purple-600" />}
               {viewItemType === 'person' && <User className="w-5 h-5 text-orange-600" />}
               {viewItemType === 'org' && '机构详情'}

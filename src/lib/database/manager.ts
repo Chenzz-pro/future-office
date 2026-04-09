@@ -110,7 +110,7 @@ export class DatabaseManager {
       clearInterval(this.keepAliveTimer);
     }
 
-    // 每5分钟检查一次连接
+    // 每3分钟检查一次连接（原来是5分钟）
     this.keepAliveTimer = setInterval(async () => {
       try {
         if (this.pool) {
@@ -130,7 +130,7 @@ export class DatabaseManager {
           }
         }
       }
-    }, 5 * 60 * 1000); // 5分钟
+    }, 3 * 60 * 1000); // 3分钟
   }
 
   /**
@@ -153,7 +153,38 @@ export class DatabaseManager {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         insertId: (results as any).insertId,
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      // 检查是否是连接丢失错误
+      const mysqlError = error as { code?: string };
+      if (mysqlError.code === 'PROTOCOL_CONNECTION_LOST' || 
+          mysqlError.code === 'ECONNRESET' ||
+          mysqlError.code === 'ER_SERVER_LOST' ||
+          mysqlError.code === 'ETIMEDOUT') {
+        console.error('[Query] 数据库连接丢失，尝试重新连接:', mysqlError.code);
+        
+        // 尝试重新连接
+        if (this.config) {
+          try {
+            await this.connect(this.config);
+            console.log('[Query] 数据库重新连接成功，重新执行查询');
+            
+            // 重新执行查询
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const [results] = await this.pool!.execute(sql, params as any);
+            return {
+              rows: results as T[],
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              affectedRows: (results as any).affectedRows,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              insertId: (results as any).insertId,
+            };
+          } catch (reconnectError) {
+            console.error('[Query] 数据库重新连接失败:', reconnectError);
+            throw reconnectError;
+          }
+        }
+      }
+      
       console.error('查询失败:', error);
       throw error;
     }
@@ -169,18 +200,35 @@ export class DatabaseManager {
       throw new Error('数据库未连接');
     }
 
-    const connection = await this.pool.getConnection();
-
     try {
-      await connection.beginTransaction();
-      const result = await callback(connection);
-      await connection.commit();
-      return result;
-    } catch (error) {
-      await connection.rollback();
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const result = await callback(connection);
+        await connection.commit();
+        return result;
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    } catch (error: unknown) {
+      // 检查是否是连接丢失错误
+      const mysqlError = error as { code?: string };
+      if (mysqlError.code === 'PROTOCOL_CONNECTION_LOST' || 
+          mysqlError.code === 'ECONNRESET' ||
+          mysqlError.code === 'ER_SERVER_LOST' ||
+          mysqlError.code === 'ETIMEDOUT') {
+        console.error('[Transaction] 数据库连接丢失，尝试重新连接:', mysqlError.code);
+        
+        // 尝试重新连接
+        if (this.config) {
+          await this.connect(this.config);
+          console.log('[Transaction] 数据库重新连接成功');
+        }
+      }
       throw error;
-    } finally {
-      connection.release();
     }
   }
 
