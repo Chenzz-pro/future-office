@@ -13,7 +13,8 @@
  */
 
 import { BaseBusinessAgent } from './base-business-agent';
-import type { AgentContext } from '@/types/agent';
+import type { AgentContext } from '@/lib/types/agent';
+import type { IntentResult, UserContext } from '@/lib/types/agent';
 import {
   todoService,
   ApproveParams,
@@ -75,8 +76,207 @@ export class ApprovalAgent extends BaseBusinessAgent {
   }
 
   /**
-   * 处理用户消息
-   * 这是入口方法，由 RootAgent 调用
+   * 执行任务（由 RootAgent 调用）
+   * 重写基类方法，直接调用 process 处理 RootAgent 传递的 action
+   */
+  async execute(intent: IntentResult, userContext: UserContext): Promise<any> {
+    console.log('[ApprovalAgent] execute 被调用:', { intent, userContext });
+
+    // 如果是 launch_flow action，预先获取表单URL
+    let formUrl: string | undefined;
+    if (intent.action === 'launch_flow' && intent.context.params?.businessType) {
+      try {
+        formUrl = await this.getFormUrl(intent.context.params.businessType as string);
+      } catch (error) {
+        console.error('[ApprovalAgent] 预先获取表单URL失败:', error);
+      }
+    }
+
+    // 构建 AgentContext
+    const context: AgentContext = {
+      userId: userContext.userId,
+      deptId: userContext.deptId,
+      role: userContext.role || 'user',
+      formUrl, // 传递表单URL
+    };
+
+    // 根据 action 构建 ParsedIntent
+    const parsedIntent = this.buildParsedIntentFromRootAgent(intent, context);
+
+    console.log('[ApprovalAgent] 构建的 ParsedIntent:', parsedIntent);
+
+    // 根据意图执行调度
+    switch (parsedIntent.intent) {
+      case 'query_todo':
+        return await this.handleQueryTodo(parsedIntent, context);
+
+      case 'query_done':
+        return await this.handleQueryDone(parsedIntent, context);
+
+      case 'query_suspended':
+        return await this.handleQuerySuspended(parsedIntent, context);
+
+      case 'approve':
+        return await this.handleApprove(parsedIntent, context);
+
+      case 'reject':
+        return await this.handleReject(parsedIntent, context);
+
+      case 'transfer':
+        return await this.handleTransfer(parsedIntent, context);
+
+      case 'urge':
+        return await this.handleUrge(parsedIntent, context);
+
+      case 'launch_flow':
+        return await this.handleLaunchFlow(parsedIntent, context);
+
+      case 'query_flow':
+        return await this.handleQueryFlow(parsedIntent, context);
+
+      case 'query_template':
+        return await this.handleQueryTemplate(parsedIntent, context);
+
+      case 'open_form':
+        return await this.handleOpenForm(parsedIntent, context);
+
+      default:
+        return this.formatResponse({
+          success: false,
+          message: '抱歉，我不太理解您的意思。请告诉我您想：\n' +
+                   '- 查询待办：请说"查我的待办"\n' +
+                   '- 审批操作：请说"同意/拒绝这个待办"\n' +
+                   '- 发起流程：请说"我要请假"、"我要报销"等\n' +
+                   '- 查询模板：请说"有哪些流程可以用"',
+        });
+    }
+  }
+
+  /**
+   * 从 RootAgent 的意图构建 ParsedIntent
+   */
+  private buildParsedIntentFromRootAgent(intent: IntentResult, context: AgentContext): ParsedIntent {
+    const action = intent.action;
+    const params = intent.context.params || {};
+
+    // 根据 action 确定意图类型
+    const parsedIntent: ParsedIntent = {
+      intent: 'unknown',
+      confidence: 1.0, // RootAgent 传递的意图置信度为 1
+      entities: {},
+    };
+
+    switch (action) {
+      case 'get_my_todo':
+      case 'query_todo':
+        parsedIntent.intent = 'query_todo';
+        parsedIntent.entities = params;
+        break;
+
+      case 'get_done':
+      case 'query_done':
+        parsedIntent.intent = 'query_done';
+        parsedIntent.entities = params;
+        break;
+
+      case 'get_suspended':
+      case 'query_suspended':
+        parsedIntent.intent = 'query_suspended';
+        parsedIntent.entities = params;
+        break;
+
+      case 'approve':
+        parsedIntent.intent = 'approve';
+        parsedIntent.entities = params;
+        break;
+
+      case 'reject':
+        parsedIntent.intent = 'reject';
+        parsedIntent.entities = params;
+        break;
+
+      case 'transfer':
+        parsedIntent.intent = 'transfer';
+        parsedIntent.entities = params;
+        break;
+
+      case 'launch_flow':
+        parsedIntent.intent = 'launch_flow';
+        // 从 params 中提取业务类型
+        const businessType = params.businessType as string;
+        if (businessType) {
+          parsedIntent.entities.businessType = this.getBusinessTypeName(businessType);
+          parsedIntent.entities.businessTypeCode = businessType;
+          parsedIntent.businessType = businessType;
+          parsedIntent.requiresForm = true;
+          // 同步获取表单URL（已在 execute 中预先获取）
+          if (context.formUrl) {
+            parsedIntent.formUrl = context.formUrl;
+          }
+        }
+        if (params.description) {
+          parsedIntent.entities.description = params.description;
+        }
+        break;
+
+      case 'query_flow':
+        parsedIntent.intent = 'query_flow';
+        parsedIntent.entities = params;
+        break;
+
+      case 'query_template':
+        parsedIntent.intent = 'query_template';
+        parsedIntent.entities = params;
+        break;
+
+      case 'open_form':
+        parsedIntent.intent = 'open_form';
+        parsedIntent.entities = params;
+        parsedIntent.requiresForm = true;
+        break;
+
+      default:
+        parsedIntent.intent = 'unknown';
+        parsedIntent.entities = params;
+    }
+
+    return parsedIntent;
+  }
+
+  /**
+   * 获取表单URL
+   */
+  private async getFormUrl(businessType?: string): Promise<string | undefined> {
+    if (!businessType) return undefined;
+    try {
+      const { flowMappingService } = await import('@/lib/ekp/services');
+      const mapping = await flowMappingService.getByBusinessType(businessType);
+      return mapping?.formTemplateUrl;
+    } catch (error) {
+      console.error('[ApprovalAgent] 获取表单URL失败:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * 业务类型编码转名称
+   */
+  private getBusinessTypeName(code: string): string {
+    const typeMap: Record<string, string> = {
+      leave: '请假',
+      expense: '报销',
+      trip: '出差',
+      purchase: '采购',
+      vehicle: '用车',
+      reception: '接待',
+      loan: '借款',
+    };
+    return typeMap[code] || code;
+  }
+
+  /**
+   * 处理用户消息（由前端直接调用，保留兼容性）
+   * 这是入口方法
    */
   async process(message: string, context: AgentContext): Promise<any> {
     console.log('[ApprovalAgent] 处理消息:', { message, context });
@@ -675,14 +875,14 @@ export class ApprovalAgent extends BaseBusinessAgent {
       });
     }
 
-    // 返回需要打开表单的指令
-    return {
+    // 返回需要打开表单的指令（通过 formatResponse 确保格式正确）
+    return this.formatResponse({
       success: true,
+      message: `好的，您要申请「${intent.entities.businessType}」，我将为您打开表单。\n\n请填写表单内容，完成后说"提交"发起流程。`,
       requiresForm: true,
       businessType,
       formUrl: intent.formUrl,
-      message: `好的，您要申请「${intent.entities.businessType}」，我将为您打开表单。\n\n请填写表单内容，完成后说"提交"发起流程。`,
-    };
+    });
   }
 
   /**
@@ -833,6 +1033,7 @@ export class ApprovalAgent extends BaseBusinessAgent {
 
   /**
    * 格式化响应
+   * 返回格式符合 AgentResponse 接口
    */
   private formatResponse(data: {
     success: boolean;
@@ -842,13 +1043,9 @@ export class ApprovalAgent extends BaseBusinessAgent {
     businessType?: string;
     formUrl?: string;
   }): any {
-    return {
-      success: data.success,
-      content: data.message,
-      defaultMessage: data.message,
-      data: data.data,
-      agentId: this.agentType,
-      timestamp: new Date().toISOString(),
+    // 构建响应数据
+    const responseData: any = {
+      // 包含 action 信息，供前端判断是否需要打开表单
       ...(data.requiresForm && {
         action: {
           type: 'open_form',
@@ -856,6 +1053,18 @@ export class ApprovalAgent extends BaseBusinessAgent {
           formUrl: data.formUrl,
         },
       }),
+      // 如果有其他数据，也包含进来
+      ...(typeof data.data === 'object' && data.data !== null && { ...data.data }),
+    };
+
+    return {
+      code: data.success ? '200' : '500',
+      msg: data.message,
+      data: responseData,
+      agentType: this.agentType,
+      permissionChecked: true,
+      permissionGranted: true,
+      skillCalled: false,
     };
   }
 }

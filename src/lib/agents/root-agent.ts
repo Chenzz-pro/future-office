@@ -29,7 +29,7 @@ export class RootAgent {
 
 你的职责：
 1. 识别用户意图（审批/会议/数据/个人助理）
-2. 提取关键参数，特别是查询目标人员
+2. 提取关键参数，特别是查询目标人员和业务类型
 3. 返回结构化的意图识别结果
 
 可用的业务Agent：
@@ -60,6 +60,12 @@ export class RootAgent {
 - "查询李四的待办数量" → params: { targetPerson: "李四" }
 - "帮我查一下王五的待办" → params: { targetPerson: "王五" }
 
+⚠️ 重要：业务类型提取规则（用于发起流程）
+- "我要请假"/"请事假"/"申请请假" → params: { businessType: "leave" }
+- "我要报销"/"费用报销"/"申请报销" → params: { businessType: "expense" }
+- "我要出差"/"出差申请"/"申请出差" → params: { businessType: "trip" }
+- "我要采购"/"采购申请"/"申请采购" → params: { businessType: "purchase" }
+
 如果用户没有明确指定查询谁，默认就是查询"我的"，params: {}
 
 示例：
@@ -72,6 +78,53 @@ export class RootAgent {
   "context": {
     "userId": "user-id",
     "params": {}
+  }
+}
+\`\`\`
+
+用户："我要请假"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "launch_flow",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "businessType": "leave"
+    }
+  }
+}
+\`\`\`
+
+用户："请事假3天"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "launch_flow",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "businessType": "leave",
+      "description": "请事假3天"
+    }
+  }
+}
+\`\`\`
+
+用户："报销差旅费500元"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "launch_flow",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "businessType": "expense",
+      "description": "报销差旅费500元"
+    }
   }
 }
 \`\`\`
@@ -292,7 +345,13 @@ export class RootAgent {
 
       // 如果业务Agent返回的是结构化数据，使用内网代码格式化
       if (typeof businessResponse.data === 'object' && businessResponse.data !== null) {
-        return this.formatStructuredData(businessResponse.data, businessResponse.msg);
+        // 检查是否有 action 字段（需要打开表单）
+        const data = businessResponse.data as Record<string, unknown>;
+        if (data.action && typeof data.action === 'object') {
+          // 返回特殊格式，前端识别 action 并打开表单
+          return `::ACTION::${JSON.stringify(data.action)}::${businessResponse.msg}`;
+        }
+        return this.formatStructuredData(data, businessResponse.msg);
       }
 
       // 其他情况，返回消息

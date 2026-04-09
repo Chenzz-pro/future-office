@@ -22,25 +22,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Bot, FileText, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 
-// 业务类型选项
+// 业务类型选项（使用真实的EKP表单URL）
 const BUSINESS_TYPES = [
   {
     value: 'leave',
     label: '请假申请',
     description: '事假、病假、年假等',
-    formUrl: 'https://oa.fjhxrl.com/sys/attachment/view.do?method=preview&fdId=test', // 示例URL
+    formUrl: 'https://oa.fjhxrl.com/km/review/km_review_main/kmReviewMain.do?method=add&fdTemplateId=17cba859d4a22f589b8cc4b482bb6898',
   },
   {
     value: 'expense',
     label: '费用报销',
     description: '差旅费、交通费、餐费等',
-    formUrl: 'https://oa.fjhxrl.com/sys/attachment/view.do?method=preview&fdId=test',
+    formUrl: 'https://oa.fjhxrl.com/km/review/km_review_main/kmReviewMain.do?method=add&fdTemplateId=expense_template_001',
   },
   {
     value: 'trip',
     label: '出差申请',
     description: '出差审批流程',
-    formUrl: 'https://oa.fjhxrl.com/sys/attachment/view.do?method=preview&fdId=test',
+    formUrl: 'https://oa.fjhxrl.com/km/review/km_review_main/kmReviewMain.do?method=add&fdTemplateId=trip_template_001',
   },
 ];
 
