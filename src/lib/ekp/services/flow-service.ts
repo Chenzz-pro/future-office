@@ -13,6 +13,7 @@
  */
 
 import { callEKPInterface } from '@/lib/ekp-client';
+import { createEKPClient } from '@/lib/ekp-client';
 import { flowMappingService } from './flow-mapping-service';
 
 // ============================================
@@ -225,36 +226,67 @@ export class FlowService {
 
   /**
    * 发起流程（通过模板ID）
+   * 优先使用配置的接口，失败时回退到 EKP REST API
    */
   async launch(userId: string, templateId: string, formValues: Record<string, unknown>): Promise<FlowOperationResult> {
     try {
-      const result = await callEKPInterface('ekp.flow.launch', {
-        authAreaId: userId,
-        templateId,
-        formValues,
-      });
+      // 尝试使用配置的接口
+      try {
+        const result = await callEKPInterface('ekp.flow.launch', {
+          authAreaId: userId,
+          templateId,
+          formValues,
+        });
 
-      if (result.success && result.data) {
-        const data = result.data as { returnState?: number; message?: string; instanceId?: string };
+        if (result.success && result.data) {
+          const data = result.data as { returnState?: number; message?: string; instanceId?: string };
 
-        if (data.returnState === 2) {
-          return {
-            success: true,
-            message: data.message || '流程发起成功',
-            instanceId: data.instanceId,
-          };
-        } else {
-          return {
-            success: false,
-            message: data.message || '流程发起失败',
-          };
+          if (data.returnState === 2) {
+            return {
+              success: true,
+              message: data.message || '流程发起成功',
+              instanceId: data.instanceId,
+            };
+          }
         }
+      } catch (interfaceError) {
+        console.warn('[FlowService] ekp.flow.launch 接口调用失败，使用备用方案:', interfaceError);
       }
 
-      return {
-        success: false,
-        message: '流程发起失败',
-      };
+      // 备用方案：直接使用 EKP REST API
+      console.log('[FlowService] 使用 EKP REST API 直接发起流程');
+      const client = await createEKPClient();
+      if (!client) {
+        return {
+          success: false,
+          message: 'EKP 客户端未配置，请联系管理员',
+        };
+      }
+
+      // 构建文档主题
+      const docSubject = formValues.docSubject || 
+        formValues.subject || 
+        `申请_${new Date().toISOString().slice(0, 10)}`;
+
+      const ekpResult = await client.addReview({
+        fdTemplateId: templateId,
+        docSubject: docSubject as string,
+        formValues: formValues,
+        docCreator: userId,
+      });
+
+      if (ekpResult.success) {
+        return {
+          success: true,
+          message: ekpResult.msg || '流程发起成功',
+          instanceId: ekpResult.data as string || undefined,
+        };
+      } else {
+        return {
+          success: false,
+          message: ekpResult.msg || '流程发起失败',
+        };
+      }
     } catch (error) {
       console.error('[FlowService] 发起流程失败:', error);
       return {
