@@ -5,20 +5,18 @@
 
 import type {
   PermissionRule,
-  BusinessRule,
-  SkillsConfig,
   AgentResponse,
   UserContext,
 } from '@/lib/types/agent';
-import { oneAPIManager } from '@/lib/oneapi';
 import { dbManager } from '@/lib/database';
+import { RowDataPacket } from 'mysql2';
 
 export interface BusinessRuleStep {
   name: string;
   desc?: string;
   action: string;
   skillCode?: string;
-  [key: string]: any;
+  [key: string]: string | undefined;
 }
 
 export interface BusinessRuleConfig {
@@ -52,7 +50,7 @@ export class RuleEngine {
     rules: PermissionRule[],
     context: UserContext,
     action: string,
-    params: Record<string, any> = {}
+    params: Record<string, unknown> = {}
   ): Promise<{ granted: boolean; reason?: string }> {
     console.log('[RuleEngine] 执行权限规则校验:', {
       ruleCount: rules.length,
@@ -133,7 +131,7 @@ export class RuleEngine {
   private async executeCheckLogic(
     checkLogic: string,
     context: UserContext,
-    params: Record<string, any> = {}
+    params: Record<string, unknown> = {}
   ): Promise<{ passed: boolean; reason?: string }> {
     const logic = checkLogic.toLowerCase();
     
@@ -262,10 +260,10 @@ export class RuleEngine {
    * ]
    */
   async executeBusinessRules(
-    rules: any[],
+    rules: BusinessRuleConfig[],
     context: UserContext,
     action: string,
-    params: Record<string, any> = {}
+    params: Record<string, unknown> = {}
   ): Promise<AgentResponse> {
     console.log('[RuleEngine] 执行业务规则:', {
       ruleCount: rules?.length || 0,
@@ -281,12 +279,15 @@ export class RuleEngine {
     
     if (rules && rules.length > 0) {
       // 优先按 ruleId 精确匹配
-      matchedRule = rules.find(r => 
-        r.ruleId === action || 
-        r.ruleId === action.replace(/_/g, '-') ||
-        r.ruleId?.includes(action) ||
-        action.includes(r.ruleId)
-      );
+      matchedRule = rules.find(r => {
+        const ruleId = r.ruleId || '';
+        return (
+          ruleId === action ||
+          ruleId === action.replace(/_/g, '-') ||
+          ruleId.includes(action) ||
+          action.includes(ruleId)
+        );
+      });
       
       // 如果没有精确匹配，取第一个规则（兼容旧格式）
       if (!matchedRule) {
@@ -307,7 +308,7 @@ export class RuleEngine {
     }
 
     // 3. 获取步骤列表
-    const steps = matchedRule.steps || matchedRule.stepList;
+    const steps = matchedRule.steps;
     
     if (!steps || !Array.isArray(steps) || steps.length === 0) {
       console.log('[RuleEngine] 业务规则无有效步骤，使用默认处理');
@@ -351,7 +352,7 @@ export class RuleEngine {
         const [rows] = await tempPool.execute(
           'SELECT fd_login_name FROM sys_org_person WHERE fd_id = ?',
           [userId]
-        ) as [any[], any];
+        ) as [RowDataPacket[], unknown];
 
         if (rows && rows.length > 0) {
           return rows[0].fd_login_name;
@@ -372,13 +373,13 @@ export class RuleEngine {
   private async executeBusinessSteps(
     steps: BusinessRuleStep[],
     context: UserContext,
-    params: Record<string, any>
+    params: Record<string, unknown>
   ): Promise<AgentResponse> {
     console.log('[RuleEngine] 执行业务流程步骤:', {
       stepCount: steps.length,
     });
 
-    let lastResult: any = params;
+    let lastResult: unknown = params;
 
     for (const step of steps) {
       console.log('[RuleEngine] 执行步骤:', step.name, step.action);
@@ -459,7 +460,7 @@ export class RuleEngine {
   /**
    * 验证参数
    */
-  private validateParams(step: BusinessRuleStep, params: Record<string, any>): boolean {
+  private validateParams(step: BusinessRuleStep, params: Record<string, unknown>): boolean {
     console.log('[RuleEngine] 校验参数:', params);
     // 基础校验：确保有必要的参数
     if (!params || Object.keys(params).length === 0) {
@@ -474,9 +475,9 @@ export class RuleEngine {
    */
   private async invokeSkill(
     skillCode: string,
-    params: Record<string, any>,
+    params: Record<string, unknown>,
     context: UserContext
-  ): Promise<any> {
+  ): Promise<unknown> {
     console.log('[RuleEngine] 调用技能:', skillCode, {
       params,
       userId: context.userId,
@@ -536,7 +537,7 @@ export class RuleEngine {
   /**
    * 调用 EKP 待办服务
    */
-  private async callEKPNotify(action: string, params: Record<string, any>): Promise<any> {
+  private async callEKPNotify(action: string, params: Record<string, unknown>): Promise<unknown> {
     try {
       const response = await fetch('http://localhost:5000/api/ekp', {
         method: 'POST',

@@ -4,21 +4,20 @@
  */
 
 import { agentRepository } from '@/lib/database/repositories/agent.repository';
-import { ruleEngine } from '@/lib/rules/rule-engine';
+import { ruleEngine, BusinessRuleConfig } from '@/lib/rules/rule-engine';
 import type {
   AgentResponse,
   UserContext,
   IntentResult,
   AgentConfig,
   PermissionRule,
-  BusinessRule,
 } from '@/lib/types/agent';
 
 export abstract class BaseBusinessAgent {
   protected agentType: string;
   protected config: AgentConfig | null = null;
   protected permissionRules: PermissionRule[] = [];
-  protected businessRules: BusinessRule[] = [];
+  protected businessRules: BusinessRuleConfig[] = [];
 
   constructor(agentType: string) {
     this.agentType = agentType;
@@ -52,10 +51,10 @@ export abstract class BaseBusinessAgent {
       // 加载业务规则（兼容数组和对象格式）
       if (this.config.businessRules) {
         if (Array.isArray(this.config.businessRules)) {
-          this.businessRules = this.config.businessRules;
+          this.businessRules = this.config.businessRules as unknown as BusinessRuleConfig[];
         } else if (typeof this.config.businessRules === 'object') {
           // 兼容对象格式：将对象包装为数组
-          this.businessRules = [this.config.businessRules as BusinessRule];
+          this.businessRules = [this.config.businessRules as unknown as BusinessRuleConfig];
         } else {
           this.businessRules = [];
         }
@@ -224,7 +223,7 @@ export abstract class BaseBusinessAgent {
   /**
    * 获取业务规则
    */
-  getBusinessRules(): BusinessRule[] {
+  getBusinessRules(): BusinessRuleConfig[] {
     return this.businessRules;
   }
 }

@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { ruleEngine } from '@/lib/rules/rule-engine';
-import type { PermissionRule, BusinessRule, UserContext } from '@/lib/types/agent';
+import { ruleEngine, BusinessRuleConfig } from '@/lib/rules/rule-engine';
+import type { PermissionRule, UserContext } from '@/lib/types/agent';
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       });
     } else if (type === 'business') {
       const result = await ruleEngine.executeBusinessRules(
-        rules as BusinessRule[],
+        rules as BusinessRuleConfig[],
         userContext,
         action || 'unknown',
         params || {}
