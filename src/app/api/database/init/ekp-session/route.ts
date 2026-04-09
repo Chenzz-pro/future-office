@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       .filter(s => s.length > 0);
 
     for (const statement of statements) {
-      await dbManager.executeQuery(statement);
+      await dbManager.query(statement);
     }
 
     return NextResponse.json({
@@ -93,7 +93,7 @@ export async function GET() {
 
     for (const table of tables) {
       try {
-        const result = await dbManager.executeQuery(
+        const result = await dbManager.query(
           `SELECT COUNT(*) as count FROM \`${table}\` LIMIT 1`
         );
         results[table] = true;

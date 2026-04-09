@@ -19,58 +19,6 @@ function getPath(params: { path: string[] }): string {
 }
 
 /**
- * GET 请求代理
- */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
-  const path = getPath(params);
-  const userId = request.headers.get('x-user-id');
-  
-  return proxyRequest(request, path, userId);
-}
-
-/**
- * POST 请求代理
- */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
-  const path = getPath(params);
-  const userId = request.headers.get('x-user-id');
-  
-  return proxyRequest(request, path, userId);
-}
-
-/**
- * PUT 请求代理
- */
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
-  const path = getPath(params);
-  const userId = request.headers.get('x-user-id');
-  
-  return proxyRequest(request, path, userId);
-}
-
-/**
- * DELETE 请求代理
- */
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
-  const path = getPath(params);
-  const userId = request.headers.get('x-user-id');
-  
-  return proxyRequest(request, path, userId);
-}
-
-/**
  * 执行代理请求
  */
 async function proxyRequest(
@@ -205,4 +153,56 @@ async function proxyRequest(
       { status: 502 }
     );
   }
+}
+
+/**
+ * GET 请求代理
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  const userId = request.headers.get('x-user-id');
+  
+  return proxyRequest(request, path.join('/'), userId);
+}
+
+/**
+ * POST 请求代理
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  const userId = request.headers.get('x-user-id');
+  
+  return proxyRequest(request, path.join('/'), userId);
+}
+
+/**
+ * PUT 请求代理
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  const userId = request.headers.get('x-user-id');
+  
+  return proxyRequest(request, path.join('/'), userId);
+}
+
+/**
+ * DELETE 请求代理
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  const userId = request.headers.get('x-user-id');
+  
+  return proxyRequest(request, path.join('/'), userId);
 }

@@ -168,7 +168,7 @@ export default function EKPBindingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" />
+          <Spinner className="w-8 h-8" />
           <p className="text-muted-foreground">正在检查绑定状态...</p>
         </div>
       </div>
@@ -278,7 +278,7 @@ export default function EKPBindingPage() {
                 onClick={handleUnbind}
                 disabled={isLoading}
               >
-                {isLoading ? <Spinner size="sm" /> : '解绑账号'}
+                {isLoading ? <Spinner className="w-4 h-4" /> : '解绑账号'}
               </Button>
             </>
           ) : (
@@ -296,7 +296,7 @@ export default function EKPBindingPage() {
                 onClick={handleBind}
                 disabled={isLoading}
               >
-                {isLoading ? <Spinner size="sm" /> : '绑定账号'}
+                {isLoading ? <Spinner className="w-4 h-4" /> : '绑定账号'}
               </Button>
             </>
           )}

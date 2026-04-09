@@ -206,6 +206,17 @@ export function AIFormConsole({
     }
   };
 
+  // 添加系统消息
+  const addSystemMessage = useCallback((content: string) => {
+    setMessages(prev => [...prev, {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content,
+      timestamp: new Date(),
+      isAction: false,
+    }]);
+  }, []);
+
   // 监听 iframe 加载状态
   const handleIframeLoad = useCallback(() => {
     setIsFormReady(true);
@@ -254,17 +265,6 @@ export function AIFormConsole({
     setShowSidebar(false); // 隐藏 iframe
     addSystemMessage('好的，我将通过 EKP API 直接帮您提交申请。请在右侧告诉我您的申请信息。');
   }, [addSystemMessage]);
-
-  // 添加系统消息
-  const addSystemMessage = useCallback((content: string) => {
-    setMessages(prev => [...prev, {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content,
-      timestamp: new Date(),
-      isAction: false,
-    }]);
-  }, []);
 
   // 发送消息
   const handleSend = useCallback(async () => {

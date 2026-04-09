@@ -10,6 +10,16 @@ import { loginWithCredentials } from '@/lib/ekp/cookie-bridge';
 // 加密密钥
 const ENCRYPTION_KEY = process.env.EKP_BINDING_KEY || 'ekp-user-binding-key-2024';
 
+// 查询结果类型
+interface EKPBingingRow {
+  user_id: string;
+  ekp_username: string;
+  ekp_account_id: string | null;
+  bind_time: Date;
+  last_used_time: Date | null;
+  is_active: number;
+}
+
 export interface EKPDingTalkBinding {
   userId: string;
   ekpUsername: string;
@@ -36,13 +46,13 @@ export async function GET(request: NextRequest) {
     }
     
     // 查询绑定信息
-    const result = await dbManager.executeQuery(
+    const result = await dbManager.query<EKPBingingRow>(
       `SELECT * FROM ekp_user_bindings WHERE user_id = ? AND is_active = 1`,
       [userId]
     );
     
     if (result.rows && result.rows.length > 0) {
-      const row = result.rows[0];
+      const row = result.rows[0] as EKPBingingRow;
       return NextResponse.json({
         success: true,
         data: {
@@ -108,7 +118,7 @@ export async function POST(request: NextRequest) {
     const encryptedPassword = encrypt(ekpPassword, ENCRYPTION_KEY);
     
     // 保存绑定信息
-    await dbManager.executeQuery(
+    await dbManager.query(
       `INSERT INTO ekp_user_bindings 
        (user_id, ekp_username, ekp_password_encrypted, bind_time, is_active)
        VALUES (?, ?, ?, NOW(), 1)
@@ -154,13 +164,13 @@ export async function DELETE(request: NextRequest) {
     }
     
     // 删除绑定信息
-    await dbManager.executeQuery(
+    await dbManager.query(
       `UPDATE ekp_user_bindings SET is_active = 0 WHERE user_id = ?`,
       [userId]
     );
     
     // 同时删除 Session
-    await dbManager.executeQuery(
+    await dbManager.query(
       `UPDATE ekp_sessions SET is_valid = 0 WHERE user_id = ?`,
       [userId]
     );
@@ -194,7 +204,7 @@ export async function PUT(request: NextRequest) {
     }
     
     // 更新最后使用时间
-    await dbManager.executeQuery(
+    await dbManager.query(
       `UPDATE ekp_user_bindings SET last_used_time = NOW() WHERE user_id = ?`,
       [userId]
     );

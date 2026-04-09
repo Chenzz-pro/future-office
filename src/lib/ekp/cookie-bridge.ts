@@ -8,7 +8,7 @@
  */
 
 import { dbManager } from '@/lib/database';
-import { encrypt, decrypt } from '@/lib/utils';
+import { encrypt, decrypt } from '@/lib/utils/crypto';
 
 // ============================================
 // 类型定义
@@ -34,6 +34,18 @@ export interface EKPConfig {
   ssoType?: 'cas' | 'oauth2' | 'jwt' | 'cookie';
   casUrl?: string;
   oauth2Url?: string;
+}
+
+// 数据库行类型
+interface EKPSessionRow {
+  user_id: string;
+  ekp_username: string;
+  ekp_session_id: string | null;
+  ekp_cookie: string | null;
+  ekp_token: string | null;
+  login_time: Date;
+  expire_time: Date;
+  is_valid: number;
 }
 
 // ============================================
@@ -88,19 +100,19 @@ export function convertCookieDomain(cookie: string, targetDomain: string): strin
 export async function getEKPSession(userId: string): Promise<EKPSession | null> {
   try {
     // 从数据库获取 Session
-    const result = await dbManager.executeQuery(
+    const result = await dbManager.query<EKPSessionRow>(
       `SELECT * FROM ekp_sessions WHERE user_id = ? AND is_valid = 1 AND expire_time > NOW()`,
       [userId]
     );
     
     if (result.rows && result.rows.length > 0) {
-      const row = result.rows[0];
+      const row = result.rows[0] as EKPSessionRow;
       return {
         userId: row.user_id,
         ekpUsername: row.ekp_username,
-        ekpSessionId: row.ekp_session_id,
+        ekpSessionId: row.ekp_session_id || undefined,
         ekpCookie: row.ekp_cookie ? decryptCookie(row.ekp_cookie) : undefined,
-        ekpToken: row.ekp_token,
+        ekpToken: row.ekp_token || undefined,
         loginTime: new Date(row.login_time),
         expireTime: new Date(row.expire_time),
         isValid: row.is_valid === 1,
@@ -123,7 +135,7 @@ export async function saveEKPSession(session: EKPSession): Promise<void> {
       ? encryptCookie(session.ekpCookie) 
       : null;
     
-    await dbManager.executeQuery(
+    await dbManager.query(
       `INSERT INTO ekp_sessions 
        (user_id, ekp_username, ekp_session_id, ekp_cookie, ekp_token, login_time, expire_time, is_valid)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -157,7 +169,7 @@ export async function saveEKPSession(session: EKPSession): Promise<void> {
  */
 export async function deleteEKPSession(userId: string): Promise<void> {
   try {
-    await dbManager.executeQuery(
+    await dbManager.query(
       `UPDATE ekp_sessions SET is_valid = 0 WHERE user_id = ?`,
       [userId]
     );
