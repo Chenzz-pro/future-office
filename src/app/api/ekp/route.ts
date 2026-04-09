@@ -4,7 +4,7 @@ import { EKPRestClient, EKPRequest } from '@/lib/ekp-rest-client';
 import { dbManager } from '@/lib/database';
 
 interface EKPProxyRequest {
-  action: 'test' | 'addReview' | 'approveReview' | 'updateReview' | 'getTodoCount' | 'getTodo';
+  action: 'test' | 'addReview' | 'approveReview' | 'updateReview' | 'getTodoCount' | 'getTodo' | 'invoke' | 'setTodoDone' | 'deleteTodo' | 'sendTodo' | 'updateTodo' | 'getTodoTargets';
   baseUrl?: string;
   username?: string;
   password?: string;
@@ -15,6 +15,10 @@ interface EKPProxyRequest {
   todoType?: number;
   data?: Record<string, unknown>;
   userId?: string;
+  todoId?: string;
+  target?: string;
+  content?: string;
+  comment?: string;
 }
 
 interface EkpConfigRow {
@@ -213,7 +217,11 @@ export async function POST(request: NextRequest) {
         return jsonResponse(false, result.msg || '连接失败');
       }
 
+      // 通用的 EKP 待办服务调用入口
+      // 支持: getTodoCount, getTodo, setTodoDone, deleteTodo, sendTodo, updateTodo, getTodoTargets
+      case 'invoke':
       case 'getTodoCount': {
+
         let targetUser = loginName || ekpUsername;
         
         if (userId && !loginName) {

@@ -7,6 +7,158 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbManager } from '@/lib/database/manager';
 
 /**
+ * 完整的业务规则配置
+ */
+const BUSINESS_RULES = {
+  approval: [
+    // ==================== 待办业务流程 ====================
+    {
+      ruleId: 'get-my-todo',
+      ruleName: '获取我的待办',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'invoke_ekp', action: 'invoke_skill', skillCode: 'ekp_notify', desc: '调用EKP待办接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'get-todo-count',
+      ruleName: '获取待办数量',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'invoke_ekp', action: 'invoke_skill', skillCode: 'ekp_notify', desc: '调用EKP待办接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'get-todo-list',
+      ruleName: '获取待办列表',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'invoke_ekp', action: 'invoke_skill', skillCode: 'ekp_notify', desc: '调用EKP待办接口' },
+        { name: 'filter_data', action: 'filter_data', desc: '过滤数据' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'approve-todo',
+      ruleName: '审批待办',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'check_permission', action: 'run_permission_rules', desc: '权限校验' },
+        { name: 'invoke_ekp', action: 'invoke_skill', skillCode: 'ekp_notify', desc: '调用EKP审批接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'reject-todo',
+      ruleName: '驳回待办',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'check_permission', action: 'run_permission_rules', desc: '权限校验' },
+        { name: 'invoke_ekp', action: 'invoke_skill', skillCode: 'ekp_notify', desc: '调用EKP驳回接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'delegate-todo',
+      ruleName: '转交待办',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'check_permission', action: 'run_permission_rules', desc: '权限校验' },
+        { name: 'invoke_ekp', action: 'invoke_skill', skillCode: 'ekp_notify', desc: '调用EKP转交接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'get-todo-detail',
+      ruleName: '获取待办详情',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'check_permission', action: 'run_permission_rules', desc: '权限校验' },
+        { name: 'invoke_ekp', action: 'invoke_skill', skillCode: 'ekp_notify', desc: '调用EKP待办详情接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+  ],
+  meeting: [
+    {
+      ruleId: 'get-my-meeting',
+      ruleName: '获取我的会议',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'invoke_meeting', action: 'invoke_skill', skillCode: 'meeting.list', desc: '调用会议查询接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'create-meeting',
+      ruleName: '创建会议',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'check_permission', action: 'run_permission_rules', desc: '权限校验' },
+        { name: 'invoke_meeting', action: 'invoke_skill', skillCode: 'meeting.create', desc: '调用会议创建接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+  ],
+  data: [
+    {
+      ruleId: 'query-data',
+      ruleName: '查询数据',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'check_permission', action: 'run_permission_rules', desc: '权限校验' },
+        { name: 'invoke_data', action: 'invoke_skill', skillCode: 'data.query', desc: '调用数据查询接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+  ],
+  assistant: [
+    {
+      ruleId: 'get-my-schedule',
+      ruleName: '获取我的日程',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'invoke_schedule', action: 'invoke_skill', skillCode: 'schedule.list', desc: '调用日程查询接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+    {
+      ruleId: 'create-schedule',
+      ruleName: '创建日程',
+      steps: [
+        { name: 'check_params', action: 'check_params', desc: '参数校验' },
+        { name: 'check_permission', action: 'run_permission_rules', desc: '权限校验' },
+        { name: 'invoke_schedule', action: 'invoke_skill', skillCode: 'schedule.create', desc: '调用日程创建接口' },
+        { name: 'format_result', action: 'format_data', desc: '格式化结果' },
+      ],
+    },
+  ],
+};
+
+/**
+ * 权限规则配置
+ */
+const PERMISSION_RULES = {
+  approval: [
+    { ruleId: 'approval-read', ruleName: '待办查询', condition: '查询', checkLogic: '仅本人', interceptAction: '您没有权限查询他人的待办' },
+    { ruleId: 'approval-action', ruleName: '待办操作', condition: '审批', checkLogic: '仅本人', interceptAction: '您没有权限操作他人的待办' },
+  ],
+  meeting: [
+    { ruleId: 'meeting-read', ruleName: '会议查询', condition: '查询', checkLogic: '仅本人', interceptAction: '您没有权限查看他人的会议' },
+    { ruleId: 'meeting-action', ruleName: '会议操作', condition: '预定', checkLogic: '仅本人', interceptAction: '您没有权限操作他人的会议' },
+  ],
+  data: [
+    { ruleId: 'data-read', ruleName: '数据查询', condition: '查询', checkLogic: '仅本人', interceptAction: '您没有权限查询他人的数据' },
+  ],
+  assistant: [
+    { ruleId: 'schedule-read', ruleName: '日程查询', condition: '查询', checkLogic: '仅本人', interceptAction: '您没有权限查看他人的日程' },
+    { ruleId: 'schedule-action', ruleName: '日程操作', condition: '创建', checkLogic: '仅本人', interceptAction: '您没有权限操作他人的日程' },
+  ],
+};
+
+/**
  * POST /api/database/init/agents
  * 手动初始化Agent和技能表
  */
@@ -28,7 +180,7 @@ export async function POST(request: NextRequest) {
     // 创建多Agent架构表
     console.log('[InitAgents] 开始创建多Agent架构表...');
 
-    // 1. 创建agents表
+    // 1. 创建agents表（包含业务规则和权限规则字段）
     await dbManager.query(`
       CREATE TABLE IF NOT EXISTS agents (
         id VARCHAR(36) PRIMARY KEY COMMENT 'Agent ID',
@@ -38,13 +190,17 @@ export async function POST(request: NextRequest) {
         avatar VARCHAR(100) DEFAULT '🤖' COMMENT 'Agent头像',
         system_prompt TEXT COMMENT '系统提示词（角色）',
         enabled BOOLEAN DEFAULT TRUE COMMENT '是否启用',
+        skills_config JSON COMMENT '技能配置',
+        permission_rules JSON COMMENT '权限规则配置',
+        business_rules JSON COMMENT '业务规则配置',
+        version INT DEFAULT 1 COMMENT '版本号',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
         INDEX idx_type (type),
         INDEX idx_enabled (enabled)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent配置表'
     `);
-    console.log('[InitAgents] agents 表创建成功');
+    console.log('[InitAgents] agents 表创建成功（含业务规则和权限规则字段）');
 
     // 2. 创建agents_skills表
     await dbManager.query(`
@@ -135,21 +291,59 @@ export async function POST(request: NextRequest) {
     ];
 
     for (const agent of agents) {
+      // 获取该Agent的业务规则和权限规则
+      const agentType = agent.type;
+      const businessRules = BUSINESS_RULES[agentType as keyof typeof BUSINESS_RULES] || [];
+      const permissionRules = PERMISSION_RULES[agentType as keyof typeof PERMISSION_RULES] || [];
+      
       await dbManager.query(
-        `INSERT INTO agents (id, type, name, description, avatar, system_prompt, enabled)
-         VALUES (?, ?, ?, ?, ?, ?, TRUE)
+        `INSERT INTO agents (id, type, name, description, avatar, system_prompt, enabled, business_rules, permission_rules)
+         VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?)
          ON DUPLICATE KEY UPDATE
          name = VALUES(name),
          description = VALUES(description),
          avatar = VALUES(avatar),
-         system_prompt = VALUES(system_prompt)`,
-        [agent.id, agent.type, agent.name, agent.description, agent.avatar, agent.system_prompt]
+         system_prompt = VALUES(system_prompt),
+         business_rules = VALUES(business_rules),
+         permission_rules = VALUES(permission_rules)`,
+        [
+          agent.id, 
+          agent.type, 
+          agent.name, 
+          agent.description, 
+          agent.avatar, 
+          agent.system_prompt,
+          JSON.stringify(businessRules),
+          JSON.stringify(permissionRules)
+        ]
       );
     }
-    console.log('[InitAgents] Agent数据插入成功');
+    console.log('[InitAgents] Agent数据插入成功（含业务规则和权限规则）');
 
-    // 6. 插入默认技能数据
+    // 6. 插入默认技能数据（包含 ekp_notify 技能）
     const skills = [
+      // EKP 待办服务 - 核心技能，支持7个操作
+      {
+        id: '00000000-0000-0000-0000-000000000010',
+        code: 'ekp_notify',
+        name: 'EKP待办服务',
+        description: '蓝凌EKP待办服务，支持获取待办数量、待办列表、审批同意、审批拒绝、转交、获取详情等操作',
+        category: 'ekp',
+        api_config: JSON.stringify({
+          method: 'POST',
+          endpoint: '/api/ekp?action=invoke',
+          params: ['action', 'todoId', 'type', 'target'],
+          subSkills: [
+            { action: 'getTodoCount', desc: '获取待办数量', params: ['type'] },
+            { action: 'getTodo', desc: '获取待办列表', params: ['type'] },
+            { action: 'setTodoDone', desc: '审批同意', params: ['todoId', 'comment'] },
+            { action: 'deleteTodo', desc: '审批拒绝', params: ['todoId', 'comment'] },
+            { action: 'sendTodo', desc: '转交待办', params: ['target', 'content'] },
+            { action: 'updateTodo', desc: '更新待办', params: ['todoId', 'data'] },
+            { action: 'getTodoTargets', desc: '获取待办接收人', params: [] },
+          ]
+        })
+      },
       {
         id: '00000000-0000-0000-0000-000000000001',
         code: 'todo.list',
@@ -276,7 +470,8 @@ export async function POST(request: NextRequest) {
 
     // 7. 为各Agent配置技能
     const agentSkills = [
-      // ApprovalAgent的技能
+      // ApprovalAgent的技能（包含核心的 ekp_notify 技能）
+      { agentType: 'approval', skillId: 'ekp_notify' },
       { agentType: 'approval', skillId: 'todo.list' },
       { agentType: 'approval', skillId: 'todo.approve' },
       { agentType: 'approval', skillId: 'todo.reject' },
