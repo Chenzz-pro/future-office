@@ -488,7 +488,7 @@ export class RuleEngine {
       switch (skillCode) {
         case 'get_my_todo':
         case 'ekp_notify':
-          // 调用 EKP 待办查询接口 - 默认获取待办数量
+          // 调用 EKP 待办查询接口
           return await this.callEKPNotify('getTodoCount', {
             type: 0, // 待办类型：0=所有待办
             userId: context.userId,
@@ -497,126 +497,62 @@ export class RuleEngine {
 
         case 'get_todo_list':
           return await this.callEKPNotify('getTodo', {
-            type: params.type as number || 0,
+            type: params.type || 0,
             userId: context.userId,
             ...params,
           });
 
         case 'approve_todo':
           return await this.callEKPNotify('setTodoDone', {
-            todoId: params.todoId as string,
+            todoId: params.todoId,
             userId: context.userId,
-            comment: params.comment as string || '',
             ...params,
           });
 
         case 'reject_todo':
           return await this.callEKPNotify('deleteTodo', {
-            todoId: params.todoId as string,
+            todoId: params.todoId,
             userId: context.userId,
-            comment: params.comment as string || '',
             ...params,
           });
 
         case 'send_todo':
           return await this.callEKPNotify('sendTodo', {
-            target: params.target as string,
-            content: params.content as string,
-            userId: context.userId,
-            ...params,
-          });
-
-        case 'delegate_todo':
-          return await this.callEKPNotify('sendTodo', {
-            target: params.target as string,
-            content: params.content as string,
+            target: params.target,
+            content: params.content,
             userId: context.userId,
             ...params,
           });
 
         default:
           console.log('[RuleEngine] 未知技能代码:', skillCode);
-          return { 
-            code: '404',
-            msg: `技能未配置: ${skillCode}`,
-            data: null 
-          };
+          return { message: '技能未配置', skillCode };
       }
     } catch (error) {
       console.error('[RuleEngine] 技能调用失败:', error);
-      return {
-        code: '500',
-        msg: error instanceof Error ? error.message : '技能调用失败',
-        data: null,
-      };
+      throw error;
     }
   }
 
   /**
    * 调用 EKP 待办服务
    */
-  private async callEKPNotify(action: string, params: Record<string, unknown>): Promise<AgentResponse> {
+  private async callEKPNotify(action: string, params: Record<string, unknown>): Promise<unknown> {
     try {
-      // 构建请求体
-      const requestBody: Record<string, unknown> = {
-        action,
-        userId: params.userId as string || '',
-      };
-
-      // 根据 action 添加不同的参数
-      if (action === 'getTodoCount' || action === 'getTodo') {
-        requestBody.todoType = (params.type as number) || 0;
-      } else if (action === 'setTodoDone' || action === 'deleteTodo') {
-        requestBody.todoId = params.todoId as string;
-        requestBody.comment = params.comment as string || '';
-      } else if (action === 'sendTodo') {
-        requestBody.target = params.target as string;
-        requestBody.content = params.content as string;
-      } else if (action === 'updateTodo') {
-        requestBody.todoId = params.todoId as string;
-        requestBody.data = params.data;
-      }
-
-      // 调用 EKP API
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const url = `${baseUrl}/api/ekp`;
-      console.log('[RuleEngine] 调用EKP API:', url, requestBody);
-
-      const response = await fetch(url, {
+      const response = await fetch('http://localhost:5000/api/ekp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ action, ...params }),
       });
 
       const result = await response.json();
       console.log('[RuleEngine] EKP响应:', result);
-
-      // 转换 EKP API 响应格式为 AgentResponse 格式
-      if (result.success) {
-        return {
-          code: '200',
-          msg: result.message || `EKP ${action} 操作成功`,
-          data: {
-            action,
-            ...result,
-          },
-        };
-      } else {
-        return {
-          code: '500',
-          msg: result.message || `EKP ${action} 操作失败`,
-          data: null,
-        };
-      }
+      return result;
     } catch (error) {
       console.error('[RuleEngine] EKP调用失败:', error);
-      return {
-        code: '500',
-        msg: error instanceof Error ? error.message : 'EKP调用失败',
-        data: null,
-      };
+      throw error;
     }
   }
 }
