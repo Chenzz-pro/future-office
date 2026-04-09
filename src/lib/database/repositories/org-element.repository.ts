@@ -23,6 +23,7 @@ export class OrgElementRepository {
     const id = dto.fd_id || crypto.randomUUID();
     const now = new Date();
 
+    // 插入核心字段，包括 fd_hierarchy_id
     const sql = `
       INSERT INTO ${this.tableName} (
         fd_id,
@@ -41,10 +42,10 @@ export class OrgElementRepository {
         fd_super_leaderid,
         fd_parentorgid,
         fd_parentid,
-        fd_creator_id,
+        fd_hierarchy_id,
         fd_create_time,
         fd_alter_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     await dbManager.query(sql, [
@@ -64,13 +65,10 @@ export class OrgElementRepository {
       dto.fd_super_leaderid || null,
       dto.fd_parentorgid || null,
       dto.fd_parentid || null,
-      dto.fd_creator_id || null,
+      dto.fd_hierarchy_id || null, // 保存 EKP 返回的层级路径
       now,
       now
     ]);
-
-    // 更新层级ID
-    await this.updateHierarchyId(id);
 
     // 更新父级人员数量
     if (dto.fd_parentid) {
@@ -142,6 +140,10 @@ export class OrgElementRepository {
       fields.push('fd_parentid = ?');
       values.push(dto.fd_parentid);
     }
+    if (dto.fd_hierarchy_id !== undefined) {
+      fields.push('fd_hierarchy_id = ?');
+      values.push(dto.fd_hierarchy_id);
+    }
 
     if (fields.length === 0) {
       return;
@@ -154,9 +156,6 @@ export class OrgElementRepository {
     values.push(id);
 
     await dbManager.query(sql, values);
-
-    // 更新层级ID
-    await this.updateHierarchyId(id);
   }
 
   /**
@@ -299,7 +298,7 @@ export class OrgElementRepository {
         ) {
           const node = this.mapRowToTreeNode(row);
           node.children = buildTree(row.fd_id);
-          node.personCount = node.children.reduce((sum, child) => sum + child.personsNumber, 0) + row.fd_persons_number;
+          node.personCount = node.children.reduce((sum, child) => sum + (child.personCount || 0), 0) + row.fd_persons_number;
           nodes.push(node);
         }
       }
@@ -400,29 +399,9 @@ export class OrgElementRepository {
       id: row.fd_id,
       name: row.fd_name,
       type: row.fd_org_type,
-      typeLabel: row.fd_org_type === 1 ? '机构' : row.fd_org_type === 2 ? '部门' : '岗位',
-      order: row.fd_order,
-      no: row.fd_no,
-      isAvailable: !!row.fd_is_available,
-      isBusiness: !!row.fd_is_business,
-      email: row.fd_org_email,
-      personsNumber: row.fd_persons_number,
-      memo: row.fd_memo,
-      hierarchyId: row.fd_hierarchy_id,
-      createTime: new Date(row.fd_create_time),
-      isExternal: !!row.fd_is_external,
-      thisLeaderId: row.fd_this_leaderid,
-      thisLeaderName: row.fd_this_leader_name,
-      superLeaderId: row.fd_super_leaderid,
-      superLeaderName: row.fd_super_leader_name,
-      parentOrgId: row.fd_parentorgid,
-      parentOrgName: row.fd_parentorg_name,
-      parentId: row.fd_parentid,
-      parentName: row.fd_parent_name,
-      creatorId: row.fd_creator_id,
+      parentId: row.fd_parentid || row.fd_parentorgid,
       children: [],
-      personCount: 0,
-      level: (row.fd_hierarchy_id?.split('/').filter(Boolean).length || 1) - 1
+      personCount: row.fd_persons_number || 0,
     };
   }
 }

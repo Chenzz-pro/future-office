@@ -45,7 +45,19 @@ export class ChatSessionRepository {
   async findById(id: string): Promise<ChatSession | null> {
     const sql = 'SELECT * FROM chat_sessions WHERE id = ?';
     const { rows } = await dbManager.query<ChatSession>(sql, [id]);
-    return rows[0] || null;
+    const row = rows[0];
+
+    if (!row) return null;
+
+    // MySQL 返回下划线命名，转换为 TypeScript 驼峰命名
+    return {
+      id: (row as any).id as string,
+      userId: (row as any).user_id as string,
+      title: (row as any).title as string,
+      agentId: ((row as any).agent_id === null || (row as any).agent_id === undefined) ? undefined : (row as any).agent_id as string,
+      createdAt: (row as any).created_at as Date,
+      updatedAt: (row as any).updated_at as Date,
+    };
   }
 
   /**
@@ -58,8 +70,17 @@ export class ChatSessionRepository {
       ORDER BY updated_at DESC
       LIMIT ?
     `;
-    const { rows } = await dbManager.query<ChatSession>(sql, [userId, limit]);
-    return rows;
+    const { rows } = await dbManager.query(sql, [userId, limit]);
+
+    // MySQL 返回下划线命名，转换为 TypeScript 驼峰命名
+    return (rows as any[]).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      userId: row.user_id as string,
+      title: row.title as string,
+      agentId: (row.agent_id === null || row.agent_id === undefined) ? undefined : row.agent_id as string,
+      createdAt: row.created_at as Date,
+      updatedAt: row.updated_at as Date,
+    }));
   }
 
   /**
@@ -104,8 +125,17 @@ export class ChatSessionRepository {
       WHERE session_id = ?
       ORDER BY created_at ASC
     `;
-    const { rows } = await dbManager.query<ChatMessage>(sql, [sessionId]);
-    return rows;
+    const { rows } = await dbManager.query(sql, [sessionId]);
+
+    // MySQL 返回下划线命名，转换为 TypeScript 驼峰命名
+    return (rows as any[]).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      sessionId: row.session_id as string,
+      role: row.role as 'user' | 'assistant' | 'system',
+      content: row.content as string,
+      metadata: (row.metadata === null || row.metadata === undefined) ? undefined : row.metadata as Record<string, unknown>,
+      createdAt: row.created_at as Date,
+    }));
   }
 
   /**

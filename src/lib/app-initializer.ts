@@ -7,10 +7,10 @@
  */
 
 import { dbManager, databaseConfigRepository } from '@/lib/database';
-import mysql from 'mysql2/promise';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseConfig } from '@/lib/database';
+import { getOneAPIConfigRepository } from '@/lib/database';
 
 // 配置文件路径（用于存储数据库连接信息）
 const CONFIG_FILE_PATH = path.join(process.cwd(), '.db-config.json');
@@ -30,11 +30,18 @@ export async function initializeApp() {
 
     // 调试日志：输出所有环境变量
     console.log('[Initialize] 环境变量检查:', {
-      DB_HOST: envDbConfig.host ? '✅ 已设置' : '❌ 未设置',
+      DB_HOST: envDbConfig.host ? `✅ ${envDbConfig.host}` : '❌ 未设置',
       DB_PORT: envDbConfig.port,
-      DB_USER: envDbConfig.username ? '✅ 已设置' : '❌ 未设置',
-      DB_PASSWORD: envDbConfig.password ? '✅ 已设置' : '❌ 未设置',
-      DB_NAME: envDbConfig.databaseName ? '✅ 已设置' : '❌ 未设置',
+      DB_USER: envDbConfig.username ? `✅ ${envDbConfig.username}` : '❌ 未设置',
+      DB_PASSWORD: envDbConfig.password ? '✅ 已设置（长度:' + envDbConfig.password.length + '）' : '❌ 未设置',
+      DB_NAME: envDbConfig.databaseName ? `✅ ${envDbConfig.databaseName}` : '❌ 未设置',
+      NODE_ENV: process.env.NODE_ENV,
+      COZE_PROJECT_ENV: process.env.COZE_PROJECT_ENV,
+      '所有环境变量': {
+        ...envDbConfig,
+        NODE_ENV: process.env.NODE_ENV,
+        COZE_PROJECT_ENV: process.env.COZE_PROJECT_ENV,
+      },
     });
 
     // 2. 如果配置了环境变量，直接连接
@@ -58,18 +65,11 @@ export async function initializeApp() {
 
       try {
         // 测试连接
-        const testPool = mysql.createPool({
-          host: config.host,
-          port: config.port,
-          user: config.username,
-          password: config.password,
-          database: config.databaseName,
-          waitForConnections: true,
-          connectionLimit: 1,
-        });
-
-        await testPool.getConnection();
-        await testPool.end();
+        const testResult = await dbManager.testConnection(config);
+        if (!testResult.success) {
+          console.error('[Initialize] ❌ 环境变量数据库连接失败:', testResult.error);
+          throw new Error(testResult.error);
+        }
 
         // 连接成功
         await dbManager.connect(config);
@@ -106,18 +106,11 @@ export async function initializeApp() {
 
       try {
         // 测试连接
-        const testPool = mysql.createPool({
-          host: fileConfig.host,
-          port: fileConfig.port,
-          user: fileConfig.username,
-          password: fileConfig.password,
-          database: fileConfig.databaseName,
-          waitForConnections: true,
-          connectionLimit: 1,
-        });
-
-        await testPool.getConnection();
-        await testPool.end();
+        const testResult = await dbManager.testConnection(fileConfig);
+        if (!testResult.success) {
+          console.error('[Initialize] ❌ 配置文件数据库连接失败:', testResult.error);
+          throw new Error(testResult.error);
+        }
 
         // 连接成功
         await dbManager.connect(fileConfig);

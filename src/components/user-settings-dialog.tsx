@@ -78,6 +78,7 @@ export function UserSettingsDialog({ open, onClose, onKeysChange }: UserSettings
 
   const handleLogout = () => {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('current-user-id');
     localStorage.removeItem('authToken');
     window.location.href = '/login';
   };

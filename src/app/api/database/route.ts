@@ -4,8 +4,32 @@ import * as fs from 'fs';
 import * as path from 'path';
 import mysql from 'mysql2/promise';
 
+// 配置文件路径（用于存储数据库连接信息）
+// 使用绝对路径，避免路径问题
+const CONFIG_FILE_PATH = '/workspace/projects/.db-config.json';
+
 // 缓存最后激活的配置，用于页面刷新后自动重新连接
 let lastActiveConfig: import('@/lib/database').DatabaseConfig | null = null;
+
+/**
+ * 创建临时连接池（不指定数据库）
+ * 用于初始化数据库时创建数据库
+ */
+async function createTempPoolWithoutDatabase(
+  host: string,
+  port: number,
+  user: string,
+  password: string
+): Promise<mysql.Pool> {
+  return mysql.createPool({
+    host,
+    port,
+    user,
+    password,
+    waitForConnections: true,
+    connectionLimit: 1,
+  });
+}
 
 /**
  * POST /api/database?action=init
@@ -29,19 +53,17 @@ export async function POST(request: NextRequest) {
 
       // 读取 SQL 脚本
       const sqlScript = fs.readFileSync(
-        path.join(process.cwd(), 'database-schema.sql'),
+        path.join(process.cwd(), 'database-schema-org-structure.sql'),
         'utf-8'
       );
 
       // 创建临时连接（不指定数据库）
-      const tempPool = mysql.createPool({
+      const tempPool = await createTempPoolWithoutDatabase(
         host,
-        port: port ?? 3306,
-        user: username,
-        password,
-        waitForConnections: true,
-        connectionLimit: 1,
-      });
+        port ?? 3306,
+        username,
+        password
+      );
 
       // 创建数据库（如果不存在）
       await tempPool.query(
@@ -165,6 +187,66 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       } as unknown as import('@/lib/database').DatabaseConfig);
 
+      // 自动执行角色表迁移（确保兼容新旧数据库）
+      console.log('[init] 开始执行角色表迁移检查...');
+      try {
+        const migrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (migrateResponse.ok) {
+          const migrateResult = await migrateResponse.json();
+          console.log('[init] 角色表迁移完成:', migrateResult.message);
+        } else {
+          console.warn('[init] 角色表迁移失败，但不影响初始化流程');
+        }
+      } catch (migrateError) {
+        console.warn('[init] 角色表迁移失败，但不影响初始化流程:', migrateError);
+      }
+
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[init] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[init] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[init] Agent架构迁移失败，但不影响初始化流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[init] Agent架构迁移失败，但不影响初始化流程:', agentMigrateError);
+      }
+
+      // 自动执行组织架构同步表初始化（确保组织架构同步功能可用）
+      console.log('[init] 开始执行组织架构同步表初始化检查...');
+      try {
+        const syncInitResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/init/sync-tables`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (syncInitResponse.ok) {
+          const syncInitResult = await syncInitResponse.json();
+          console.log('[init] 组织架构同步表初始化完成:', syncInitResult.message);
+        } else {
+          console.warn('[init] 组织架构同步表初始化失败，但不影响初始化流程');
+        }
+      } catch (syncInitError) {
+        console.warn('[init] 组织架构同步表初始化失败，但不影响初始化流程:', syncInitError);
+      }
+
       return NextResponse.json({
         success: true,
         message: '数据库初始化成功',
@@ -183,21 +265,19 @@ export async function POST(request: NextRequest) {
       }
 
       // 创建临时连接（不指定数据库）
-      const tempPool = mysql.createPool({
+      const tempPool = await createTempPoolWithoutDatabase(
         host,
-        port: port ?? 3306,
-        user: username,
-        password,
-        waitForConnections: true,
-        connectionLimit: 1,
-      });
+        port ?? 3306,
+        username,
+        password
+      );
 
       // 删除数据库（如果存在）
       await tempPool.query(`DROP DATABASE IF EXISTS \`${databaseName}\``);
 
       // 读取 SQL 脚本
       const sqlScript = fs.readFileSync(
-        path.join(process.cwd(), 'database-schema.sql'),
+        path.join(process.cwd(), 'database-schema-org-structure.sql'),
         'utf-8'
       );
 
@@ -334,6 +414,46 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       };
 
+      // 自动执行角色表迁移（确保兼容新旧数据库）
+      console.log('[recreate] 开始执行角色表迁移检查...');
+      try {
+        const migrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (migrateResponse.ok) {
+          const migrateResult = await migrateResponse.json();
+          console.log('[recreate] 角色表迁移完成:', migrateResult.message);
+        } else {
+          console.warn('[recreate] 角色表迁移失败，但不影响初始化流程');
+        }
+      } catch (migrateError) {
+        console.warn('[recreate] 角色表迁移失败，但不影响初始化流程:', migrateError);
+      }
+
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[recreate] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[recreate] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[recreate] Agent架构迁移失败，但不影响初始化流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[recreate] Agent架构迁移失败，但不影响初始化流程:', agentMigrateError);
+      }
+
       return NextResponse.json({
         success: true,
         message: '数据库重新创建成功',
@@ -365,25 +485,231 @@ export async function POST(request: NextRequest) {
 
     if (action === 'connect') {
       const body = await request.json();
-      const { configId } = body;
 
-      const config = await databaseConfigRepository.findById(configId);
-      if (!config) {
+      // 支持两种方式：
+      // 1. 传递 configId（从数据库读取配置）
+      // 2. 传递完整的配置对象（直接连接）
+      let config: import('@/lib/database').DatabaseConfig | null = null;
+
+      if (body.configId) {
+        config = await databaseConfigRepository.findById(body.configId);
+        if (!config) {
+          return NextResponse.json(
+            { success: false, error: '配置不存在' },
+            { status: 404 }
+          );
+        }
+      } else if (body.host && body.databaseName && body.username) {
+        // 使用传递的配置对象
+        config = {
+          id: body.id || 'default',
+          name: body.name || '默认配置',
+          type: 'mysql',
+          host: body.host,
+          port: body.port ?? 3306,
+          databaseName: body.databaseName,
+          username: body.username,
+          password: body.password,
+          isActive: body.isActive ?? true,
+          isDefault: body.isDefault ?? false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as import('@/lib/database').DatabaseConfig;
+
+        console.log('[API:Database:Connect] 收到的数据库配置:', {
+          host: config.host,
+          port: config.port,
+          databaseName: config.databaseName,
+          username: config.username,
+          password: config.password ? `长度: ${config.password.length}, 前3位: ${config.password.substring(0, 3)}, 后3位: ${config.password.substring(Math.max(0, config.password.length - 3))}` : '空',
+        });
+      } else {
         return NextResponse.json(
-          { success: false, error: '配置不存在' },
-          { status: 404 }
+          { success: false, error: '缺少必要参数（configId 或 配置信息）' },
+          { status: 400 }
         );
       }
 
+      // 先连接数据库
+      console.log('[API:Database:Connect] 开始连接数据库...');
       await dbManager.connect(config);
-      await databaseConfigRepository.setActive(configId);
+      console.log('[API:Database:Connect] 数据库连接成功');
+
+      // 验证连接是否真的成功
+      if (!dbManager.isConnected()) {
+        throw new Error('数据库连接失败：连接池未正确创建');
+      }
+
+      // 执行一个简单查询，验证连接是否可用
+      try {
+        await dbManager.query('SELECT 1');
+      } catch (error) {
+        throw new Error('数据库连接失败：无法执行查询');
+      }
+
+      console.log('[API:Database:Connect] ✅ 数据库连接验证成功');
+
+      // 检查 database_configs 表是否存在，如果不存在则创建
+      try {
+        console.log('[API:Database:Connect] 检查 database_configs 表是否存在...');
+        const checkResult = await dbManager.query<{ count: number }>(
+          'SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
+          ['database_configs']
+        );
+        const tableExists = checkResult.rows[0]?.count > 0;
+
+        if (!tableExists) {
+          console.log('[API:Database:Connect] database_configs 表不存在，创建中...');
+          await dbManager.query(`
+            CREATE TABLE database_configs (
+              id VARCHAR(36) PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              type VARCHAR(20) NOT NULL,
+              host VARCHAR(255) NOT NULL,
+              port INT NOT NULL,
+              database_name VARCHAR(100) NOT NULL,
+              username VARCHAR(100) NOT NULL,
+              password VARCHAR(255) NOT NULL,
+              is_active BOOLEAN DEFAULT FALSE,
+              is_default BOOLEAN DEFAULT FALSE,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+          `);
+          console.log('[API:Database:Connect] ✅ database_configs 表创建成功');
+        } else {
+          console.log('[API:Database:Connect] database_configs 表已存在，跳过创建');
+        }
+      } catch (err) {
+        console.warn('[API:Database:Connect] 检查或创建 database_configs 表失败:', err);
+      }
+
+      // 尝试保存配置到数据库
+      try {
+        console.log('[API:Database:Connect] 保存数据库配置...');
+        const existingConfig = await databaseConfigRepository.findById(config.id);
+        const configData: Omit<import('@/lib/database').DatabaseConfig, 'id' | 'createdAt' | 'updatedAt'> = {
+          name: config.name,
+          type: config.type,
+          host: config.host,
+          port: config.port,
+          databaseName: config.databaseName,
+          username: config.username,
+          password: config.password,
+          isActive: config.isActive,
+          isDefault: config.isDefault,
+        };
+
+        if (!existingConfig) {
+          await databaseConfigRepository.create(configData, config.id);
+          console.log('[API:Database:Connect] ✅ 数据库配置创建成功');
+        } else {
+          await databaseConfigRepository.update(config.id, configData);
+          console.log('[API:Database:Connect] ✅ 数据库配置更新成功');
+        }
+
+        // 设置为激活状态
+        await databaseConfigRepository.setActive(config.id);
+        console.log('[API:Database:Connect] ✅ 数据库配置已设置为激活状态');
+      } catch (err) {
+        console.warn('[API:Database:Connect] 保存配置失败:', err);
+        // 保存失败不影响连接成功
+      }
 
       // 缓存配置，用于页面刷新后自动重新连接
       lastActiveConfig = config;
 
+      // 保存配置到文件（用于应用重启后自动重连）
+      try {
+        saveConfigToFile(config);
+        console.log('[API:Database:Connect] ✅ 数据库配置已保存到文件');
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[API:Database:Connect] ❌ 保存配置文件失败:', errorMsg);
+        console.warn('[API:Database:Connect] ⚠️  文件系统可能是只读的，应用重启后需要重新配置数据库');
+        console.warn('[API:Database:Connect] 💡 建议使用环境变量配置数据库，避免重启后丢失配置');
+        console.warn('[API:Database:Connect] 💡 环境变量示例：.env.example');
+      }
+
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[API:Database:Connect] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[API:Database:Connect] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[API:Database:Connect] Agent架构迁移失败，但不影响连接流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[API:Database:Connect] Agent架构迁移失败，但不影响连接流程:', agentMigrateError);
+      }
+
+      // 自动执行EKP接口表初始化（确保EKP接口管理中心可用）
+      console.log('[API:Database:Connect] 开始执行EKP接口表初始化检查...');
+      try {
+        const ekpInitResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/init/ekp-interfaces`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (ekpInitResponse.ok) {
+          const ekpInitResult = await ekpInitResponse.json();
+          console.log('[API:Database:Connect] EKP接口表初始化完成:', ekpInitResult.message);
+        } else {
+          console.warn('[API:Database:Connect] EKP接口表初始化失败，但不影响连接流程');
+        }
+      } catch (ekpInitError) {
+        console.warn('[API:Database:Connect] EKP接口表初始化失败，但不影响连接流程:', ekpInitError);
+      }
+
+      // 自动执行组织架构同步表初始化（确保组织架构同步功能可用）
+      console.log('[API:Database:Connect] 开始执行组织架构同步表初始化检查...');
+      try {
+        const syncInitResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/init/sync-tables`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (syncInitResponse.ok) {
+          const syncInitResult = await syncInitResponse.json();
+          console.log('[API:Database:Connect] 组织架构同步表初始化完成:', syncInitResult.message);
+        } else {
+          console.warn('[API:Database:Connect] 组织架构同步表初始化失败，但不影响连接流程');
+        }
+      } catch (syncInitError) {
+        console.warn('[API:Database:Connect] 组织架构同步表初始化失败，但不影响连接流程:', syncInitError);
+      }
+
+      console.log('[API:Database:Connect] ✅ 数据库连接流程完成');
+
+      // 检查系统是否已初始化（检查是否有 admin 用户）
+      let initialized = false;
+      try {
+        const checkResult = await dbManager.query<{ count: number }>(
+          'SELECT COUNT(*) as count FROM sys_org_person WHERE fd_login_name = ?',
+          ['admin']
+        );
+        initialized = (checkResult.rows[0]?.count || 0) > 0;
+        console.log('[API:Database:Connect] 系统初始化状态:', initialized);
+      } catch (err) {
+        console.warn('[API:Database:Connect] 检查系统初始化状态失败:', err);
+      }
+
       return NextResponse.json({
         success: true,
-        message: '数据库连接成功',
+        message: '数据库连接成功，系统初始化完成',
+        initialized: initialized,
       });
     }
 
@@ -442,7 +768,7 @@ export async function POST(request: NextRequest) {
       const fs = await import('fs');
       const path = await import('path');
       const sqlScript = fs.readFileSync(
-        path.join(process.cwd(), 'database-schema.sql'),
+        path.join(process.cwd(), 'database-schema-org-structure.sql'),
         'utf-8'
       );
 
@@ -517,6 +843,36 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       };
 
+      // 保存配置到文件（用于应用重启后自动重连）
+      try {
+        saveConfigToFile(lastActiveConfig);
+        console.log('[API:Database:Add] ✅ 数据库配置已保存到文件');
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[API:Database:Add] ❌ 保存配置文件失败:', errorMsg);
+        console.warn('[API:Database:Add] ⚠️  文件系统可能是只读的，应用重启后需要重新配置数据库');
+      }
+
+      // 自动执行Agent架构迁移（确保兼容新旧数据库）
+      console.log('[API:Database:Add] 开始执行Agent架构迁移检查...');
+      try {
+        const agentMigrateResponse = await fetch(`${process.env.COZE_PROJECT_DOMAIN_DEFAULT || 'http://localhost:5000'}/api/database/migrate/agent-architecture`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (agentMigrateResponse.ok) {
+          const agentMigrateResult = await agentMigrateResponse.json();
+          console.log('[API:Database:Add] Agent架构迁移完成:', agentMigrateResult.message);
+        } else {
+          console.warn('[API:Database:Add] Agent架构迁移失败，但不影响添加流程');
+        }
+      } catch (agentMigrateError) {
+        console.warn('[API:Database:Add] Agent架构迁移失败，但不影响添加流程:', agentMigrateError);
+      }
+
       return NextResponse.json({
         success: true,
         message: '数据库配置添加成功并已连接',
@@ -549,6 +905,51 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * 保存配置到文件
+ */
+function saveConfigToFile(config: import('@/lib/database').DatabaseConfig): void {
+  try {
+    const configData = {
+      id: config.id,
+      name: config.name,
+      type: config.type,
+      host: config.host,
+      port: config.port,
+      databaseName: config.databaseName,
+      username: config.username,
+      password: config.password,
+      isActive: config.isActive,
+      isDefault: config.isDefault,
+      createdAt: config.createdAt,
+      updatedAt: config.updatedAt,
+    };
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(configData, null, 2));
+  } catch (err) {
+    console.error('[API:Database] ❌ 保存配置文件失败:', err);
+    throw err;
+  }
+}
+
+/**
+ * 从配置文件加载配置
+ */
+function loadConfigFromFile(): import('@/lib/database').DatabaseConfig | null {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      const config = JSON.parse(data) as import('@/lib/database').DatabaseConfig;
+      // 确保日期字段是 Date 对象
+      if (config.createdAt) config.createdAt = new Date(config.createdAt);
+      if (config.updatedAt) config.updatedAt = new Date(config.updatedAt);
+      return config;
+    }
+  } catch (err) {
+    console.error('[API:Database] ❌ 读取配置文件失败:', err);
+  }
+  return null;
+}
+
+/**
  * GET /api/database
  * 获取数据库配置列表和状态
  */
@@ -570,55 +971,93 @@ export async function GET() {
   } catch (error) {
     console.error('获取数据库配置失败:', error);
 
-    // 如果错误是因为数据库未连接，尝试使用缓存的配置自动重新连接
-    if (error instanceof Error && error.message === '数据库未连接' && lastActiveConfig) {
-      console.log('[GET] 数据库未连接，尝试使用缓存的配置自动重新连接...');
+    // 如果错误是因为数据库未连接，尝试从配置文件读取并自动重新连接
+    if (error instanceof Error && error.message === '数据库未连接') {
+      const fileConfig = loadConfigFromFile();
 
-      try {
-        // 使用临时连接池测试连接
-        const testPool = mysql.createPool({
-          host: lastActiveConfig.host,
-          port: lastActiveConfig.port,
-          user: lastActiveConfig.username,
-          password: lastActiveConfig.password,
-          database: lastActiveConfig.databaseName,
-          waitForConnections: true,
-          connectionLimit: 1,
-        });
+      // 优先尝试配置文件
+      if (fileConfig) {
+        console.log('[GET] 数据库未连接，尝试从配置文件自动重新连接...');
 
-        await testPool.getConnection();
-        await testPool.end();
+        try {
+          // 使用 dbManager 测试连接
+          const testResult = await dbManager.testConnection(fileConfig);
+          if (!testResult.success) {
+            console.error('[GET] 配置文件测试连接失败:', testResult.error);
+            throw new Error(testResult.error);
+          }
 
-        // 连接成功，使用 dbManager 连接
-        await dbManager.connect(lastActiveConfig);
+          // 连接成功，使用 dbManager 连接
+          await dbManager.connect(fileConfig);
 
-        // 重新读取配置列表
-        const configs = await databaseConfigRepository.findAll();
-        const isConnected = dbManager.isConnected();
-        const currentConfig = dbManager.getConfig();
+          // 更新缓存
+          lastActiveConfig = fileConfig;
 
-        console.log('[GET] 自动重新连接成功');
+          // 重新读取配置列表
+          const configs = await databaseConfigRepository.findAll();
+          const isConnected = dbManager.isConnected();
+          const currentConfig = dbManager.getConfig();
 
-        return NextResponse.json({
-          success: true,
-          data: {
-            configs,
-            isConnected,
-            currentConfig,
-          },
-        });
-      } catch (connectError) {
-        console.error('[GET] 自动重新连接失败:', connectError);
-        // 连接失败，返回未连接状态
-        return NextResponse.json({
-          success: true,
-          data: {
-            configs: [],
-            isConnected: false,
-            currentConfig: null,
-          },
-        });
+          console.log('[GET] ✅ 通过配置文件自动重新连接成功');
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              configs,
+              isConnected,
+              currentConfig,
+            },
+          });
+        } catch (connectError) {
+          console.error('[GET] 配置文件自动重新连接失败:', connectError);
+        }
       }
+
+      // 尝试使用内存缓存的配置自动重新连接
+      if (lastActiveConfig) {
+        console.log('[GET] 数据库未连接，尝试使用内存缓存的配置自动重新连接...');
+
+        try {
+          // 使用 dbManager 测试连接
+          const testResult = await dbManager.testConnection(lastActiveConfig);
+          if (!testResult.success) {
+            console.error('[GET] 内存缓存配置测试连接失败:', testResult.error);
+            throw new Error(testResult.error);
+          }
+
+          // 连接成功，使用 dbManager 连接
+          await dbManager.connect(lastActiveConfig);
+
+          // 重新读取配置列表
+          const configs = await databaseConfigRepository.findAll();
+          const isConnected = dbManager.isConnected();
+          const currentConfig = dbManager.getConfig();
+
+          console.log('[GET] 自动重新连接成功');
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              configs,
+              isConnected,
+              currentConfig,
+            },
+          });
+        } catch (connectError) {
+          console.error('[GET] 自动重新连接失败:', connectError);
+        }
+      }
+
+      // 所有重连尝试都失败，返回未连接状态
+      console.log('[GET] 所有重连尝试失败，返回未连接状态');
+      return NextResponse.json({
+        success: true,
+        data: {
+          configs: [],
+          isConnected: false,
+          currentConfig: null,
+        },
+      });
     }
 
     // 检查是否有环境变量配置，尝试使用环境变量重新连接
@@ -651,18 +1090,11 @@ export async function GET() {
           };
 
           // 测试连接
-          const testPool = mysql.createPool({
-            host: config.host,
-            port: config.port,
-            user: config.username,
-            password: config.password,
-            database: config.databaseName,
-            waitForConnections: true,
-            connectionLimit: 1,
-          });
-
-          await testPool.getConnection();
-          await testPool.end();
+          const testResult = await dbManager.testConnection(config);
+          if (!testResult.success) {
+            console.error('[GET] 环境变量测试连接失败:', testResult.error);
+            throw new Error(testResult.error);
+          }
 
           // 连接成功
           await dbManager.connect(config);

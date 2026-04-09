@@ -86,10 +86,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
   const { sessions, currentSession, setCurrentSession, createSession, addMessage, updateSession } = useChatHistory();
 
-  // 获取当前用户ID
-  const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('currentUser') || '{}') : null;
-  const userId = currentUser?.id;
-
   // 使用配置钩子（仅全局配置）
   const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
 
@@ -97,6 +93,33 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   useEffect(() => {
     checkDatabaseConnection();
   }, []);
+
+  const checkDatabaseConnection = async () => {
+    try {
+      setDbCheckLoading(true);
+      const response = await fetch('/api/database');
+      const data = await response.json();
+      setDbConnected(data.success || false);
+      if (!data.success) {
+        console.log('[NewChat] 数据库未连接:', data.error);
+      }
+    } catch (error) {
+      console.error('[NewChat] 检查数据库连接失败:', error);
+      setDbConnected(false);
+    } finally {
+      setDbCheckLoading(false);
+    }
+  };
+
+  // 设置默认模型
+  useEffect(() => {
+    if (activeKey) {
+      if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
+      else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
+      else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
+      else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
+    }
+  }, [activeKey]);
 
   const checkDatabaseConnection = async () => {
     try {
@@ -160,146 +183,142 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   }, []);
 
   const sendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    const trimmedInput = inputValue.trim();
+    if (!trimmedInput || isLoading) return;
 
     console.log('[sendMessage] 开始发送消息');
-    console.log('[sendMessage] dbConnected:', dbConnected);
-    console.log('[sendMessage] activeKey:', activeKey ? '已配置' : '未配置');
+
+    // 立即设置 loading 状态，防止重复发送
+    setIsLoading(true);
+
+    // 获取当前用户信息
+    const userId = localStorage.getItem('current-user-id') || '';
+    const deptId = ''; // TODO: 从用户信息中获取部门ID
+    const role = 'user'; // TODO: 从用户信息中获取角色
+
+    if (!userId) {
+      console.error('[sendMessage] 用户ID未找到，请先登录');
+      setError('⚠️ 未找到用户信息，请先登录');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[sendMessage] 用户信息:', { userId, deptId, role });
 
     // 如果没有当前会话，创建一个
     let session = currentSession;
     if (!session) {
       console.log('[sendMessage] 创建新会话');
-      session = createSession(selectedModel, activeKey?.provider || 'unknown');
+      try {
+        session = await createSession(selectedModel, activeKey?.provider || 'unknown');
+      } catch (err) {
+        console.error('[sendMessage] 创建会话失败:', err);
+        setError('创建会话失败，请重试');
+        setIsLoading(false);
+        return;
+      }
     }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue.trim(),
+      content: trimmedInput,
       timestamp: new Date(),
     };
 
     console.log('[sendMessage] 添加用户消息:', userMessage.content);
 
-    // 先添加用户消息到界面
-    addMessage(session.id, userMessage);
-    setInputValue('');
-    setIsLoading(true);
-    setError(null);
-
-    // 检查数据库连接和API配置
-    if (!dbConnected) {
-      console.log('[sendMessage] 数据库未连接');
-      setError('数据库未连接，消息已显示但无法保存到历史记录。请稍后重试或联系管理员检查数据库配置。');
-      setIsLoading(false);
-      return;
-    }
-
-    if (!activeKey) {
-      console.log('[sendMessage] API Key 未配置');
-      setError('API Key 未配置，消息已显示但无法获取 AI 回复。请联系管理员配置 AI 模型 API Key。');
-      setIsLoading(false);
-      return;
-    }
-
-    // 添加用户消息
-    addMessage(session.id, userMessage);
-    setInputValue('');
-    setIsLoading(true);
-    setError(null);
-
-    // 构建消息历史
-    const chatMessages = [
-      { role: 'system' as const, content: '你是一个有帮助的 AI 助手。' },
-      ...(session.messages.map(m => ({ role: m.role, content: m.content }))),
-      { role: 'user' as const, content: userMessage.content },
-    ];
-
-    console.log('[sendMessage] 调用 Chat API');
-    console.log('[sendMessage] 消息数量:', chatMessages.length);
-    console.log('[sendMessage] 模型:', selectedModel);
-    console.log('[sendMessage] 提供商:', activeKey.provider);
-
     try {
+      // 先添加用户消息到会话中（等待完成）
+      console.log('[sendMessage] 开始添加用户消息到会话');
+      await addMessage(session.id, userMessage);
+      console.log('[sendMessage] 用户消息已添加到会话');
+
+      // 清空输入框和错误信息（在消息添加成功后）
+      setInputValue('');
+      setError(null);
+
+      // 构建对话历史（使用添加用户消息之前的历史）
+      const conversationHistory = session.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      console.log('[sendMessage] 调用新的统一聊天API');
+      console.log('[sendMessage] 对话历史长度:', conversationHistory.length);
+      console.log('[sendMessage] 对话历史内容:', conversationHistory.map(m => `${m.role}: ${m.content.substring(0, 30)}...`));
+
+      // 添加超时机制，防止 API 调用卡住
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error('[sendMessage] API 调用超时');
+      }, 30000); // 30秒超时
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
-          messages: chatMessages,
-          model: selectedModel,
-          apiKey: activeKey.apiKey,
-          baseUrl: activeKey.baseUrl,
-          provider: activeKey.provider,
+          message: userMessage.content,
+          userId,
+          deptId,
+          role,
+          conversationHistory,
         }),
       });
 
-      console.log('[sendMessage] Chat API 响应状态:', response.status);
+      clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[sendMessage] Chat API 错误:', errorData);
-        throw new Error(errorData.error || '请求失败');
+      console.log('[sendMessage] API 响应:', { status: response.status, ok: response.ok });
+
+      const data = await response.json();
+      console.log('[sendMessage] 响应数据:', JSON.stringify(data, null, 2));
+
+      if (!response.ok || !data.success) {
+        console.error('[sendMessage] API 错误:', data);
+        throw new Error(data.error || '请求失败');
       }
-
-      // 流式读取响应
-      const reader = response.body?.getReader();
-      if (!reader) {
-        console.error('[sendMessage] 无法读取响应');
-        throw new Error('无法读取响应');
-      }
-
-      let assistantContent = '';
-      const decoder = new TextDecoder();
-      let chunksReceived = 0;
-
-      console.log('[sendMessage] 开始读取流式响应');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          console.log('[sendMessage] 流式响应结束，共收到', chunksReceived, '个数据块');
-          break;
-        }
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        chunksReceived++;
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed === '' || trimmed === 'data: [DONE]') continue;
-
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(trimmed.slice(6));
-              if (data.content) {
-                assistantContent += data.content;
-                console.log('[sendMessage] 收到内容片段:', assistantContent.length, '字符');
-              }
-            } catch (err) {
-              console.error('[sendMessage] 解析数据块失败:', err);
-            }
-          }
-        }
-      }
-
-      console.log('[sendMessage] 助手回复完成，总长度:', assistantContent.length);
 
       // 添加助手消息
-      if (assistantContent) {
-        console.log('[sendMessage] 添加助手消息');
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: assistantContent,
-          timestamp: new Date(),
-        };
-        addMessage(session.id, assistantMessage);
+      const assistantContent = data.data?.content || '处理完成';
+      console.log('[sendMessage] 助手回复内容:', assistantContent);
+      console.log('[sendMessage] 助手回复长度:', assistantContent.length);
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: assistantContent,
+        timestamp: new Date(),
+      };
+
+      console.log('[sendMessage] 准备添加助手消息:', assistantMessage);
+
+      if (session) {
+        await addMessage(session.id, assistantMessage);
+        console.log('[sendMessage] 助手消息已添加');
+      } else {
+        console.warn('[sendMessage] 会话不存在，无法添加助手消息');
       }
     } catch (err) {
       console.error('[sendMessage] Chat error:', err);
-      setError(err instanceof Error ? err.message : '请求失败，请重试');
+
+      // 区分不同类型的错误
+      let errorMessage = '请求失败，请重试';
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = '请求超时，请检查网络连接后重试';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
+      console.error('[sendMessage] 错误详情:', {
+        message: errorMessage,
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
       console.log('[sendMessage] 发送消息流程结束');

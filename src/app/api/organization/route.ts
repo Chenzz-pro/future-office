@@ -1,88 +1,61 @@
 /**
  * 组织架构管理 API
- * 提供机构、部门、岗位、人员的增删改查功能
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { orgElementRepository } from '@/lib/database/repositories/org-element.repository';
-import { orgPersonRepository } from '@/lib/database/repositories/org-person.repository';
-import { OrgElementType, OrgElementDTO, OrgPersonDTO, OrgTreeNode, OrgPerson } from '@/types/org-structure';
+import { dbManager } from '@/lib/database/manager';
+import { hashPassword, generateRandomPassword } from '@/lib/password/password-utils';
+
+export async function POST(request: NextRequest) {
+  try {
+    const { action, type, data, id } = await request.json();
+
+    console.log('[API:Organization] 收到请求', { action, type, data, id });
+
+    if (!action) {
+      return NextResponse.json({ success: false, error: '缺少操作类型' }, { status: 400 });
+    }
+
+    switch (action) {
+      case 'create':
+        return await createOrgElement(type, data);
+      case 'update':
+        return await updateOrgElement(type, id, data);
+      case 'delete':
+        return await deleteOrgElement(type, id);
+      default:
+        return NextResponse.json({ success: false, error: '无效的操作类型' }, { status: 400 });
+    }
+  } catch (error: unknown) {
+    console.error('[API:Organization] 操作错误:', error);
+    const errorMessage = error instanceof Error ? error.message : '服务器错误';
+    return NextResponse.json(
+      { success: false, error: errorMessage },
+      { status: 500 }
+    );
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
-    const type = searchParams.get('type'); // organization, department, position, person
 
-    switch (action) {
-      case 'tree':
-        // 获取组织架构树
-        const typeStr = searchParams.get('type');
-        const treeType = typeStr ? (parseInt(typeStr) as OrgElementType) : undefined;
-        const rootId = searchParams.get('rootId') || undefined;
-        const tree = await orgElementRepository.getTree(treeType, rootId);
-        return NextResponse.json({ success: true, data: tree });
-
-      case 'list':
-        // 获取列表
-        if (type === 'person') {
-          // 获取人员列表
-          const deptId = searchParams.get('deptId') || undefined;
-          const postId = searchParams.get('postId') || undefined;
-          const keyword = searchParams.get('keyword') || undefined;
-          const page = parseInt(searchParams.get('page') || '1');
-          const pageSize = parseInt(searchParams.get('pageSize') || '20');
-
-          const result = await orgPersonRepository.findList({
-            fd_dept_id: deptId,
-            fd_post_id: postId,
-            keyword,
-            page,
-            pageSize
-          });
-          return NextResponse.json({ success: true, data: result });
-        } else {
-          // 获取机构/部门/岗位列表
-          const orgType = type ? parseInt(type) as OrgElementType : undefined;
-          const parentId = searchParams.get('parentId') || undefined;
-          const parentOrgId = searchParams.get('parentOrgId') || undefined;
-          const keyword = searchParams.get('keyword') || undefined;
-
-          const elements = await orgElementRepository.findList({
-            fd_org_type: orgType,
-            fd_parentid: parentId,
-            fd_parentorgid: parentOrgId,
-            keyword
-          });
-          return NextResponse.json({ success: true, data: elements });
-        }
-
-      case 'detail':
-        // 获取详情
-        const id = searchParams.get('id');
-        if (!id) {
-          return NextResponse.json({ success: false, error: '缺少ID参数' }, { status: 400 });
-        }
-
-        if (type === 'person') {
-          const person = await orgPersonRepository.findById(id);
-          if (!person) {
-            return NextResponse.json({ success: false, error: '人员不存在' }, { status: 404 });
-          }
-          return NextResponse.json({ success: true, data: person });
-        } else {
-          const element = await orgElementRepository.findById(id);
-          if (!element) {
-            return NextResponse.json({ success: false, error: '组织元素不存在' }, { status: 404 });
-          }
-          return NextResponse.json({ success: true, data: element });
-        }
-
-      default:
-        return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
+    if (action === 'tree') {
+      const type = searchParams.get('type');
+      return await getTreeData(type ? parseInt(type) : 1);
     }
+
+    if (action === 'list') {
+      const type = searchParams.get('type');
+      const parentId = searchParams.get('parentId');
+      const keyword = searchParams.get('keyword');
+      return await getOrgList(type || 'department', parentId || '', keyword || '', searchParams);
+    }
+
+    return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
   } catch (error: unknown) {
-    console.error('组织架构API错误:', error);
+    console.error('获取组织数据错误:', error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : '服务器错误' },
       { status: 500 }
@@ -90,65 +63,516 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { action, type, data } = body;
+// 创建组织元素
+async function createOrgElement(type: string, data: Record<string, unknown>) {
+  console.log('[createOrgElement] 开始创建', { type, data });
 
-    switch (action) {
-      case 'create':
-        // 创建
-        if (type === 'person') {
-          const personDTO = data as OrgPersonDTO;
-          const personId = await orgPersonRepository.create(personDTO);
-          const person = await orgPersonRepository.findById(personId);
-          return NextResponse.json({ success: true, data: person });
-        } else {
-          const elementDTO = data as OrgElementDTO;
-          const elementId = await orgElementRepository.create(elementDTO);
-          const element = await orgElementRepository.findById(elementId);
-          return NextResponse.json({ success: true, data: element });
-        }
+  const id = crypto.randomUUID();
 
-      case 'update':
-        // 更新
-        const { id } = body;
-        if (!id) {
-          return NextResponse.json({ success: false, error: '缺少ID参数' }, { status: 400 });
-        }
+  let tableName = 'sys_org_element';
+  let orgType = 1;
 
-        if (type === 'person') {
-          await orgPersonRepository.update(id, data);
-          const person = await orgPersonRepository.findById(id);
-          return NextResponse.json({ success: true, data: person });
-        } else {
-          await orgElementRepository.update(id, data);
-          const element = await orgElementRepository.findById(id);
-          return NextResponse.json({ success: true, data: element });
-        }
-
-      case 'delete':
-        // 删除
-        const { id: deleteId } = body;
-        if (!deleteId) {
-          return NextResponse.json({ success: false, error: '缺少ID参数' }, { status: 400 });
-        }
-
-        if (type === 'person') {
-          await orgPersonRepository.delete(deleteId);
-        } else {
-          await orgElementRepository.delete(deleteId);
-        }
-        return NextResponse.json({ success: true, message: '删除成功' });
-
-      default:
-        return NextResponse.json({ success: false, error: '无效的操作' }, { status: 400 });
-    }
-  } catch (error: unknown) {
-    console.error('组织架构API错误:', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
-      { status: 500 }
-    );
+  if (type === 'organization') {
+    orgType = 1;
+  } else if (type === 'department') {
+    orgType = 2;
+  } else if (type === 'position') {
+    orgType = 3;
+  } else if (type === 'person') {
+    tableName = 'sys_org_person';
   }
+
+  console.log('[createOrgElement] 表名和类型', { tableName, orgType });
+
+  if (type === 'person') {
+    // 创建人员（sys_org_person 就是系统用户表）
+    // 如果没有提供密码，生成随机密码
+    const password = (data.fd_password as string) || generateRandomPassword(12, {
+      includeNumbers: true,
+      includeSpecialChars: false,
+      includeUppercase: true,
+    });
+    const hashedPassword = await hashPassword(password);
+
+    await dbManager.query(
+      `INSERT INTO sys_org_person (
+        fd_id, fd_name, fd_no, fd_email, fd_mobile, fd_login_name, fd_memo, fd_order, fd_password,
+        fd_dept_id, fd_post_id, fd_rtx_account, fd_is_login_enabled, fd_role
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        data.fd_name,
+        data.fd_no || '',
+        data.fd_email || '',
+        data.fd_mobile || '',
+        data.fd_login_name,
+        data.fd_memo || '',
+        data.fd_order || 0,
+        hashedPassword,
+        data.fd_dept_id || null,
+        data.fd_post_id || null,
+        data.fd_rtx_account || null,
+        1, // fd_is_login_enabled: 默认允许登录
+        data.fd_role || 'user', // fd_role: 默认普通用户
+      ]
+    );
+    console.log('[createOrgElement] 人员创建成功', { id, loginName: data.fd_login_name });
+
+    // 返回密码（仅当是自动生成时）
+    const isAutoGenerated = !data.fd_password;
+    return NextResponse.json({
+      success: true,
+      data: { id },
+      message: isAutoGenerated ? `人员创建成功！登录密码：${password}` : '人员创建成功',
+      ...(isAutoGenerated && { generatedPassword: password }),
+    });
+  } else {
+    // 创建组织元素
+    // 根据类型选择正确的父ID字段
+    // 机构和部门使用 fd_parentorgid，岗位使用 fd_parentid
+    const parentField = (type === 'position') ? 'fd_parentid' : 'fd_parentorgid';
+    const parentId = data[parentField as string] || data.fd_parentid || null;
+
+    await dbManager.query(
+      `INSERT INTO sys_org_element (
+        fd_id, fd_org_type, fd_name, fd_no, fd_order, fd_org_email, fd_memo, fd_parentid, fd_parentorgid
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        orgType,
+        data.fd_name,
+        data.fd_no || '',
+        data.fd_order || 0,
+        data.fd_email || '',
+        data.fd_memo || '',
+        type === 'position' ? parentId : null, // fd_parentid: 仅岗位使用
+        type === 'position' ? null : parentId, // fd_parentorgid: 机构和部门使用
+      ]
+    );
+    console.log('[createOrgElement] 组织元素创建成功', { id, orgType, parentField, parentId });
+  }
+
+  return NextResponse.json({ success: true, data: { id } });
+}
+
+// 更新组织元素
+async function updateOrgElement(type: string, id: string, data: Record<string, unknown>) {
+  let tableName = 'sys_org_element';
+
+  if (type === 'person') {
+    tableName = 'sys_org_person';
+  }
+
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  // 构建更新字段
+  if (data.fd_name !== undefined) {
+    fields.push('fd_name = ?');
+    values.push(data.fd_name);
+  }
+  if (data.fd_no !== undefined) {
+    fields.push('fd_no = ?');
+    values.push(data.fd_no);
+  }
+  if (data.fd_order !== undefined) {
+    fields.push('fd_order = ?');
+    values.push(data.fd_order);
+  }
+  if (data.fd_email !== undefined) {
+    const emailField = type === 'person' ? 'fd_email' : 'fd_org_email';
+    fields.push(`${emailField} = ?`);
+    values.push(data.fd_email);
+  }
+  if (data.fd_memo !== undefined) {
+    fields.push('fd_memo = ?');
+    values.push(data.fd_memo);
+  }
+  if (type === 'person' && data.fd_mobile !== undefined) {
+    fields.push('fd_mobile = ?');
+    values.push(data.fd_mobile);
+  }
+  if (type === 'person' && data.fd_login_name !== undefined) {
+    fields.push('fd_login_name = ?');
+    values.push(data.fd_login_name);
+  }
+
+  // 处理人员密码更新
+  if (type === 'person' && data.fd_password !== undefined && data.fd_password) {
+    fields.push('fd_password = ?');
+    values.push(await hashPassword(data.fd_password as string));
+  }
+
+  if (fields.length === 0) {
+    return NextResponse.json({ success: false, error: '没有要更新的字段' }, { status: 400 });
+  }
+
+  values.push(id);
+
+  await dbManager.query(
+    `UPDATE ${tableName} SET ${fields.join(', ')} WHERE fd_id = ?`,
+    values
+  );
+
+  return NextResponse.json({ success: true });
+}
+
+// 删除组织元素
+async function deleteOrgElement(type: string, id: string) {
+  let tableName = 'sys_org_element';
+
+  if (type === 'person') {
+    tableName = 'sys_org_person';
+  }
+
+  await dbManager.query(`DELETE FROM ${tableName} WHERE fd_id = ?`, [id]);
+
+  return NextResponse.json({ success: true });
+}
+
+// 获取树形数据
+async function getTreeData(type: number) {
+  // 查询机构和部门数据（不查询人员）
+  // 添加 fd_hierarchy_id 字段用于解析层级关系
+  let query = `
+    SELECT fd_id, fd_org_type, fd_name, fd_parentid, fd_parentorgid, fd_persons_number, fd_hierarchy_id
+    FROM sys_org_element
+    WHERE 1=1
+  `;
+
+  const params: unknown[] = [];
+  
+  // type: 1=只显示机构，2=显示机构和部门（默认，不包含岗位）
+  if (type === 1) {
+    query += ' AND fd_org_type = 1';
+  } else {
+    // 默认只显示机构和部门，不显示岗位（岗位在右侧区域显示）
+    query += ' AND fd_org_type IN (1, 2)';
+  }
+
+  query += ' ORDER BY fd_org_type ASC, fd_order ASC, fd_create_time ASC';
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await dbManager.query<any>(query, params);
+
+  console.log('[API:Organization] 查询到组织数据:', result.rows.length, '条');
+
+  // 构建树形结构（不包含人员）
+  const treeData = buildTree(result.rows, type);
+
+  console.log('[API:Organization] 构建的树形结构:', JSON.stringify(treeData, null, 2));
+
+  return NextResponse.json({ success: true, data: treeData });
+}
+
+// 解析层级路径 fd_hierarchy_id
+// 支持两种格式:
+// 1. /id1/id2/id3/ (用 '/' 分隔，当前数据库格式)
+// 2. xid1xidx2xidx3x (用 'x' 分隔，EKP原始格式)
+function parseHierarchyId(hierarchyId: string | null | undefined): string[] {
+  if (!hierarchyId || typeof hierarchyId !== 'string') {
+    return [];
+  }
+  
+  // 尝试用 '/' 分隔（当前数据库格式，如 /179c16fb1505a52647dab5d44539290c）
+  if (hierarchyId.startsWith('/')) {
+    const parts = hierarchyId.split('/').filter(part => part.trim() !== '');
+    return parts;
+  }
+  
+  // 尝试用 'x' 分隔（EKP原始格式，如 xid1xidx2xidx3x）
+  if (hierarchyId.includes('x')) {
+    const parts = hierarchyId.split('x').filter(part => part.trim() !== '');
+    return parts;
+  }
+  
+  return [];
+}
+
+// 从层级路径获取直接父级ID（最后一级的前一个）
+function getParentIdFromHierarchy(hierarchyId: string | null | undefined, currentId: string): string | undefined {
+  const levels = parseHierarchyId(hierarchyId);
+  if (levels.length === 0) {
+    return undefined;
+  }
+  
+  // 找到当前ID在路径中的位置
+  const currentIndex = levels.indexOf(currentId);
+  
+  if (currentIndex > 0) {
+    // 返回上一级作为父级
+    return levels[currentIndex - 1];
+  } else if (currentIndex === -1 && levels.length > 0) {
+    // 当前ID不在路径中（可能是根节点），返回最后一级作为父级
+    return levels[levels.length - 1];
+  }
+  
+  return undefined;
+}
+
+// 构建树形结构（只包含机构和部门）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildTree(flatData: any[], rootType?: number): any[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const map = new Map<string, any>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const roots: any[] = [];
+
+  // 创建所有节点的映射
+  flatData.forEach((item) => {
+    map.set(item.fd_id, {
+      id: item.fd_id,
+      name: item.fd_name,
+      type: item.fd_org_type,
+      parentId: item.fd_parentid || item.fd_parentorgid,
+      hierarchyId: item.fd_hierarchy_id,
+      children: [],
+      personCount: item.fd_persons_number || 0,
+    });
+  });
+
+  // 构建树形结构
+  flatData.forEach((item) => {
+    const node = map.get(item.fd_id);
+
+    // 机构（type=1）没有父节点，作为根节点
+    if (item.fd_org_type === 1) {
+      console.log('[buildTree] 添加根节点（机构）:', item.fd_name, item.fd_id);
+      roots.push(node);
+    }
+    // 部门（type=2）的父节点查找逻辑
+    else if (item.fd_org_type === 2) {
+      let parentId = item.fd_parentorgid;
+      
+      // 如果没有直接的父机构ID，尝试从层级路径解析
+      if (!parentId && item.fd_hierarchy_id) {
+        const parentFromHierarchy = getParentIdFromHierarchy(item.fd_hierarchy_id, item.fd_id);
+        if (parentFromHierarchy) {
+          parentId = parentFromHierarchy;
+          console.log('[buildTree] 从层级路径解析部门父节点:', item.fd_name, '-> 父节点ID:', parentId, '层级路径:', item.fd_hierarchy_id);
+        }
+      }
+      
+      if (parentId && map.has(parentId)) {
+        const parent = map.get(parentId);
+        parent.children.push(node);
+        console.log('[buildTree] 添加子节点（部门）:', item.fd_name, '-> 父节点:', parent.name);
+      } else {
+        // 如果没有找到父节点，作为根节点
+        console.warn('[buildTree] 部门未找到父节点，作为根节点:', item.fd_name, 'parentId:', parentId, 'hierarchyId:', item.fd_hierarchy_id);
+        roots.push(node);
+      }
+    }
+    // 岗位（type=3）的父节点是 fd_parentid（上级部门）
+    else if (item.fd_org_type === 3) {
+      let parentId = item.fd_parentid;
+      
+      // 如果没有直接的父ID，尝试从层级路径解析
+      if (!parentId && item.fd_hierarchy_id) {
+        const parentFromHierarchy = getParentIdFromHierarchy(item.fd_hierarchy_id, item.fd_id);
+        if (parentFromHierarchy) {
+          parentId = parentFromHierarchy;
+          console.log('[buildTree] 从层级路径解析岗位父节点:', item.fd_name, '-> 父节点ID:', parentId);
+        }
+      }
+      
+      if (parentId && map.has(parentId)) {
+        const parent = map.get(parentId);
+        parent.children.push(node);
+        console.log('[buildTree] 添加子节点（岗位）:', item.fd_name, '-> 父节点:', parent.name);
+      } else {
+        // 如果没有找到父节点，作为根节点
+        console.warn('[buildTree] 岗位未找到父节点，作为根节点:', item.fd_name, 'parentId:', parentId);
+        roots.push(node);
+      }
+    }
+  });
+
+  // 按照名称排序
+  interface TreeNode {
+    name: string;
+    children?: TreeNode[];
+  }
+  const sortNodes = (nodes: TreeNode[]) => {
+    nodes.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    nodes.forEach(node => {
+      if (node.children && node.children.length > 0) {
+        sortNodes(node.children);
+      }
+    });
+  };
+
+  sortNodes(roots);
+
+  return roots;
+}
+
+// 获取组织列表
+async function getOrgList(type: string, parentId: string, keyword: string, searchParams?: URLSearchParams) {
+  let tableName = 'sys_org_element';
+  let query = '';
+  const params: unknown[] = [];
+
+  if (type === 'person') {
+    tableName = 'sys_org_person';
+    query = `
+      SELECT fd_id, fd_name, fd_no, fd_email as fd_org_email, fd_mobile, fd_login_name, fd_order
+      FROM sys_org_person
+      WHERE 1=1
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      // 需要判断 parentId 是机构还是部门
+      // 先查询 sys_org_element 表，判断 parentId 对应的 fd_org_type
+      const parentQuery = 'SELECT fd_org_type FROM sys_org_element WHERE fd_id = ?';
+      const parentResult = await dbManager.query<any>(parentQuery, [parentId]);
+
+      if (parentResult.rows.length > 0) {
+        const parentOrgType = parentResult.rows[0].fd_org_type;
+
+        if (parentOrgType === 1) {
+          // 如果父节点是机构，查询该机构下所有部门的人员
+          // 注意：部门使用 fd_parentorgid 指向父机构/部门
+          query += ' AND fd_dept_id IN (SELECT fd_id FROM sys_org_element WHERE fd_parentorgid = ? AND fd_org_type = 2)';
+          params.push(parentId);
+        } else if (parentOrgType === 2) {
+          // 如果父节点是部门，直接查询该部门的人员
+          query += ' AND fd_dept_id = ?';
+          params.push(parentId);
+        } else {
+          // 其他情况（type=3 岗位），查询该岗位的人员（通过 sys_org_post_person 关联表）
+          query += ' AND fd_id IN (SELECT fd_person_id FROM sys_org_post_person WHERE fd_post_id = ?)';
+          params.push(parentId);
+        }
+      }
+    }
+  } else if (type === 'post') {
+    // 查询岗位列表
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid
+      FROM sys_org_element
+      WHERE fd_org_type = 3
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      // 查询指定部门下的岗位
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
+    }
+  } else if (type === 'org') {
+    // 查询子机构和子部门列表（type=1 和 type=2，不包含岗位）
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid, fd_parentid, fd_memo
+      FROM sys_org_element
+      WHERE fd_org_type IN (1, 2)
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      // 查询指定父节点下的子机构和子部门
+      // 机构和部门使用 fd_parentorgid
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
+    }
+  } else if (type === 'organization') {
+    // 查询子机构列表（type=1）
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid, fd_parentid, fd_memo
+      FROM sys_org_element
+      WHERE fd_org_type = 1
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
+    }
+  } else if (type === 'department') {
+    // 查询子部门列表（type=2）
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid, fd_parentid, fd_memo
+      FROM sys_org_element
+      WHERE fd_org_type = 2
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
+    }
+  } else {
+    const orgType = type === 'organization' ? 1 : type === 'department' ? 2 : 3;
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order
+      FROM sys_org_element
+      WHERE fd_org_type = ?
+    `;
+    params.push(orgType);
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      // 根据类型使用不同的父ID字段
+      // 机构和部门使用 fd_parentorgid，岗位使用 fd_parentid
+      const parentField = (type === 'position') ? 'fd_parentid' : 'fd_parentorgid';
+      query += ` AND ${parentField} = ?`;
+      params.push(parentId);
+      console.log('[getOrgList] 查询子节点:', { type, parentField, parentId });
+    }
+  }
+
+  query += ' ORDER BY fd_order ASC, fd_create_time ASC';
+
+  // 获取总记录数
+  const countQuery = query.replace(/SELECT .* FROM/, 'SELECT COUNT(*) as total FROM').replace(/ORDER BY.*$/, '');
+  const countResult = await dbManager.query<{ total: number }>(countQuery, params);
+  const total = countResult.rows[0]?.total || 0;
+
+  // 添加分页
+  const page = parseInt(searchParams?.get('page') || '1');
+  const pageSize = parseInt(searchParams?.get('pageSize') || (type === 'person' ? '50' : '10'));
+  const offset = (page - 1) * pageSize;
+  
+  query += ` LIMIT ${pageSize} OFFSET ${offset}`;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await dbManager.query<any>(query, params);
+
+  return NextResponse.json({ 
+    success: true, 
+    data: result.rows,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize)
+  });
 }

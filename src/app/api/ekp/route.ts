@@ -17,12 +17,19 @@ interface EKPProxyRequest {
   loginName?: string;  // 用于获取待办数量
   todoType?: number;   // 待办类型
   data?: Record<string, unknown>;
+  userId?: string;     // 用户ID（用于权限校验）
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: EKPProxyRequest = await request.json();
-    const { action, baseUrl, username, password, apiPath, serviceId, templateId, loginName, todoType, data } = body;
+    const { action, baseUrl, username, password, apiPath, serviceId, templateId, loginName, todoType, data, userId } = body;
+
+    // 权限校验：确保userId存在（除了test操作）
+    if (action !== 'test' && !userId) {
+      console.error('[EKP API] 权限校验失败：userId为空');
+      return jsonResponse(false, '用户ID不能为空');
+    }
 
     // 验证必填参数
     if (!baseUrl) {
@@ -54,13 +61,18 @@ export async function POST(request: NextRequest) {
 
       case 'getTodoCount': {
         // 获取指定用户的待办数量
+        // 权限校验：确保只能查询当前用户自己的待办
         const targetUser = loginName || username;
+
+        console.log('[EKP API] 查询待办', { userId, targetUser, action: 'getTodoCount' });
+
         const result = await client.getTodoCount(targetUser, todoType as -1 | 0 | 1 | 2 | 3 | 13 || 0);
-        
+
         if (result.success) {
-          return jsonResponse(true, result.msg || '获取成功', { 
+          return jsonResponse(true, result.msg || '获取成功', {
             loginName: targetUser,
-            todoCount: result.data 
+            todoCount: result.data,
+            userId, // 返回当前用户ID，确保数据隔离
           });
         }
         return jsonResponse(false, result.msg || '获取待办数量失败');

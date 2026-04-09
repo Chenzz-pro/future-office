@@ -1,6 +1,5 @@
 // 数据库配置数据访问层
 
-import mysql from 'mysql2/promise';
 import { dbManager } from '../manager';
 
 export interface DatabaseConfig {
@@ -157,23 +156,16 @@ export class DatabaseConfigRepository {
    */
   async testConnection(config: DatabaseConfig): Promise<{ success: boolean; message: string }> {
     try {
-      // 创建临时连接池测试
-      const testPool = mysql.createPool({
-        host: config.host,
-        port: config.port,
-        user: config.username,
-        password: config.password,
-        database: config.databaseName,
-        waitForConnections: true,
-        connectionLimit: 1,
-      });
-
-      const connection = await testPool.getConnection();
-      await connection.ping();
-      connection.release();
-      await testPool.end();
-
-      return { success: true, message: '连接成功' };
+      // 使用 dbManager 的统一测试方法
+      const testResult = await dbManager.testConnection(config);
+      if (testResult.success) {
+        return { success: true, message: '连接成功' };
+      } else {
+        return {
+          success: false,
+          message: testResult.error || '连接失败',
+        };
+      }
     } catch (error) {
       return {
         success: false,

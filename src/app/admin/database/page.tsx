@@ -30,7 +30,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Link2, RefreshCw, Database, Check, X, ArrowRight } from 'lucide-react';
+import { Plus, Link2, RefreshCw, Database, Check, X, ArrowRight, Clock, Bell } from 'lucide-react';
 
 interface DatabaseConfig {
   id: string;
@@ -71,6 +71,18 @@ interface MigrationResult {
   };
 }
 
+interface ExtensionTableStatus {
+  scheduler: {
+    scheduledTasksTable: boolean;
+    taskExecutionsTable: boolean;
+  };
+  monitor: {
+    alertRulesTable: boolean;
+    alertsTable: boolean;
+    notificationChannelsTable: boolean;
+  };
+}
+
 export default function DatabaseConfigPage() {
   const [status, setStatus] = useState<DatabaseStatus | null>(null);
   const [preview, setPreview] = useState<MigrationPreview | null>(null);
@@ -81,6 +93,9 @@ export default function DatabaseConfigPage() {
   const [migrating, setMigrating] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [migrationResult, setMigrationResult] = useState<MigrationResult | null>(null);
+  const [extensionStatus, setExtensionStatus] = useState<ExtensionTableStatus | null>(null);
+  const [initSchedulerLoading, setInitSchedulerLoading] = useState(false);
+  const [initMonitorLoading, setInitMonitorLoading] = useState(false);
 
   const [initForm, setInitForm] = useState({
     host: 'localhost',
@@ -102,7 +117,76 @@ export default function DatabaseConfigPage() {
   useEffect(() => {
     handleLoadStatus();
     handleLoadPreview();
+    handleLoadExtensionStatus();
   }, []);
+
+  const handleLoadExtensionStatus = async () => {
+    try {
+      // 检查定时任务表
+      const schedulerRes = await fetch('/api/database/init/scheduler');
+      const schedulerData = await schedulerRes.json();
+
+      // 检查监控中心表
+      const monitorRes = await fetch('/api/monitor/init?action=status');
+      const monitorData = await monitorRes.json();
+
+      setExtensionStatus({
+        scheduler: schedulerData.data || {
+          scheduledTasksTable: false,
+          taskExecutionsTable: false,
+        },
+        monitor: monitorData.data || {
+          alertRulesTable: false,
+          alertsTable: false,
+          notificationChannelsTable: false,
+        },
+      });
+    } catch {
+      console.error('加载扩展表状态失败');
+    }
+  };
+
+  const handleInitSchedulerTables = async () => {
+    setInitSchedulerLoading(true);
+    try {
+      const res = await fetch('/api/database/init/scheduler', {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert('定时任务表初始化成功！');
+        handleLoadExtensionStatus();
+      } else {
+        alert('初始化失败: ' + data.error);
+      }
+    } catch (error) {
+      alert('初始化失败: ' + error);
+    } finally {
+      setInitSchedulerLoading(false);
+    }
+  };
+
+  const handleInitMonitorTables = async () => {
+    setInitMonitorLoading(true);
+    try {
+      const res = await fetch('/api/monitor/init', {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert('监控中心表初始化成功！');
+        handleLoadExtensionStatus();
+      } else {
+        alert('初始化失败: ' + data.error);
+      }
+    } catch (error) {
+      alert('初始化失败: ' + error);
+    } finally {
+      setInitMonitorLoading(false);
+    }
+  };
 
   const handleLoadStatus = async () => {
     try {
@@ -312,6 +396,7 @@ export default function DatabaseConfigPage() {
           <TabsTrigger value="overview">概览</TabsTrigger>
           <TabsTrigger value="configs">数据库配置</TabsTrigger>
           <TabsTrigger value="migration">数据迁移</TabsTrigger>
+          <TabsTrigger value="extensions">扩展功能</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -525,6 +610,121 @@ export default function DatabaseConfigPage() {
                     <Badge variant="outline">{totalMigrateCount} 条</Badge>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="extensions" className="space-y-4">
+          <h3 className="text-lg font-semibold">扩展功能表</h3>
+          <p className="text-sm text-muted-foreground">
+            以下功能模块需要单独的数据库表支持，请确保在使用前完成初始化。
+          </p>
+
+          {/* 定时任务模块 */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Clock className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">定时任务模块</CardTitle>
+                  <CardDescription>支持定时任务调度和执行记录</CardDescription>
+                </div>
+              </div>
+              <Badge variant={extensionStatus?.scheduler?.scheduledTasksTable ? 'default' : 'destructive'}>
+                {extensionStatus?.scheduler?.scheduledTasksTable ? '已初始化' : '未初始化'}
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">定时任务定义表 (scheduled_tasks)</span>
+                  {extensionStatus?.scheduler?.scheduledTasksTable ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">任务执行记录表 (task_executions)</span>
+                  {extensionStatus?.scheduler?.taskExecutionsTable ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </div>
+                <Button
+                  onClick={handleInitSchedulerTables}
+                  disabled={initSchedulerLoading || !status?.isConnected}
+                  className="mt-2"
+                >
+                  {initSchedulerLoading ? '初始化中...' : '初始化定时任务表'}
+                </Button>
+                {!status?.isConnected && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    请先连接数据库后再初始化
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 监控中心模块 */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Bell className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">监控中心模块</CardTitle>
+                  <CardDescription>支持告警规则、告警记录和通知渠道</CardDescription>
+                </div>
+              </div>
+              <Badge variant={extensionStatus?.monitor?.alertRulesTable ? 'default' : 'destructive'}>
+                {extensionStatus?.monitor?.alertRulesTable ? '已初始化' : '未初始化'}
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">告警规则表 (alert_rules)</span>
+                  {extensionStatus?.monitor?.alertRulesTable ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">告警记录表 (alerts)</span>
+                  {extensionStatus?.monitor?.alertsTable ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">通知渠道表 (notification_channels)</span>
+                  {extensionStatus?.monitor?.notificationChannelsTable ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </div>
+                <Button
+                  onClick={handleInitMonitorTables}
+                  disabled={initMonitorLoading || !status?.isConnected}
+                  className="mt-2"
+                >
+                  {initMonitorLoading ? '初始化中...' : '初始化监控中心表'}
+                </Button>
+                {!status?.isConnected && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    请先连接数据库后再初始化
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>

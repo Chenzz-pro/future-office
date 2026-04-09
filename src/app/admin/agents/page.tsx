@@ -1,181 +1,783 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Bot, Search, Plus, Edit, Trash2, MoreHorizontal } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Bot, Search, Settings, X, Save, Loader2, Shield, Code, Play, FileText, Terminal, BrainCircuit } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface AgentConfig {
+  id: string;
+  type: string;
+  agentType?: string;
+  name: string;
+  description: string;
+  avatar: string;
+  systemPrompt: string;
+  enabled: boolean;
+  skills: string[];
+  bots: Array<{ id: string; name: string }>;
+  permissionRules?: any;
+  businessRules?: any;
+  version?: number;
+}
+
+interface SkillConfig {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  category: string;
+}
+
+// Agent类型映射
+const AGENT_TYPES = {
+  root: { name: '统筹智能体', description: '负责意图识别、任务分发、结果汇总', emoji: '🎯' },
+  approval: { name: '审批智能体', description: '负责待办审批、流程发起、审批查询', emoji: '✅' },
+  meeting: { name: '会议智能体', description: '负责会议查询、会议预定、会议通知', emoji: '📅' },
+  data: { name: '数据智能体', description: '负责表单查询、统计分析、报表生成', emoji: '📊' },
+  assistant: { name: '个人助理智能体', description: '负责日程管理、提醒通知、个人事务', emoji: '🤝' },
+};
+
+type ViewMode = 'list' | 'edit';
 
 export default function AgentsManagement() {
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [agents, setAgents] = useState<AgentConfig[]>([]);
+  const [skills, setSkills] = useState<SkillConfig[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    avatar: '🤖',
+    systemPrompt: '',
+    skills: [] as string[],
+    permissionRules: '',
+    businessRules: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [initializing, setInitializing] = useState(false);
 
-  const mockAgents = [
-    {
-      id: '1',
-      name: '客服助手',
-      description: '处理客户咨询和问题解答',
-      category: '客服',
-      status: 'active',
-      createdAt: '2024-01-15',
-      totalCalls: 1234,
-    },
-    {
-      id: '2',
-      name: '任务助手',
-      description: '协助任务分配和进度跟踪',
-      category: '任务',
-      status: 'active',
-      createdAt: '2024-01-10',
-      totalCalls: 856,
-    },
-    {
-      id: '3',
-      name: '数据分析',
-      description: '数据分析和报表生成',
-      category: '分析',
-      status: 'active',
-      createdAt: '2024-01-08',
-      totalCalls: 432,
-    },
-    {
-      id: '4',
-      name: '代码助手',
-      description: '代码编写和代码审查',
-      category: '开发',
-      status: 'inactive',
-      createdAt: '2024-01-05',
-      totalCalls: 678,
-    },
-  ];
+  // 测试相关状态
+  const [testMessage, setTestMessage] = useState('');
+  const [testResult, setTestResult] = useState<any>(null);
+  const [testing, setTesting] = useState(false);
 
+  // 加载Agent列表
+  const loadAgents = async () => {
+    try {
+      const response = await fetch('/api/admin/agents?action=list');
+      const data = await response.json();
+      if (data.success) {
+        setAgents(data.data);
+      }
+    } catch (error) {
+      console.error('加载Agent列表失败:', error);
+    }
+  };
+
+  // 加载技能列表
+  const loadSkills = async () => {
+    try {
+      const response = await fetch('/api/admin/skills?action=list');
+      const data = await response.json();
+      if (data.success) {
+        setSkills(data.data);
+      }
+    } catch (error) {
+      console.error('加载技能列表失败:', error);
+    }
+  };
+
+  // 初始化Agent和技能数据
+  const handleInitializeAgents = async () => {
+    setInitializing(true);
+    try {
+      const response = await fetch('/api/database/init/agents', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`初始化成功！\n创建了 ${data.data.agentsCount} 个智能体\n创建了 ${data.data.skillsCount} 个技能`);
+        await loadAgents();
+        await loadSkills();
+      } else {
+        alert(data.error || '初始化失败');
+      }
+    } catch (error) {
+      console.error('初始化Agent失败:', error);
+      alert('初始化失败，请检查数据库连接');
+    } finally {
+      setInitializing(false);
+    }
+  };
+
+  useEffect(() => {
+    Promise.all([loadAgents(), loadSkills()]).finally(() => {
+      setLoading(false);
+    });
+  }, []);
+
+  const filteredAgents = agents.filter(agent =>
+    agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    agent.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // 编辑Agent
+  const handleEditAgent = (agent: AgentConfig) => {
+    setSelectedAgent(agent);
+    setEditForm({
+      name: agent.name,
+      description: agent.description,
+      avatar: agent.avatar,
+      systemPrompt: agent.systemPrompt,
+      skills: agent.skills || [],
+      permissionRules: agent.permissionRules ? JSON.stringify(agent.permissionRules, null, 2) : '',
+      businessRules: agent.businessRules ? JSON.stringify(agent.businessRules, null, 2) : '',
+    });
+    setTestMessage('');
+    setTestResult(null);
+    setViewMode('edit');
+  };
+
+  // 保存Agent配置
+  const handleSaveAgent = async () => {
+    if (!selectedAgent) return;
+
+    setSaving(true);
+    try {
+      let permissionRules = null;
+      let businessRules = null;
+
+      // 尝试解析权限规则
+      if (editForm.permissionRules.trim()) {
+        try {
+          permissionRules = JSON.parse(editForm.permissionRules);
+        } catch (e) {
+          alert('权限规则JSON格式错误，请检查格式');
+          setSaving(false);
+          return;
+        }
+      }
+
+      // 尝试解析业务规则
+      if (editForm.businessRules.trim()) {
+        try {
+          businessRules = JSON.parse(editForm.businessRules);
+        } catch (e) {
+          alert('业务规则JSON格式错误，请检查格式');
+          setSaving(false);
+          return;
+        }
+      }
+
+      const response = await fetch('/api/admin/agents?action=update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: selectedAgent.type,
+          name: editForm.name,
+          description: editForm.description,
+          avatar: editForm.avatar,
+          systemPrompt: editForm.systemPrompt,
+          skills: editForm.skills,
+          bots: [],
+          permissionRules,
+          businessRules,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadAgents();
+        setViewMode('list');
+        setSelectedAgent(null);
+      } else {
+        alert(data.error || '保存失败');
+      }
+    } catch (error) {
+      console.error('保存Agent失败:', error);
+      alert('保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 测试Agent
+  const handleTestAgent = async () => {
+    if (!selectedAgent || !testMessage) return;
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch('/api/agents/root', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: localStorage.getItem('current-user-id'),
+          message: testMessage,
+        }),
+      });
+
+      const result = await response.json();
+      setTestResult(result);
+    } catch (error) {
+      console.error('测试Agent失败:', error);
+      setTestResult({ error: '测试失败' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  // 渲染列表视图
+  if (viewMode === 'list') {
+    return (
+      <div className="space-y-6">
+        {/* 页面标题 */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">智能体管理</h1>
+            <p className="text-gray-600 mt-1">管理和配置系统中的智能体</p>
+          </div>
+        </div>
+
+        {/* 统计卡片 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600">总智能体数</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-gray-900">{agents.length}</div>
+              <p className="text-xs text-gray-500 mt-1">系统内置智能体</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600">运行中</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600">{agents.filter(a => a.enabled).length}</div>
+              <p className="text-xs text-gray-500 mt-1">
+                {agents.length > 0 ? `${Math.round(agents.filter(a => a.enabled).length / agents.length * 100)}%` : '0%'} 活跃率
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600">可用技能</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-gray-900">{skills.length}</div>
+              <p className="text-xs text-gray-500 mt-1">系统技能总数</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* 搜索框 */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="搜索智能体..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 智能体列表 */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          </div>
+        ) : filteredAgents.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Bot className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">暂无智能体</h3>
+              <p className="text-gray-600 mb-4">请先配置数据库连接并初始化智能体</p>
+              <Button
+                onClick={handleInitializeAgents}
+                disabled={initializing}
+              >
+                {initializing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    初始化中...
+                  </>
+                ) : (
+                  '初始化智能体'
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredAgents.map((agent) => {
+              const typeInfo = AGENT_TYPES[agent.type as keyof typeof AGENT_TYPES];
+              return (
+                <Card key={agent.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-2xl">
+                          {agent.avatar}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{agent.name}</h3>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-xs text-gray-500">{typeInfo?.name || agent.type}</span>
+                            {agent.agentType && (
+                              <Badge variant={agent.agentType === 'root' ? 'default' : 'secondary'} className="text-xs">
+                                {agent.agentType === 'root' ? 'Root' : 'Business'}
+                              </Badge>
+                            )}
+                            {agent.enabled && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                已启用
+                              </span>
+                            )}
+                            {agent.version && (
+                              <span className="text-xs text-gray-400">v{agent.version}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{agent.description}</p>
+
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                      {agent.skills.slice(0, 3).map((skill) => (
+                        <span key={skill} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
+                          {skill}
+                        </span>
+                      ))}
+                      {agent.skills.length > 3 && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
+                          +{agent.skills.length - 3}
+                        </span>
+                      )}
+                    </div>
+
+                    <Button
+                      onClick={() => handleEditAgent(agent)}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      配置
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 渲染编辑视图
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">智能体管理</h1>
-          <p className="text-gray-600 mt-1">管理和配置系统中的智能体</p>
-        </div>
-        <Button className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          新建智能体
-        </Button>
-      </div>
-
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">总智能体数</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900">56</div>
-            <p className="text-xs text-green-600 mt-1">+3 本周新增</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">运行中</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">48</div>
-            <p className="text-xs text-gray-500 mt-1">85.7% 活跃率</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">本月调用</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900">12,345</div>
-            <p className="text-xs text-green-600 mt-1">+15.3% 较上月</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 智能体列表 */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>智能体列表</CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  placeholder="搜索智能体..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 w-64"
-                />
-              </div>
-            </div>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setViewMode('list');
+              setSelectedAgent(null);
+            }}
+          >
+            <X className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              配置智能体 - {selectedAgent?.name}
+            </h1>
+            <p className="text-gray-600 mt-1">
+              配置系统提示词、技能、权限规则、业务规则和测试
+            </p>
           </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>智能体名称</TableHead>
-                <TableHead>描述</TableHead>
-                <TableHead>分类</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>调用次数</TableHead>
-                <TableHead>创建时间</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockAgents.map((agent) => (
-                <TableRow key={agent.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                        <Bot className="w-5 h-5 text-purple-600" />
+          {selectedAgent?.agentType && (
+            <Badge variant={selectedAgent.agentType === 'root' ? 'default' : 'secondary'}>
+              {selectedAgent.agentType === 'root' ? 'RootAgent' : '业务Agent'}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* 表单内容 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <Tabs defaultValue="basic" className="w-full">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="basic">基本信息</TabsTrigger>
+              <TabsTrigger value="system-prompt">系统提示词</TabsTrigger>
+              <TabsTrigger value="skills">技能配置</TabsTrigger>
+              <TabsTrigger value="rules">规则配置</TabsTrigger>
+              <TabsTrigger value="test">测试</TabsTrigger>
+            </TabsList>
+
+            {/* 基本信息标签页 */}
+            <TabsContent value="basic" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>基本信息</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center text-3xl">
+                      {editForm.avatar}
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">{editForm.name}</div>
+                      <div className="text-sm text-gray-500">类型: {selectedAgent?.type}</div>
+                      {selectedAgent?.version && (
+                        <div className="text-xs text-gray-400 mt-1">版本: v{selectedAgent.version}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="description">描述</Label>
+                    <textarea
+                      id="description"
+                      value={editForm.description}
+                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      placeholder="简单描述这个智能体的功能..."
+                      rows={3}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* 系统提示词标签页 */}
+            <TabsContent value="system-prompt" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>系统提示词（角色）</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-600 mb-4">
+                    定义智能体的角色、行为和回复风格
+                  </p>
+                  <textarea
+                    value={editForm.systemPrompt}
+                    onChange={(e) => setEditForm({ ...editForm, systemPrompt: e.target.value })}
+                    placeholder="例如：你是一个专业的编程助手，擅长帮助用户解决编程问题。"
+                    rows={12}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono"
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* 技能配置标签页 */}
+            <TabsContent value="skills" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>可调用的技能</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-600 mb-4">
+                    选择这个智能体可以使用的技能
+                  </p>
+                  <div className="space-y-3">
+                    {skills.map((skill) => (
+                      <label
+                        key={skill.id}
+                        className={cn(
+                          'flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-all',
+                          editForm.skills.includes(skill.code)
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editForm.skills.includes(skill.code)}
+                          onChange={(e) => {
+                            const newSkills = e.target.checked
+                              ? [...editForm.skills, skill.code]
+                              : editForm.skills.filter(s => s !== skill.code);
+                            setEditForm({ ...editForm, skills: newSkills });
+                          }}
+                          className="mt-0.5 w-4 h-4"
+                        />
+                        <div>
+                          <div className="font-medium text-sm text-gray-900">{skill.name}</div>
+                          <div className="text-xs text-gray-500">{skill.code}</div>
+                          <div className="text-xs text-gray-500 mt-1">{skill.description}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* 规则配置标签页 */}
+            <TabsContent value="rules" className="space-y-6">
+              {/* 权限规则 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    权限规则配置
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    配置权限拦截规则，用于控制用户的访问权限
+                  </p>
+                  <div>
+                    <Label htmlFor="permissionRules">权限规则（JSON格式）</Label>
+                    <Textarea
+                      id="permissionRules"
+                      value={editForm.permissionRules}
+                      onChange={(e) => setEditForm({ ...editForm, permissionRules: e.target.value })}
+                      placeholder={`{\n  "conditions": {\n    "requireLogin": true,\n    "requireRole": ["admin"]\n  },\n  "actions": {\n    "allow": ["query", "approve"],\n    "deny": ["delete"]\n  }\n}`}
+                      rows={12}
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 业务规则 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Code className="h-5 w-5" />
+                    业务规则配置
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    配置业务流程规则，用于定义业务流程和校验逻辑
+                  </p>
+                  <div>
+                    <Label htmlFor="businessRules">业务规则（JSON格式）</Label>
+                    <Textarea
+                      id="businessRules"
+                      value={editForm.businessRules}
+                      onChange={(e) => setEditForm({ ...editForm, businessRules: e.target.value })}
+                      placeholder={`{\n  "steps": [\n    {\n      "name": "validate_request",\n      "action": "check_params"\n    },\n    {\n      "name": "execute_business",\n      "action": "process"\n    }\n  ],\n  "validation": {\n    "required": ["userId", "action"],\n    "rules": [\n      {\n        "field": "userId",\n        "type": "string",\n        "minLength": 1\n      }\n    ]\n  }\n}`}
+                      rows={12}
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* 测试标签页 */}
+            <TabsContent value="test" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Play className="h-5 w-5" />
+                    测试智能体
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    输入测试消息，验证智能体的响应结果
+                  </p>
+                  <div>
+                    <Label htmlFor="testMessage">测试消息</Label>
+                    <Textarea
+                      id="testMessage"
+                      value={testMessage}
+                      onChange={(e) => setTestMessage(e.target.value)}
+                      placeholder="输入测试消息，例如：我想申请请假..."
+                      rows={3}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleTestAgent}
+                    disabled={testing || !testMessage}
+                    className="w-full"
+                  >
+                    {testing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        测试中...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        执行测试
+                      </>
+                    )}
+                  </Button>
+
+                  {/* 测试结果 */}
+                  {testResult && (
+                    <div className="mt-4 space-y-4">
+                      <h4 className="font-medium text-sm">测试结果</h4>
+
+                      {/* 三栏展示 */}
+                      <div className="grid grid-cols-1 gap-4">
+                        {/* 1. RootAgent执行日志 */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Terminal className="w-4 h-4" />
+                              RootAgent执行日志
+                              <Badge variant="outline" className="ml-auto">
+                                路由权限拦截
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className="text-gray-500">识别的Agent:</span>
+                                <Badge variant="secondary">
+                                  {testResult.data?.targetAgent || '未知'}
+                                </Badge>
+                              </div>
+                              {testResult.data?.routePermissionCheck && (
+                                <div className="text-xs space-y-1 mt-2 p-2 bg-gray-50 rounded">
+                                  <div>✓ 用户ID: {testResult.data.routePermissionCheck.userId}</div>
+                                  <div>✓ 路由检查: {testResult.data.routePermissionCheck.checkResult}</div>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* 2. 意图识别日志 */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <BrainCircuit className="w-4 h-4" />
+                              意图识别日志
+                              <Badge variant="outline" className="ml-auto">
+                                RootAgent.process()
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 text-xs">
+                              {testResult.data?.intentLogs?.map((log: any, idx: number) => (
+                                <div key={idx} className="p-2 bg-gray-50 rounded">
+                                  <div className="font-medium mb-1">候选Agent: {log.agentId}</div>
+                                  <div>匹配得分: {log.score?.toFixed(4)}</div>
+                                  <div>关键词: {log.matchedKeywords?.join(', ') || '无'}</div>
+                                  <div className="text-gray-500">推理: {log.reasoning}</div>
+                                </div>
+                              )) || (
+                                <div className="text-gray-500 text-center py-4">
+                                  暂无意图识别日志
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* 3. 业务Agent执行日志 */}
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Settings className="w-4 h-4" />
+                              业务Agent执行日志
+                              <Badge variant="outline" className="ml-auto">
+                                权限校验+技能调用
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 text-xs">
+                              <div className="flex items-center gap-4 p-2 bg-gray-50 rounded">
+                                <span>Agent类型: <strong>{testResult.agentType || '未知'}</strong></span>
+                                <span>权限检查: <Badge variant={testResult.permissionChecked ? 'default' : 'secondary'}>
+                                  {testResult.permissionChecked ? '✓ 已检查' : '✗ 未检查'}
+                                </Badge></span>
+                                <span>权限结果: <Badge variant={testResult.permissionGranted ? 'default' : 'destructive'}>
+                                  {testResult.permissionGranted ? '✓ 通过' : '✗ 拒绝'}
+                                </Badge></span>
+                                <span>技能调用: <Badge variant={testResult.skillCalled ? 'default' : 'secondary'}>
+                                  {testResult.skillCalled ? '✓ 已调用' : '✗ 未调用'}
+                                </Badge></span>
+                              </div>
+                              <pre className="mt-2 overflow-auto bg-gray-50 p-2 rounded max-h-48">
+                                {JSON.stringify(testResult.data, null, 2)}
+                              </pre>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
-                      <span className="font-medium">{agent.name}</span>
                     </div>
-                  </TableCell>
-                  <TableCell className="text-gray-600">{agent.description}</TableCell>
-                  <TableCell>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                      {agent.category}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        agent.status === 'active'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
-                      {agent.status === 'active' ? '运行中' : '已停用'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-gray-600">{agent.totalCalls.toLocaleString()}</TableCell>
-                  <TableCell className="text-gray-600">{agent.createdAt}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-700">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* 保存按钮 */}
+        <div className="lg:col-span-1">
+          <Card className="sticky top-6">
+            <CardHeader>
+              <CardTitle>操作</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button
+                onClick={handleSaveAgent}
+                disabled={saving}
+                className="w-full"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    保存中...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    保存配置
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={() => {
+                  setViewMode('list');
+                  setSelectedAgent(null);
+                }}
+                variant="outline"
+                className="w-full"
+                disabled={saving}
+              >
+                取消
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

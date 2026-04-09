@@ -18,6 +18,7 @@ export interface EKPConfig {
   password: string;
   apiPath: string;      // REST服务路径（用于测试连接）
   serviceId: string;    // 服务标识
+  enabled?: boolean;    // 是否启用
 }
 
 export interface EKPRequest {
@@ -83,6 +84,28 @@ export const EKP_REST_PATHS = {
   review: {
     addReview: '/api/km-review/kmReviewRestService/addReview',
     approve: '/api/km-review/kmReviewRestService/approveProcess',
+  },
+  // 组织架构服务（通用查询接口 - 用于管理后台）
+  organization: {
+    // 获取组织树（机构+部门）
+    orgTree: '/api/sys/organization/orgTree',
+    // 获取人员列表
+    person: '/api/sys/organization/person',
+    // 获取人员详细信息
+    personInfo: '/api/sys/organization/personInfo',
+    // 获取组织元素（机构、部门、岗位）
+    element: '/api/sys/organization/element',
+    // 获取岗位列表
+    post: '/api/sys/organization/post',
+  },
+  // 组织架构同步接口（蓝凌标准同步接口 - 按接口文档）
+  sync: {
+    // 获取所有组织架构基本信息（用于异构系统做组织架构关系对应）
+    getElementsBaseInfo: '/api/sys-organization/sysSynchroGetOrg/getElementsBaseInfo',
+    // 获取需要更新的组织架构信息（全量同步）
+    getUpdatedElements: '/api/sys-organization/sysSynchroGetOrg/getUpdatedElements',
+    // 分页获取需要更新的组织架构信息（分页同步）
+    getUpdatedElementsByToken: '/api/sys-organization/sysSynchroGetOrg/getUpdatedElementsByToken',
   },
 };
 
@@ -414,6 +437,597 @@ export class EKPRestClient {
       };
     }
   }
+
+  // ============================================
+  // 组织架构同步方法
+  // ============================================
+
+  /**
+   * 获取组织树（机构+部门）
+   * @param parentId 父级ID，不传则获取根节点
+   */
+  async getOrgTree(parentId?: string): Promise<EKPResponse<OrgTreeNode[]>> {
+    try {
+      const body: Record<string, unknown> = {};
+      if (parentId) {
+        body.parentId = parentId;
+      }
+
+      const response = await this.post<{ data?: OrgTreeNode[]; list?: OrgTreeNode[] }>(
+        EKP_REST_PATHS.organization.orgTree,
+        body
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足：请检查用户是否有访问组织架构的权限' };
+      }
+
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '服务不存在：请检查EKP系统是否支持组织架构接口' };
+      }
+
+      // 解析返回数据
+      if (response.result) {
+        const data = response.result.data || response.result.list || [];
+        return { success: true, data, msg: `获取成功，共 ${data.length} 条` };
+      }
+
+      return { success: false, data: null, msg: response.text || '获取组织树失败' };
+    } catch (err) {
+      return { success: false, data: null, msg: `获取组织树失败：${err instanceof Error ? err.message : '网络错误'}` };
+    }
+  }
+
+  /**
+   * 获取人员列表
+   * @param deptId 部门ID，不传则获取所有人员
+   * @param page 页码
+   * @param pageSize 每页数量
+   */
+  async getPersonList(deptId?: string, page = 1, pageSize = 100): Promise<EKPResponse<PersonListData>> {
+    try {
+      const body: Record<string, unknown> = {
+        pageno: page,
+        count: pageSize,
+      };
+      if (deptId) {
+        body.deptId = deptId;
+      }
+
+      const response = await this.post<{ count?: number; datas?: PersonInfo[] }>(
+        EKP_REST_PATHS.organization.person,
+        body
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足：请检查用户是否有访问人员信息的权限' };
+      }
+
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '服务不存在：请检查EKP系统是否支持人员接口' };
+      }
+
+      // 解析返回数据
+      if (response.result) {
+        return {
+          success: true,
+          data: {
+            count: response.result.count || 0,
+            persons: response.result.datas || [],
+          },
+          msg: `获取成功，共 ${response.result.count || 0} 条`,
+        };
+      }
+
+      return { success: false, data: null, msg: response.text || '获取人员列表失败' };
+    } catch (err) {
+      return { success: false, data: null, msg: `获取人员列表失败：${err instanceof Error ? err.message : '网络错误'}` };
+    }
+  }
+
+  /**
+   * 获取岗位列表
+   */
+  async getPostList(): Promise<EKPResponse<PostInfo[]>> {
+    try {
+      const response = await this.post<{ data?: PostInfo[]; list?: PostInfo[] }>(
+        EKP_REST_PATHS.organization.post,
+        {}
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      const data = response.result?.data || response.result?.list || [];
+      return { success: true, data, msg: `获取成功，共 ${data.length} 条` };
+    } catch (err) {
+      return { success: false, data: null, msg: `获取岗位列表失败：${err instanceof Error ? err.message : '网络错误'}` };
+    }
+  }
+
+  // ============================================
+  // 组织架构同步接口（按接口文档实现）
+  // ============================================
+
+  /**
+   * 获取需要更新的组织架构信息（同步全量数据）
+   * 
+   * 根据接口文档，getUpdatedElements 是用于同步组织架构的主接口
+   * 支持按组织类型过滤，分批次获取数据
+   * 
+   * @param options 配置选项
+   * @param options.returnOrgType 要返回的组织类型数组，如 ['org', 'dept', 'person']
+   *                       可选值: org(机构), dept(部门), group(群组), post(岗位), person(人员)
+   *                       空数组或不传表示获取所有类型
+   * @param options.count 每次获取的条目数，默认 500
+   * @param options.beginTimeStamp 开始时间戳，用于增量同步，格式: yyyy-MM-dd HH:mm:ss.SSS
+   *                                空表示获取所有数据
+   * @returns 返回同步数据及下次继续的 timestamp
+   */
+  async getUpdatedElements(options?: {
+    returnOrgType?: string[];
+    count?: number;
+    beginTimeStamp?: string;
+  }): Promise<EKPResponse<SyncedElementsResult>> {
+    try {
+      const body: Record<string, unknown> = {
+        count: options?.count || 500,
+      };
+
+      // 设置组织类型过滤
+      if (options?.returnOrgType && options.returnOrgType.length > 0) {
+        body.returnOrgType = JSON.stringify(
+          options.returnOrgType.map(type => ({ type }))
+        );
+      }
+
+      // 设置时间戳（用于增量同步）
+      if (options?.beginTimeStamp) {
+        body.beginTimeStamp = options.beginTimeStamp;
+      }
+
+      console.log('[EKPRestClient] 调用 getUpdatedElements:', body);
+
+      const response = await this.post<SyncedElementsResponse>(
+        EKP_REST_PATHS.sync.getUpdatedElements,
+        body
+      );
+
+      // 处理响应
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足：请检查用户是否有访问组织架构同步接口的权限' };
+      }
+
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '同步接口不存在：请检查 EKP 系统是否配置了组织架构同步服务' };
+      }
+
+      if (response.result) {
+        const result = response.result as SyncedElementsResponse;
+
+        if (result.returnState === 2) {
+          // 成功，解析 message 中的数据
+          let elements: SyncedElement[] = [];
+          try {
+            if (typeof result.message === 'string') {
+              elements = JSON.parse(result.message);
+            } else if (Array.isArray(result.message)) {
+              elements = result.message;
+            }
+          } catch (parseError) {
+            console.error('[EKPRestClient] 解析同步数据失败:', parseError);
+          }
+
+          return {
+            success: true,
+            data: {
+              elements,
+              count: result.count || elements.length,
+              timeStamp: result.timeStamp || '',
+              hasMore: result.count ? result.count >= (options?.count || 500) : false,
+            },
+            msg: `获取成功，共 ${elements.length} 条`,
+          };
+        } else if (result.returnState === 1) {
+          return {
+            success: false,
+            data: null,
+            msg: `获取失败：${result.message}`,
+          };
+        }
+      }
+
+      return { success: false, data: null, msg: response.text || '获取同步数据失败' };
+    } catch (err) {
+      return {
+        success: false,
+        data: null,
+        msg: `获取同步数据失败：${err instanceof Error ? err.message : '网络错误'}`,
+      };
+    }
+  }
+
+  /**
+   * 分页获取需要更新的组织架构信息（按 Token 分页）
+   * 
+   * 该接口和 getUpdatedElements 功能相同，但支持按 token 分页
+   * 适用于数据量较大时防止单次返回过多数据
+   * 
+   * @param options 分页选项
+   * @param options.returnOrgType 要返回的组织类型数组
+   * @param options.pageNo 页码（从1开始）
+   * @param options.count 每页记录数
+   * @param options.token 分页令牌（查询第一页时不需要）
+   * @param options.beginTimeStamp 开始时间戳
+   */
+  async getUpdatedElementsByToken(options: {
+    returnOrgType?: string[];
+    pageNo?: number;
+    count?: number;
+    token?: string;
+    beginTimeStamp?: string;
+  }): Promise<EKPResponse<SyncedElementsByTokenResult>> {
+    try {
+      const body: Record<string, unknown> = {
+        pageNo: options?.pageNo || 1,
+        count: options?.count || 100,
+      };
+
+      if (options?.returnOrgType && options.returnOrgType.length > 0) {
+        body.returnOrgType = JSON.stringify(
+          options.returnOrgType.map(type => ({ type }))
+        );
+      }
+
+      if (options?.token) {
+        body.token = options.token;
+      }
+
+      if (options?.beginTimeStamp) {
+        body.beginTimeStamp = options.beginTimeStamp;
+      }
+
+      const response = await this.post<SyncedElementsByTokenResponse>(
+        EKP_REST_PATHS.sync.getUpdatedElementsByToken,
+        body
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败：用户名或密码错误' };
+      }
+
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足' };
+      }
+
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '同步接口不存在' };
+      }
+
+      if (response.result) {
+        const result = response.result as SyncedElementsByTokenResponse;
+
+        if (result.returnState === 2) {
+          let elements: SyncedElement[] = [];
+          try {
+            if (typeof result.message === 'string') {
+              elements = JSON.parse(result.message);
+            } else if (Array.isArray(result.message)) {
+              elements = result.message;
+            }
+          } catch (parseError) {
+            console.error('[EKPRestClient] 解析分页同步数据失败:', parseError);
+          }
+
+          return {
+            success: true,
+            data: {
+              elements,
+              count: result.count || elements.length,
+              token: result.token || '',
+              hasMore: result.count ? result.count >= (options?.count || 100) : false,
+            },
+            msg: `获取成功，共 ${elements.length} 条`,
+          };
+        } else if (result.returnState === 1) {
+          return {
+            success: false,
+            data: null,
+            msg: `获取失败：${result.message}`,
+          };
+        }
+      }
+
+      return { success: false, data: null, msg: response.text || '获取分页数据失败' };
+    } catch (err) {
+      return {
+        success: false,
+        data: null,
+        msg: `获取分页数据失败：${err instanceof Error ? err.message : '网络错误'}`,
+      };
+    }
+  }
+
+  /**
+   * 获取所有组织架构基本信息
+   * 
+   * 用于异构系统做组织架构关系对应
+   * 也方便异构系统做组织架构删除检测
+   * 
+   * @param options 配置选项
+   * @param options.returnOrgType 要返回的组织类型数组
+   * @param options.returnType 要返回的字段列表，如 ['no', 'order', 'keyword']
+   */
+  async getElementsBaseInfo(options?: {
+    returnOrgType?: string[];
+    returnType?: string[];
+  }): Promise<EKPResponse<BaseInfoElement[]>> {
+    try {
+      const body: Record<string, unknown> = {};
+
+      if (options?.returnOrgType && options.returnOrgType.length > 0) {
+        body.returnOrgType = JSON.stringify(
+          options.returnOrgType.map(type => ({ type }))
+        );
+      }
+
+      if (options?.returnType && options.returnType.length > 0) {
+        body.returnType = JSON.stringify(
+          options.returnType.map(field => ({ type: field }))
+        );
+      }
+
+      const response = await this.post<BaseInfoResponse>(
+        EKP_REST_PATHS.sync.getElementsBaseInfo,
+        body
+      );
+
+      if (response.status === 302 || response.status === 401) {
+        return { success: false, data: null, msg: '认证失败' };
+      }
+
+      if (response.status === 403) {
+        return { success: false, data: null, msg: '权限不足' };
+      }
+
+      if (response.status === 404) {
+        return { success: false, data: null, msg: '基础信息接口不存在' };
+      }
+
+      if (response.result) {
+        const result = response.result as BaseInfoResponse;
+
+        if (result.returnState === 2) {
+          let elements: BaseInfoElement[] = [];
+          try {
+            if (typeof result.message === 'string') {
+              elements = JSON.parse(result.message);
+            } else if (Array.isArray(result.message)) {
+              elements = result.message;
+            }
+          } catch (parseError) {
+            console.error('[EKPRestClient] 解析基础信息失败:', parseError);
+          }
+
+          return {
+            success: true,
+            data: elements,
+            msg: `获取成功，共 ${elements.length} 条`,
+          };
+        } else if (result.returnState === 1) {
+          return {
+            success: false,
+            data: null,
+            msg: `获取失败：${result.message}`,
+          };
+        }
+      }
+
+      return { success: false, data: null, msg: response.text || '获取基础信息失败' };
+    } catch (err) {
+      return {
+        success: false,
+        data: null,
+        msg: `获取基础信息失败：${err instanceof Error ? err.message : '网络错误'}`,
+      };
+    }
+  }
+}
+
+// ============================================
+// 组织架构数据类型
+// ============================================
+
+/**
+ * 组织树节点
+ */
+export interface OrgTreeNode {
+  id: string;
+  fdId?: string;
+  fdName?: string;
+  name?: string;
+  fdOrgType?: number; // 1: 机构, 2: 部门, 3: 岗位
+  type?: number;
+  fdHierarchyId?: string; // 层级路径，格式: x{id1}x{id2}x...
+  fdParentId?: string;
+  fdParentorgid?: string;
+  children?: OrgTreeNode[];
+  fdNo?: string;
+  fdOrder?: number;
+  fdOrgEmail?: string;
+}
+
+/**
+ * 人员信息
+ */
+export interface PersonInfo {
+  fdId?: string;
+  fdName?: string;
+  name?: string;
+  fdLoginName?: string;
+  fdEmail?: string;
+  fdMobile?: string;
+  fdNo?: string;
+  fdRtxAccount?: string;
+  fdDeptId?: string;
+  fdHierarchyId?: string;
+  fdIsLoginEnabled?: number;
+}
+
+/**
+ * 岗位信息
+ */
+export interface PostInfo {
+  id: string;
+  fdId?: string;
+  fdName?: string;
+  name?: string;
+  fdNo?: string;
+  fdOrder?: number;
+  fdParentId?: string;
+}
+
+/**
+ * 人员列表数据
+ */
+export interface PersonListData {
+  count: number;
+  persons: PersonInfo[];
+}
+
+// ============================================
+// 组织架构同步接口类型定义（按接口文档）
+// ============================================
+
+/**
+ * 同步接口返回状态
+ */
+export type SyncedReturnState = 0 | 1 | 2;
+// 0: 未操作
+// 1: 失败
+// 2: 成功
+
+/**
+ * 组织架构类型
+ */
+export type OrgElementType = 'org' | 'dept' | 'group' | 'post' | 'person';
+// org: 机构
+// dept: 部门
+// group: 群组
+// post: 岗位
+// person: 人员
+
+/**
+ * 同步接口返回的单个组织架构元素（完整信息）
+ * 根据接口文档 getUpdatedElements 返回的数据格式
+ */
+export interface SyncedElement {
+  id: string;                    // 唯一标识
+  lunid: string;                 // 唯一标示，可作为数据存储的主键
+  name: string;                  // 名称
+  type: OrgElementType;          // 组织架构类型
+  no?: string;                   // 编号
+  order?: string;                // 排序号
+  keyword?: string;              // 关键字
+  memo?: string;                 // 说明
+  isAvailable?: boolean;          // 是否有效（决定是否删除）
+  parent?: string;               // 父部门（org/dept/post/person时有此信息）
+  thisLeader?: string;           // 部门领导（org/dept/post时有此信息）
+  superLeader?: string;          // 上级领导（org/dept时有此信息）
+  members?: string[];            // 成员（group时有此信息）
+  persons?: string[];            // 包含人员（post时有此信息）
+  posts?: string[];             // 所属岗位（person时有此信息）
+  // 人员特有字段
+  loginName?: string;            // 登录名（person时有此信息）
+  password?: string;             // 密码，MD5 32位加密（person时有此信息）
+  mobileNo?: string;             // 手机号（person时有此信息）
+  email?: string;               // 邮件地址（person时有此信息）
+  attendanceCardNumber?: string; // 考勤号（person时有此信息）
+  workPhone?: string;            // 办公电话（person时有此信息）
+  rtx?: string;                 // rtx账号（person时有此信息）
+  wechat?: string;              // 微信号（person时有此信息）
+  sex?: 'M' | 'F';              // 性别（person时有此信息）
+  shortNo?: string;              // 短号（person时有此信息）
+  staffingLevelName?: string;    // 职级名称（person时有此信息）
+  staffingLevelValue?: string;   // 职级大小（person时有此信息）
+  customProps?: Record<string, string>; // 自定义属性（person时有此信息）
+  // 层级相关字段（来自 getElementsBaseInfo）
+  hierarchyId?: string;          // 层级路径，格式: xparent1xparent2xcurrentx
+}
+
+/**
+ * 基础信息元素（getElementsBaseInfo 返回）
+ */
+export interface BaseInfoElement {
+  id: string;                    // 唯一标识
+  lunid?: string;                // 唯一标示
+  name: string;                  // 名称
+  type: OrgElementType;          // 组织架构类型
+  no?: string;                   // 编号
+  order?: string;                // 排序号
+  keyword?: string;              // 关键字
+}
+
+/**
+ * getUpdatedElements 原始响应
+ */
+export interface SyncedElementsResponse {
+  returnState: SyncedReturnState;
+  message: string | SyncedElement[];
+  count: number;
+  timeStamp: string;
+}
+
+/**
+ * getUpdatedElementsByToken 原始响应
+ */
+export interface SyncedElementsByTokenResponse {
+  returnState: SyncedReturnState;
+  message: string | SyncedElement[];
+  count: number;
+  token: string;
+}
+
+/**
+ * BaseInfo 原始响应
+ */
+export interface BaseInfoResponse {
+  returnState: SyncedReturnState;
+  message: string | BaseInfoElement[];
+  count: number;
+}
+
+/**
+ * getUpdatedElements 返回结果
+ */
+export interface SyncedElementsResult {
+  elements: SyncedElement[];
+  count: number;
+  timeStamp: string;
+  hasMore: boolean;
+}
+
+/**
+ * getUpdatedElementsByToken 返回结果
+ */
+export interface SyncedElementsByTokenResult {
+  elements: SyncedElement[];
+  count: number;
+  token: string;
+  hasMore: boolean;
 }
 
 // ============================================
