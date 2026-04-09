@@ -254,8 +254,8 @@ export class ApprovalAgent extends BaseBusinessAgent {
       try {
         const { flowMappingService } = await import('@/lib/ekp/services');
         const mapping = await flowMappingService.getByBusinessType(entities.businessTypeCode as string);
-        if (mapping?.formUrl) {
-          formUrl = mapping.formUrl;
+        if (mapping?.formTemplateUrl) {
+          formUrl = mapping.formTemplateUrl;
         }
       } catch (error) {
         console.error('[ApprovalAgent] 获取表单URL失败:', error);

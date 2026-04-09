@@ -185,8 +185,8 @@ export class FlowService {
           // 合并映射表的表单信息
           return {
             ...template,
-            formUrl: mapping.formUrl || template.formUrl,
-            formCode: mapping.formCode || template.formCode,
+            formUrl: mapping.formTemplateUrl || template.formUrl,
+            formCode: mapping.formTemplateId || template.formCode,
           };
         }
       }

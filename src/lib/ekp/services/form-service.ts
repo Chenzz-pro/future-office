@@ -121,8 +121,8 @@ export class FormService {
    */
   async getTemplate(formCode: string): Promise<FormTemplate | null> {
     try {
-      // 先从映射表获取表单信息
-      const mapping = await flowMappingService.getByFormCode(formCode);
+      // 先从映射表获取表单信息（通过表单模板ID）
+      const mapping = await flowMappingService.getByFormTemplateId(formCode);
 
       if (!mapping) {
         console.warn('[FormService] 未找到表单配置:', formCode);
@@ -133,8 +133,8 @@ export class FormService {
       return {
         id: mapping.flowTemplateId || formCode,
         code: formCode,
-        name: mapping.businessTypeName || formCode,
-        url: mapping.formUrl || '',
+        name: mapping.businessName || formCode,
+        url: mapping.formTemplateUrl || '',
         fields: [],
         groups: [],
         actions: [
@@ -162,9 +162,9 @@ export class FormService {
 
       return {
         id: mapping.flowTemplateId || '',
-        code: mapping.formCode || '',
-        name: mapping.businessTypeName || businessType,
-        url: mapping.formUrl || '',
+        code: mapping.formTemplateId || '',
+        name: mapping.businessName || businessType,
+        url: mapping.formTemplateUrl || '',
         fields: [],
         groups: [],
         actions: [

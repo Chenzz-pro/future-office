@@ -16,25 +16,23 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const keyword = searchParams.get('keyword') || undefined;
-    const category = searchParams.get('category') || undefined;
     const enabled = searchParams.get('enabled');
     const isSystem = searchParams.get('isSystem');
 
     const mappings = await flowMappingService.getAll({
       keyword,
-      category,
       enabled: enabled === 'true' ? true : enabled === 'false' ? false : undefined,
       isSystem: isSystem === 'true' ? true : isSystem === 'false' ? false : undefined,
     });
 
-    // 获取分类列表
-    const categories = await flowMappingService.getCategories();
+    // 获取业务类型列表（用于下拉选择）
+    const businessTypes = await flowMappingService.getBusinessTypes();
 
     return NextResponse.json({
       success: true,
       data: {
         mappings,
-        categories,
+        businessTypes,
       },
     });
   } catch (error) {
@@ -52,7 +50,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.headers.get('X-User-ID');
     const body = await request.json();
     const { action, ...params } = body;
 
@@ -66,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 创建新映射
-    const id = await flowMappingService.create(params, userId || undefined);
+    const id = await flowMappingService.create(params);
 
     return NextResponse.json({
       success: true,
@@ -88,7 +85,6 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const userId = request.headers.get('X-User-ID');
     const body = await request.json();
     const { id, ...params } = body;
 
@@ -99,7 +95,7 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const success = await flowMappingService.update(id, params, userId || undefined);
+    const success = await flowMappingService.update(id, params);
 
     return NextResponse.json({
       success,
