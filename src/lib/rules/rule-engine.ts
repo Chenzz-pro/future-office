@@ -407,6 +407,22 @@ export class RuleEngine {
             // 调用技能
             if (step.skillCode) {
               lastResult = await this.invokeSkill(step.skillCode, params, context);
+              
+              // 检查 EKP 响应是否成功
+              if (typeof lastResult === 'object' && lastResult !== null) {
+                const response = lastResult as Record<string, unknown>;
+                
+                // 如果 EKP 返回错误（success === false 或 code !== '200'）
+                if (response.success === false || (response.code && response.code !== '200')) {
+                  console.log('[RuleEngine] EKP 返回错误:', response.message || response.msg);
+                  return {
+                    code: String(response.code || '400'),
+                    msg: String(response.message || response.msg || 'EKP 接口调用失败'),
+                    data: response,
+                    skillCalled: true,
+                  };
+                }
+              }
             }
             break;
 
