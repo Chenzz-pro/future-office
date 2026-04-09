@@ -378,6 +378,54 @@
 
 ---
 
+### 2.7 组织架构同步
+
+**接口**: `POST /api/organization/sync`
+
+**描述**: 从EKP系统同步组织架构数据（机构、部门、岗位、人员）
+
+**请求头**:
+- `X-User-ID`: 用户ID（可选）
+
+**请求体**:
+```json
+{
+  "type": "full",
+  "scope": ["organizations", "departments", "posts", "persons"]
+}
+```
+
+**参数说明**:
+- `type`: 同步类型
+  - `full`: 全量同步
+  - `incremental`: 增量同步
+- `scope`: 同步范围数组，可选值：
+  - `organizations`: 机构
+  - `departments`: 部门
+  - `posts`: 岗位
+  - `persons`: 人员
+  - 可任意组合，如 `["organizations", "departments", "posts", "persons"]` 表示同步全部
+
+**响应**:
+```json
+{
+  "success": true,
+  "message": "同步完成",
+  "data": {
+    "syncLogId": "sync-log-uuid",
+    "stats": {
+      "total": 100,
+      "organizations": { "total": 5, "success": 5, "failed": 0 },
+      "departments": { "total": 20, "success": 20, "failed": 0 },
+      "posts": { "total": 30, "success": 30, "failed": 0 },
+      "persons": { "total": 45, "success": 45, "failed": 0 }
+    }
+  }
+}
+```
+
+---
+
 ## 3. 聊天对话接口
 
 ### 3.1 发送消息（RootAgent）
