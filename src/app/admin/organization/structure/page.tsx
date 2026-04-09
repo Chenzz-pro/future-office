@@ -662,17 +662,116 @@ export default function OrganizationStructurePage() {
         {/* 顶部搜索栏 */}
         <Card className="p-4">
           <div className="flex gap-3 items-center">
-            {/* 当前选中节点提示 */}
+            {/* 当前选中节点提示 - 增强样式，更明显 */}
             {selectedNode ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg text-blue-700">
-                <Building2 className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  {selectedNode.type === 1 ? '机构' : '部门'}：{selectedNodeName}
-                </span>
+              <div className="flex items-center justify-between flex-1 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 shadow-sm">
+                <div className="flex items-center gap-3">
+                  {/* 节点类型图标 */}
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    selectedNode.type === 1 
+                      ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
+                      : 'bg-gradient-to-br from-green-500 to-green-600'
+                  }`}>
+                    {selectedNode.type === 1 ? (
+                      <Building2 className="w-5 h-5 text-white" />
+                    ) : (
+                      <BriefcaseBusiness className="w-5 h-5 text-white" />
+                    )}
+                  </div>
+                  
+                  {/* 节点信息 */}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        selectedNode.type === 1 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {selectedNode.type === 1 ? '机构' : '部门'}
+                      </span>
+                      <span className="text-base font-semibold text-gray-900">
+                        {selectedNodeName}
+                      </span>
+                    </div>
+                    {selectedNode.parentId && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        父级ID: {selectedNode.parentId}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 操作按钮组 - 更明显 */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      // 将 OrgTreeNode 转换为 OrgElement 格式
+                      const element: OrgElement = {
+                        fd_id: selectedNode.id,
+                        fd_org_type: selectedNode.type,
+                        fd_name: selectedNode.name,
+                        fd_order: 0,
+                        fd_is_available: true,
+                        fd_is_business: true,
+                        fd_persons_number: selectedNode.personCount || 0,
+                        fd_parentid: selectedNode.parentId || undefined,
+                        fd_parentorgid: selectedNode.parentId || undefined,
+                        // 添加必需的属性
+                        fd_create_time: new Date(),
+                        fd_alter_time: new Date(),
+                        fd_is_external: false,
+                        fd_is_abandon: false,
+                      };
+                      handleEdit(element, selectedNode.type === 1 ? 'org' : 'dept');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                    title="编辑当前机构/部门"
+                  >
+                    <Edit className="w-4 h-4 mr-1" />
+                    编辑
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      // 将 OrgTreeNode 转换为 OrgElement 格式
+                      const element: OrgElement = {
+                        fd_id: selectedNode.id,
+                        fd_org_type: selectedNode.type,
+                        fd_name: selectedNode.name,
+                        fd_order: 0,
+                        fd_is_available: true,
+                        fd_is_business: true,
+                        fd_persons_number: selectedNode.personCount || 0,
+                        fd_parentid: selectedNode.parentId || undefined,
+                        fd_parentorgid: selectedNode.parentId || undefined,
+                        // 添加必需的属性
+                        fd_create_time: new Date(),
+                        fd_alter_time: new Date(),
+                        fd_is_external: false,
+                        fd_is_abandon: false,
+                      };
+                      handleDelete(element, selectedNode.type === 1 ? 'org' : 'dept');
+                    }}
+                    className="shadow-sm"
+                    title="删除当前机构/部门"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    删除
+                  </Button>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg text-gray-500">
-                <span className="text-sm">请在左侧选择一个部门</span>
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Folder className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-amber-800">未选择节点</span>
+                  <p className="text-xs text-amber-600">点击左侧组织架构树选择节点，或直接新建机构</p>
+                </div>
               </div>
             )}
 
@@ -716,8 +815,8 @@ export default function OrganizationStructurePage() {
               <Button
                 size="sm"
                 onClick={() => handleCreate('organization')}
-                disabled={!selectedNode}
-                title={!selectedNode ? '请先选择一个部门' : '新建子机构'}
+                // 机构可以独立创建（顶层机构），不需要选中节点
+                title="新建顶层机构"
               >
                 <Plus className="w-4 h-4 mr-1" />
                 新建机构
