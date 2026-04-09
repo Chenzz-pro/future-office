@@ -236,14 +236,12 @@ async function getTreeData(type: number) {
 
   const params: unknown[] = [];
   
-  // type: 1=只显示机构，2=显示机构和部门+岗位（默认），3=只显示岗位
+  // type: 1=只显示机构，2=显示机构和部门（默认，不包含岗位）
   if (type === 1) {
     query += ' AND fd_org_type = 1';
-  } else if (type === 3) {
-    query += ' AND fd_org_type = 3';
   } else {
-    // 默认显示机构和部门、岗位
-    query += ' AND fd_org_type IN (1, 2, 3)';
+    // 默认只显示机构和部门，不显示岗位（岗位在右侧区域显示）
+    query += ' AND fd_org_type IN (1, 2)';
   }
 
   query += ' ORDER BY fd_org_type ASC, fd_order ASC, fd_create_time ASC';
@@ -446,6 +444,25 @@ async function getOrgList(type: string, parentId: string, keyword: string) {
           params.push(parentId);
         }
       }
+    }
+  } else if (type === 'post') {
+    // 查询岗位列表
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid
+      FROM sys_org_element
+      WHERE fd_org_type = 3
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      // 查询指定部门下的岗位
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
     }
   } else {
     const orgType = type === 'organization' ? 1 : type === 'department' ? 2 : 3;

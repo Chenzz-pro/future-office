@@ -3,13 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { OrgElementDialog } from '@/components/org-element-dialog';
 import {
@@ -21,12 +14,11 @@ import {
   Users,
   Briefcase,
   Plus,
-  ArrowUpDown,
-  X,
   RefreshCw,
   Edit,
   Trash2,
   User,
+  X,
 } from 'lucide-react';
 import { OrgElement, OrgPerson, OrgTreeNode } from '@/types/org-structure';
 import {
@@ -39,51 +31,42 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
-// 视图类型
-type ViewType = 'organization' | 'department' | 'position' | 'person';
-
-// 视图配置
-const viewConfigs = [
-  { type: 'organization' as ViewType, label: '机构', icon: Building2, color: 'from-blue-500 to-blue-600' },
-  { type: 'department' as ViewType, label: '部门', icon: Briefcase, color: 'from-green-500 to-green-600' },
-  { type: 'position' as ViewType, label: '岗位', icon: Users, color: 'from-purple-500 to-purple-600' },
-  { type: 'person' as ViewType, label: '人员', icon: User, color: 'from-orange-500 to-orange-600' },
-];
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function OrganizationStructurePage() {
   // 状态管理
   const [treeData, setTreeData] = useState<OrgTreeNode[]>([]);
   const [selectedNode, setSelectedNode] = useState<OrgTreeNode | null>(null);
-  const [currentView, setCurrentView] = useState<ViewType>('department');
-  const [listData, setListData] = useState<(OrgElement | OrgPerson)[]>([]);
+  const [selectedNodeName, setSelectedNodeName] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [searchKeyword, setSearchKeyword] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  // 列表数据状态
+  const [postList, setPostList] = useState<OrgElement[]>([]);
+  const [personList, setPersonList] = useState<OrgPerson[]>([]);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [currentTab, setCurrentTab] = useState<'posts' | 'persons'>('posts');
 
   // 对话框状态
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [dialogInitialData, setDialogInitialData] = useState<OrgElement | OrgPerson | null>(null);
+  const [dialogViewType, setDialogViewType] = useState<'department' | 'position' | 'person'>('position');
 
   // 删除确认对话框状态
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteItem, setDeleteItem] = useState<(OrgElement | OrgPerson) | null>(null);
+  const [deleteItem, setDeleteItem] = useState<OrgElement | OrgPerson | null>(null);
+  const [deleteItemType, setDeleteItemType] = useState<'post' | 'person'>('post');
 
   // 加载树数据
   const loadTreeData = async () => {
     try {
       setLoading(true);
-      // type=2：显示机构和部门（不显示人员和岗位）
+      // type=2：显示机构和部门（不显示岗位，岗位在右侧显示）
       const response = await fetch('/api/organization?action=tree&type=2');
       const data = await response.json();
       if (data.success) {
         setTreeData(data.data || []);
-        // 默认不展开任何节点，让用户手动点击展开
-        // 如果需要默认展开第一个节点，可以取消下面的注释
-        // if (data.data && data.data.length > 0) {
-        //   setExpandedNodes(new Set([data.data[0].id]));
-        // }
       }
     } catch (error) {
       console.error('加载树数据失败:', error);
@@ -92,31 +75,43 @@ export default function OrganizationStructurePage() {
     }
   };
 
-  // 加载列表数据
-  const loadListData = async () => {
-    if (!selectedNode) {
-      setListData([]);
-      return;
-    }
-
+  // 加载岗位列表
+  const loadPostList = async (parentId: string) => {
     try {
-      setLoading(true);
       const params = new URLSearchParams({
-        type: currentView,
-        parentId: selectedNode.id,
+        type: 'post',
+        parentId: parentId,
         ...(searchKeyword && { keyword: searchKeyword }),
       });
 
       const response = await fetch(`/api/organization?action=list&${params}`);
       const data = await response.json();
       if (data.success) {
-        setListData(data.data || []);
+        setPostList(data.data || []);
       }
     } catch (error) {
-      console.error('加载数据失败:', error);
-      setListData([]);
-    } finally {
-      setLoading(false);
+      console.error('加载岗位数据失败:', error);
+      setPostList([]);
+    }
+  };
+
+  // 加载人员列表
+  const loadPersonList = async (parentId: string) => {
+    try {
+      const params = new URLSearchParams({
+        type: 'person',
+        parentId: parentId,
+        ...(searchKeyword && { keyword: searchKeyword }),
+      });
+
+      const response = await fetch(`/api/organization?action=list&${params}`);
+      const data = await response.json();
+      if (data.success) {
+        setPersonList(data.data || []);
+      }
+    } catch (error) {
+      console.error('加载人员数据失败:', error);
+      setPersonList([]);
     }
   };
 
@@ -125,11 +120,26 @@ export default function OrganizationStructurePage() {
     loadTreeData();
   }, []);
 
-  // 监听选择节点和视图变化，重新加载列表
+  // 监听选择节点变化，加载岗位和人员
   useEffect(() => {
-    loadListData();
+    if (selectedNode) {
+      loadPostList(selectedNode.id);
+      loadPersonList(selectedNode.id);
+    } else {
+      setPostList([]);
+      setPersonList([]);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNode, currentView, searchKeyword]);
+  }, [selectedNode]);
+
+  // 监听搜索关键词变化
+  useEffect(() => {
+    if (selectedNode) {
+      loadPostList(selectedNode.id);
+      loadPersonList(selectedNode.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchKeyword]);
 
   // 节点展开/折叠
   const toggleNode = (nodeId: string) => {
@@ -145,6 +155,8 @@ export default function OrganizationStructurePage() {
   // 选择节点
   const handleSelectNode = (node: OrgTreeNode) => {
     setSelectedNode(node);
+    setSelectedNodeName(node.name);
+    setCurrentTab('posts'); // 切换到岗位Tab
 
     // 如果节点有子节点且未展开，自动展开该节点
     if (node.children && node.children.length > 0 && !expandedNodes.has(node.id)) {
@@ -155,25 +167,22 @@ export default function OrganizationStructurePage() {
   };
 
   // 打开新建对话框
-  const handleCreate = () => {
-    // 根据当前视图类型判断是否需要选择父节点
-    const needsParent = ['department', 'position', 'person'].includes(currentView);
-
-    if (needsParent && !selectedNode) {
-      // 使用更明显的提示
-      const message = `创建${viewConfigs.find(c => c.type === currentView)?.label}需要先选择父级组织`;
-      alert(message);
+  const handleCreate = (viewType: 'position' | 'person') => {
+    if (!selectedNode) {
+      alert('请先在左侧选择一个部门');
       return;
     }
 
-    console.log('[handleCreate] 打开新建对话框', { currentView, selectedNode, needsParent });
+    setDialogViewType(viewType);
     setDialogMode('create');
     setDialogInitialData(null);
     setDialogOpen(true);
   };
 
   // 打开编辑对话框
-  const handleEdit = (item: OrgElement | OrgPerson) => {
+  const handleEdit = (item: OrgElement | OrgPerson, itemType: 'post' | 'person') => {
+    setDeleteItemType(itemType);
+    setDialogViewType(itemType === 'post' ? 'position' : 'person');
     setDialogMode('edit');
     setDialogInitialData(item);
     setDialogOpen(true);
@@ -181,35 +190,28 @@ export default function OrganizationStructurePage() {
 
   // 保存数据
   const handleSave = async (data: Record<string, unknown>) => {
-    console.log('[handleSave] 开始保存', {
-      action: dialogMode === 'create' ? 'create' : 'update',
-      type: currentView,
-      data,
-    });
-
     try {
       const response = await fetch('/api/organization', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: dialogMode === 'create' ? 'create' : 'update',
-          type: currentView,
+          type: dialogViewType,
           data,
         }),
       });
 
-      console.log('[handleSave] 响应状态:', response.status);
-
       const result = await response.json();
-      console.log('[handleSave] 响应数据:', result);
-
       if (!result.success) {
         throw new Error(result.error || '保存失败');
       }
 
       // 刷新数据
       await loadTreeData();
-      await loadListData();
+      if (selectedNode) {
+        await loadPostList(selectedNode.id);
+        await loadPersonList(selectedNode.id);
+      }
     } catch (error) {
       console.error('[handleSave] 保存失败:', error);
       throw error;
@@ -217,8 +219,9 @@ export default function OrganizationStructurePage() {
   };
 
   // 打开删除确认对话框
-  const handleDelete = (item: OrgElement | OrgPerson) => {
+  const handleDelete = (item: OrgElement | OrgPerson, itemType: 'post' | 'person') => {
     setDeleteItem(item);
+    setDeleteItemType(itemType);
     setDeleteDialogOpen(true);
   };
 
@@ -232,7 +235,7 @@ export default function OrganizationStructurePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'delete',
-          type: currentView,
+          type: deleteItemType === 'post' ? 'position' : 'person',
           id: deleteItem.fd_id,
         }),
       });
@@ -244,25 +247,15 @@ export default function OrganizationStructurePage() {
 
       // 刷新数据
       await loadTreeData();
-      await loadListData();
+      if (selectedNode) {
+        await loadPostList(selectedNode.id);
+        await loadPersonList(selectedNode.id);
+      }
       setDeleteDialogOpen(false);
     } catch (error) {
       console.error('删除失败:', error);
       alert('删除失败，请重试');
     }
-  };
-
-  // 其他按钮处理
-  const handleQuickSort = () => {
-    alert('快速排序功能开发中');
-  };
-
-  const handleSetInvalid = () => {
-    alert('置为无效功能开发中');
-  };
-
-  const handleChangeParent = () => {
-    alert('快捷调换上级功能开发中');
   };
 
   // 渲染树节点
@@ -334,6 +327,74 @@ export default function OrganizationStructurePage() {
     );
   };
 
+  // 渲染列表项
+  const renderListItem = (
+    item: OrgElement | OrgPerson,
+    itemType: 'post' | 'person',
+    index: number
+  ) => {
+    const isPost = itemType === 'post';
+    const element = item as OrgElement;
+    const person = item as OrgPerson;
+
+    return (
+      <Card
+        key={item.fd_id}
+        className="p-4 hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* 序号 */}
+            <span className="text-sm text-gray-400 w-6">{index + 1}</span>
+            
+            {/* 图标 */}
+            <div
+              className={`w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center text-white ${
+                isPost ? 'from-purple-500 to-purple-600' : 'from-orange-500 to-orange-600'
+              }`}
+            >
+              {isPost ? <Users className="w-5 h-5" /> : <User className="w-5 h-5" />}
+            </div>
+
+            {/* 信息 */}
+            <div>
+              <h4 className="font-medium text-gray-900">{item.fd_name}</h4>
+              <p className="text-sm text-gray-500 mt-1">
+                {item.fd_no && `编号: ${item.fd_no}`}
+                {isPost && element.fd_org_email && item.fd_no && ' | '}
+                {isPost && element.fd_org_email && `邮箱: ${element.fd_org_email}`}
+                {!isPost && person.fd_email && item.fd_no && ' | '}
+                {!isPost && person.fd_email && `邮箱: ${person.fd_email}`}
+                {!isPost && person.fd_mobile && (
+                  <>
+                    {item.fd_no || person.fd_email ? ' | ' : ''}
+                    {`手机: ${person.fd_mobile}`}
+                  </>
+                )}
+                {!isPost && person.fd_login_name && (
+                  <>
+                    {item.fd_no || person.fd_email || person.fd_mobile ? ' | ' : ''}
+                    {`登录名: ${person.fd_login_name}`}
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => handleEdit(item, itemType)}>
+              <Edit className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(item, itemType)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-6">
       {/* 左侧树形结构 */}
@@ -382,84 +443,68 @@ export default function OrganizationStructurePage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 顶部搜索栏 */}
         <Card className="p-4">
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            {/* 当前选中节点提示 */}
+            {selectedNode ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg text-blue-700">
+                <Building2 className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  {selectedNode.type === 1 ? '机构' : '部门'}：{selectedNodeName}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg text-gray-500">
+                <span className="text-sm">请在左侧选择一个部门</span>
+              </div>
+            )}
+
             <div className="flex-1 flex items-center gap-2">
               <Search className="w-4 h-4 text-gray-400" />
               <Input
-                placeholder="请输入关键字（可根据编号、名称、名称拼音查询）"
+                placeholder="搜索岗位/人员..."
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
                 className="flex-1"
               />
             </div>
-            <Button variant="outline">搜索</Button>
-            <Button variant="ghost" size="sm">
-              展开筛选
-            </Button>
           </div>
         </Card>
 
-        {/* 功能切换与排序栏 */}
+        {/* Tab切换与操作按钮 */}
         <Card className="p-4 mt-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {/* 视图切换下拉 */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">当前显示：</span>
-                <Select value={currentView} onValueChange={(v) => setCurrentView(v as ViewType)}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {viewConfigs.map((config) => (
-                      <SelectItem key={config.type} value={config.type}>
-                        {config.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v as 'posts' | 'persons')}>
+              <TabsList>
+                <TabsTrigger value="posts" className="flex items-center gap-1">
+                  <Users className="w-4 h-4" />
+                  岗位 ({postList.length})
+                </TabsTrigger>
+                <TabsTrigger value="persons" className="flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  人员 ({personList.length})
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-              {/* 排序控制 */}
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-600">排序：</span>
-                <span className="font-medium">排序号</span>
-                <Button variant="ghost" size="sm" className="text-gray-500">
-                  <ArrowUpDown className="w-4 h-4 mr-1" />
-                  更多排序
-                </Button>
-              </div>
-            </div>
-
-            {/* 操作按钮 */}
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                onClick={handleCreate}
-                disabled={['department', 'position', 'person'].includes(currentView) && !selectedNode}
-                title={
-                  ['department', 'position', 'person'].includes(currentView) && !selectedNode
-                    ? `请先在左侧选择一个${viewConfigs.find(c => c.type === currentView)?.label === 'department' ? '机构' : viewConfigs.find(c => c.type === currentView)?.label === 'position' ? '部门' : '部门'}作为父级`
-                    : `新建${viewConfigs.find(c => c.type === currentView)?.label}`
-                }
+                onClick={() => handleCreate('position')}
+                disabled={!selectedNode}
+                title={!selectedNode ? '请先选择一个部门' : '新建岗位'}
               >
                 <Plus className="w-4 h-4 mr-1" />
-                新建
+                新建岗位
               </Button>
-              {/* 提示信息 */}
-              {['department', 'position', 'person'].includes(currentView) && !selectedNode && (
-                <span className="text-xs text-gray-500">
-                  提示：请先在左侧选择父级组织
-                </span>
-              )}
-              <Button variant="outline" size="sm" onClick={handleQuickSort}>
-                快速排序
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleSetInvalid}>
-                置为无效
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleChangeParent}>
-                快捷调换上级
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleCreate('person')}
+                disabled={!selectedNode}
+                title={!selectedNode ? '请先选择一个部门' : '新建人员'}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                新建人员
               </Button>
             </div>
           </div>
@@ -475,67 +520,33 @@ export default function OrganizationStructurePage() {
             ) : !selectedNode ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <Users className="w-16 h-16 mb-4 opacity-30" />
-                <p className="text-lg font-medium mb-2">请在左侧选择层级</p>
-                <p className="text-sm">选择层级后，可查看该层级的机构、部门、岗位或人员信息</p>
-              </div>
-            ) : listData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <X className="w-16 h-16 mb-4 opacity-30" />
-                <p className="text-lg font-medium mb-2">很抱歉，未找到符合条件的记录！</p>
-                <p className="text-sm">请尝试其他查询条件</p>
+                <p className="text-lg font-medium mb-2">请在左侧选择部门</p>
+                <p className="text-sm">选择部门后，可查看该部门的岗位和人员信息</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                {listData.map((item: any) => (
-                  <Card
-                    key={item.fd_id}
-                    className="p-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {/* 图标 */}
-                        <div
-                          className={`w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center text-white ${
-                            currentView === 'organization' ? 'from-blue-500 to-blue-600' :
-                            currentView === 'department' ? 'from-green-500 to-green-600' :
-                            currentView === 'position' ? 'from-purple-500 to-purple-600' :
-                            'from-orange-500 to-orange-600'
-                          }`}
-                        >
-                          {currentView === 'organization' && <Building2 className="w-5 h-5" />}
-                          {currentView === 'department' && <Briefcase className="w-5 h-5" />}
-                          {currentView === 'position' && <Users className="w-5 h-5" />}
-                          {currentView === 'person' && <User className="w-5 h-5" />}
-                        </div>
-
-                        {/* 信息 */}
-                        <div>
-                          <h4 className="font-medium text-gray-900">{item.fd_name}</h4>
-                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                          <p className="text-sm text-gray-500 mt-1">
-                            {item.fd_no && `编号: ${item.fd_no}`}
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                            {item.fd_no && ((item as any).fd_email || (item as any).fd_org_email) && ' | '}
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                            {((item as any).fd_email || (item as any).fd_org_email) && `邮箱: ${((item as any).fd_email || (item as any).fd_org_email)}`}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* 操作按钮 */}
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(item)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+              <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v as 'posts' | 'persons')}>
+                <TabsContent value="posts" className="m-0 space-y-2">
+                  {postList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+                      <Briefcase className="w-12 h-12 mb-3 opacity-30" />
+                      <p className="text-sm">该部门暂无岗位</p>
                     </div>
-                  </Card>
-                ))}
-              </div>
+                  ) : (
+                    postList.map((item, index) => renderListItem(item, 'post', index))
+                  )}
+                </TabsContent>
+
+                <TabsContent value="persons" className="m-0 space-y-2">
+                  {personList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+                      <User className="w-12 h-12 mb-3 opacity-30" />
+                      <p className="text-sm">该部门暂无人员</p>
+                    </div>
+                  ) : (
+                    personList.map((item, index) => renderListItem(item, 'person', index))
+                  )}
+                </TabsContent>
+              </Tabs>
             )}
           </div>
         </Card>
@@ -546,12 +557,14 @@ export default function OrganizationStructurePage() {
         open={dialogOpen}
         onClose={() => {
           setDialogOpen(false);
-          // 关闭对话框后刷新数据
           loadTreeData();
-          loadListData();
+          if (selectedNode) {
+            loadPostList(selectedNode.id);
+            loadPersonList(selectedNode.id);
+          }
         }}
         mode={dialogMode}
-        viewType={currentView}
+        viewType={dialogViewType}
         initialData={dialogInitialData}
         parentId={selectedNode?.id}
       />
