@@ -83,12 +83,15 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.success) {
-        // 保存用户信息到 localStorage
+        // 保存完整的用户信息到 localStorage
         localStorage.setItem('currentUser', JSON.stringify({
           id: data.data.userId,
           username: data.data.username,
           personName: data.data.personName,
           email: data.data.email,
+          mobile: data.data.mobile,
+          deptId: data.data.deptId,
+          rtxAccount: data.data.rtxAccount,
           role: data.data.role,
         }));
 

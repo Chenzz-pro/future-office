@@ -25,7 +25,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useChatHistory, Message, ChatSession } from '@/hooks/use-chat-history';
+import { useChatHistory, getCurrentUser, Message, ChatSession } from '@/hooks/use-chat-history';
 import { useLLMConfig } from '@/hooks/use-llm-config';
 import { CustomSkill } from '@/types/custom-skill';
 
@@ -164,10 +164,37 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     // 立即设置 loading 状态，防止重复发送
     setIsLoading(true);
 
-    // 获取当前用户信息
-    const userId = localStorage.getItem('current-user-id') || '';
-    const deptId = ''; // TODO: 从用户信息中获取部门ID
-    const role = 'user'; // TODO: 从用户信息中获取角色
+    // 获取当前用户完整信息（优先从后端获取最新，确保 deptId 和 role 正确）
+    let userContext = getCurrentUser();
+    
+    // 如果有 userId，尝试从后端获取完整信息（包括 deptId 和 role）
+    if (userContext.userId) {
+      try {
+        const response = await fetch('/api/auth/current', {
+          headers: {
+            'X-User-ID': userContext.userId,
+          },
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data) {
+            userContext = {
+              userId: result.data.userId,
+              deptId: result.data.deptId,
+              role: result.data.role?.code || 'user',
+              roleId: result.data.role?.id,
+              username: result.data.username,
+              personName: result.data.personName,
+            };
+            console.log('[sendMessage] 从后端获取到完整用户信息:', userContext);
+          }
+        }
+      } catch (err) {
+        console.warn('[sendMessage] 获取后端用户信息失败，使用本地缓存:', err);
+      }
+    }
+
+    const { userId, deptId, role, roleId } = userContext;
 
     if (!userId) {
       console.error('[sendMessage] 用户ID未找到，请先登录');
@@ -176,7 +203,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       return;
     }
 
-    console.log('[sendMessage] 用户信息:', { userId, deptId, role });
+    console.log('[sendMessage] 用户信息:', { userId, deptId, role, roleId });
 
     // 如果没有当前会话，创建一个
     let session = currentSession;
@@ -228,7 +255,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         console.error('[sendMessage] API 调用超时');
       }, 30000); // 30秒超时
 
-      const response = await fetch('/api/chat', {
+      // 调用 RootAgent API（统一的智能体入口）
+      const response = await fetch('/api/agents/root', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -237,7 +265,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           userId,
           deptId,
           role,
-          conversationHistory,
         }),
       });
 
