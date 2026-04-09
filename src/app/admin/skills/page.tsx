@@ -42,13 +42,17 @@ import {
   CheckCircle,
   XCircle,
   Bell,
+  BellRing,
   Calendar,
   Settings,
   TestTube,
   RefreshCw,
   Database,
+  ChevronDown,
+  ChevronRight,
+  Info,
 } from 'lucide-react';
-import { SKILL_TEMPLATES, type CustomSkill, type SkillCategory } from '@/types/custom-skill';
+import { SKILL_TEMPLATES, type CustomSkill, type SkillCategory, EKP_NOTIFY_SUB_SKILLS, type EKPNotifyAction, type EKPNotifySubSkill } from '@/types/custom-skill';
 
 interface SkillRecord {
   id: string;
@@ -73,6 +77,8 @@ interface SkillRecord {
   responseParsing?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
+  // EKP待办服务支持的操作列表
+  subSkills?: EKPNotifySubSkill[];
 }
 
 export default function SkillsManagement() {
@@ -87,6 +93,10 @@ export default function SkillsManagement() {
   const [testParams, setTestParams] = useState<Record<string, string>>({});
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; data?: unknown } | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  // 当前选中的EKP待办操作
+  const [selectedAction, setSelectedAction] = useState<string>('getTodoCount');
+  // EKP待办操作说明展开状态
+  const [actionInfoOpen, setActionInfoOpen] = useState(false);
 
   // 新建/编辑对话框状态
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -109,40 +119,82 @@ export default function SkillsManagement() {
       }
 
       // 合并预置模板和自定义技能
-      const templateSkills: SkillRecord[] = [
-        {
-          id: 'ekp-todo',
-          name: 'EKP待办查询',
-          description: '查询蓝凌EKP系统的待办数量',
-          icon: 'Bell',
-          category: '企业服务',
-          enabled: true,
-          apiConfig: {
-            baseUrl: ekpData.config?.baseUrl || '',
-            path: ekpData.config?.apiPath || '/api/sys-notify/sysNotifyTodoRestService/getTodo',
-            method: 'POST',
-            contentType: 'application/json',
-          },
-          authConfig: {
-            type: 'basic',
-            username: ekpData.config?.username || '',
-            password: ekpData.config?.password || '',
-          },
-          requestParams: [
-            { name: 'loginName', label: '用户登录名', type: 'string', required: true, defaultValue: ekpData.config?.username || '' },
-            { name: 'type', label: '待办类型', type: 'enum', required: false, defaultValue: '0', enumOptions: ['-1', '0', '1', '2', '3', '13'] },
-          ],
-          bodyTemplate: {
-            targets: '{"LoginName":"{{loginName}}"}',
-            type: '{{type}}',
-          },
-          responseParsing: {
-            successField: 'returnState',
-            successValue: '2',
-            dataField: 'message',
-            countField: 'count',
-          },
+      // EKP待办服务 - 支持7个接口操作
+      const ekpNotifyTemplate: SkillRecord = {
+        id: 'ekp-notify',
+        name: 'EKP待办服务',
+        description: '蓝凌EKP待办REST服务，支持发送、删除、已办、查询、更新待办等7个接口操作',
+        icon: 'BellRing',
+        category: '企业服务',
+        enabled: true,
+        apiConfig: {
+          baseUrl: ekpData.config?.baseUrl || '',
+          path: '/api/sys-notify/sysNotifyTodoRestService',
+          method: 'POST',
+          contentType: 'application/json',
         },
+        authConfig: {
+          type: 'basic',
+          username: ekpData.config?.username || '',
+          password: ekpData.config?.password || '',
+        },
+        requestParams: [
+          { 
+            name: 'action', 
+            label: '操作类型', 
+            type: 'enum', 
+            required: true, 
+            defaultValue: 'getTodoCount',
+            enumOptions: EKP_NOTIFY_SUB_SKILLS.map(s => s.action),
+          },
+        ],
+        responseParsing: {
+          successField: 'returnState',
+          successValue: '2',
+          dataField: 'message',
+        },
+        // EKP待办服务的子技能配置
+        subSkills: EKP_NOTIFY_SUB_SKILLS,
+      };
+      
+      // 兼容旧版EKP待办查询（保留但标记为不推荐）
+      const legacyEkpTodoTemplate: SkillRecord = {
+        id: 'ekp-todo',
+        name: 'EKP待办查询（旧版）',
+        description: '查询蓝凌EKP系统的待办数量（兼容旧版，建议使用EKP待办服务）',
+        icon: 'Bell',
+        category: '企业服务',
+        enabled: false,
+        apiConfig: {
+          baseUrl: ekpData.config?.baseUrl || '',
+          path: ekpData.config?.apiPath || '/api/sys-notify/sysNotifyTodoRestService/getTodo',
+          method: 'POST',
+          contentType: 'application/json',
+        },
+        authConfig: {
+          type: 'basic',
+          username: ekpData.config?.username || '',
+          password: ekpData.config?.password || '',
+        },
+        requestParams: [
+          { name: 'loginName', label: '用户登录名', type: 'string', required: true, defaultValue: ekpData.config?.username || '' },
+          { name: 'type', label: '待办类型', type: 'enum', required: false, defaultValue: '0', enumOptions: ['-1', '0', '1', '2', '3', '13'] },
+        ],
+        bodyTemplate: {
+          targets: '{"LoginName":"{{loginName}}"}',
+          type: '{{type}}',
+        },
+        responseParsing: {
+          successField: 'returnState',
+          successValue: '2',
+          dataField: 'message',
+          countField: 'count',
+        },
+      };
+      
+      const templateSkills: SkillRecord[] = [
+        ekpNotifyTemplate,
+        legacyEkpTodoTemplate,
         {
           id: 'ekp-leave',
           name: 'EKP请假申请',
@@ -203,24 +255,66 @@ export default function SkillsManagement() {
     try {
       const apiConfig = testSkill.apiConfig as { baseUrl?: string; path?: string; method?: string; contentType?: string };
       const authConfig = testSkill.authConfig as { type?: string; username?: string; password?: string } | undefined;
-      const bodyTemplate = testSkill.bodyTemplate || {};
 
       // 构建请求体
       const body: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(bodyTemplate)) {
-        if (typeof value === 'string') {
-          // 替换模板变量
-          let processedValue = value;
-          for (const [paramKey, paramValue] of Object.entries(testParams)) {
-            processedValue = processedValue.replace(new RegExp(`\\{\\{${paramKey}\\}\\}`, 'g'), paramValue);
+      
+      // 处理EKP待办服务（多操作技能）
+      if (testSkill.subSkills && selectedAction) {
+        // 根据选中的action获取对应的参数配置
+        const currentSubSkill = testSkill.subSkills.find(s => s.action === selectedAction);
+        if (currentSubSkill) {
+          // 为每个参数设置值
+          for (const param of currentSubSkill.params) {
+            const value = testParams[param.name] || param.defaultValue || '';
+            // 对于JSON格式的参数（如targets），直接使用用户输入的值
+            if (param.name === 'targets' || param.name === 'target' || param.name === 'types') {
+              try {
+                // 尝试解析为JSON，如果失败则包装为JSON对象
+                JSON.parse(value);
+                body[param.name] = value;
+              } catch {
+                // 如果不是有效JSON，包装为对象格式
+                if (param.name === 'target') {
+                  body[param.name] = `{"LoginName":"${value}"}`;
+                } else {
+                  body[param.name] = value;
+                }
+              }
+            } else {
+              body[param.name] = value;
+            }
           }
-          // 如果是JSON字符串，解析它
-          if (key === 'targets' && !processedValue.startsWith('{')) {
-            processedValue = `{"LoginName":"${processedValue}"}`;
+        }
+      } else {
+        // 处理普通技能（旧版EKP待办查询等）
+        const bodyTemplate = testSkill.bodyTemplate || {};
+        for (const [key, value] of Object.entries(bodyTemplate)) {
+          if (typeof value === 'string') {
+            // 替换模板变量
+            let processedValue = value;
+            for (const [paramKey, paramValue] of Object.entries(testParams)) {
+              processedValue = processedValue.replace(new RegExp(`\\{\\{${paramKey}\\}\\}`, 'g'), paramValue);
+            }
+            // 如果是JSON字符串，解析它
+            if (key === 'targets' && !processedValue.startsWith('{')) {
+              processedValue = `{"LoginName":"${processedValue}"}`;
+            }
+            body[key] = processedValue;
+          } else {
+            body[key] = testParams[key] || value;
           }
-          body[key] = processedValue;
-        } else {
-          body[key] = testParams[key] || value;
+        }
+        
+        // 添加额外的参数
+        for (const [paramKey, paramValue] of Object.entries(testParams)) {
+          if (!(paramKey in body)) {
+            if (paramKey === 'loginName') {
+              body['targets'] = `{"LoginName":"${paramValue}"}`;
+            } else {
+              body[paramKey] = paramValue;
+            }
+          }
         }
       }
 
@@ -233,7 +327,13 @@ export default function SkillsManagement() {
         headers['Authorization'] = `Basic ${credentials}`;
       }
 
-      const url = `${apiConfig.baseUrl}${apiConfig.path}`;
+      // 构建请求URL - EKP待办服务根据action动态构建路径
+      let url = `${apiConfig.baseUrl}${apiConfig.path}`;
+      if (testSkill.subSkills && selectedAction) {
+        // EKP待办服务：baseUrl + path + /action
+        url = `${apiConfig.baseUrl}${apiConfig.path}/${selectedAction}`;
+      }
+      
       console.log('[TestSkill] 请求URL:', url);
       console.log('[TestSkill] 请求体:', JSON.stringify(body));
 
@@ -249,23 +349,52 @@ export default function SkillsManagement() {
       // 检查返回状态
       const returnState = data.returnState || data.returnState2;
       if (String(returnState) === '2') {
-        // 解析message中的JSON获取count
-        let count = 0;
+        // 解析message中的JSON
+        let displayMessage = '操作成功！';
         try {
           const msgData = JSON.parse(data.message);
-          count = msgData.count || 0;
+          if (selectedAction === 'getTodoCount') {
+            // 获取待办数量
+            let totalCount = 0;
+            if (Array.isArray(msgData)) {
+              msgData.forEach((item: Record<string, string>) => {
+                const count = parseInt(Object.values(item)[0] as string, 10) || 0;
+                totalCount += count;
+              });
+              displayMessage = `查询成功！共有 ${totalCount} 条待办`;
+              // 格式化显示各类型数量
+              const typeSummary = msgData.map((item: Record<string, string>) => {
+                const type = Object.keys(item)[0];
+                const count = Object.values(item)[0];
+                const typeNames: Record<string, string> = {
+                  '-1': '已办', '0': '待办', '1': '审批类', '2': '通知类', '3': '暂挂类'
+                };
+                return `${typeNames[type] || type}：${count}`;
+              }).join('，');
+              if (typeSummary) {
+                displayMessage += `（${typeSummary}）`;
+              }
+            }
+          } else if (selectedAction === 'getTodo') {
+            // 获取待办列表
+            const count = msgData.count || (msgData.docs ? msgData.docs.length : 0);
+            displayMessage = `查询成功！共 ${count} 条待办`;
+            if (msgData.pageCount) {
+              displayMessage += `，共 ${msgData.pageCount} 页`;
+            }
+          }
         } catch {
-          count = data.count || 0;
+          displayMessage = data.message || '操作成功';
         }
         setTestResult({
           success: true,
-          message: `查询成功！共有 ${count} 条待办`,
+          message: displayMessage,
           data,
         });
       } else {
         setTestResult({
           success: false,
-          message: data.message || data.msg || '查询失败',
+          message: data.message || data.msg || '操作失败',
           data,
         });
       }
@@ -285,6 +414,7 @@ export default function SkillsManagement() {
     setTestSkill(skill);
     setTestParams({});
     setTestResult(null);
+    setSelectedAction('getTodoCount');
     setTestDialogOpen(true);
   };
 
@@ -420,7 +550,8 @@ export default function SkillsManagement() {
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                           skill.id.startsWith('ekp-') ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
                         }`}>
-                          {skill.id === 'ekp-todo' ? <Bell className="w-5 h-5" /> :
+                          {skill.id === 'ekp-notify' ? <BellRing className="w-5 h-5" /> :
+                           skill.id === 'ekp-todo' ? <Bell className="w-5 h-5" /> :
                            skill.id === 'ekp-leave' ? <Calendar className="w-5 h-5" /> :
                            <Sparkles className="w-5 h-5" />}
                         </div>
@@ -488,47 +619,146 @@ export default function SkillsManagement() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            {/* 参数输入 */}
-            {testSkill?.requestParams?.map((param) => (
-              <div key={param.name} className="space-y-2">
-                <Label>
-                  {param.label}
-                  {param.required && <span className="text-red-500 ml-1">*</span>}
-                </Label>
-                {param.type === 'enum' ? (
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            {/* 判断是否为EKP待办服务 */}
+            {testSkill?.subSkills && testSkill.subSkills.length > 0 ? (
+              <>
+                {/* 操作类型选择 */}
+                <div className="space-y-2">
+                  <Label>
+                    操作类型
+                    <span className="text-red-500 ml-1">*</span>
+                  </Label>
                   <Select
-                    value={testParams[param.name] || param.defaultValue || ''}
-                    onValueChange={(v) => setTestParams({ ...testParams, [param.name]: v })}
+                    value={selectedAction}
+                    onValueChange={(v) => {
+                      setSelectedAction(v);
+                      setTestParams({});
+                      setTestResult(null);
+                    }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={`选择${param.label}`} />
+                      <SelectValue placeholder="选择操作类型" />
                     </SelectTrigger>
                     <SelectContent>
-                      {param.enumOptions?.map((opt) => (
-                        <SelectItem key={opt} value={opt}>
-                          {opt === '-1' ? '所有已办' :
-                           opt === '0' ? '所有待办' :
-                           opt === '1' ? '审批类' :
-                           opt === '2' ? '通知类' :
-                           opt === '3' ? '暂挂类' :
-                           opt === '13' ? '审批+暂挂' : opt}
+                      {testSkill.subSkills.map((subSkill) => (
+                        <SelectItem key={subSkill.action} value={subSkill.action}>
+                          {subSkill.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                ) : (
-                  <Input
-                    placeholder={param.placeholder || `输入${param.label}`}
-                    value={testParams[param.name] || param.defaultValue || ''}
-                    onChange={(e) => setTestParams({ ...testParams, [param.name]: e.target.value })}
-                  />
-                )}
-                {param.description && (
-                  <p className="text-xs text-gray-500">{param.description}</p>
-                )}
-              </div>
-            ))}
+                  {/* 显示操作说明 */}
+                  {selectedAction && (() => {
+                    const currentSubSkill = testSkill.subSkills?.find(s => s.action === selectedAction);
+                    return currentSubSkill ? (
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-sm text-blue-800">
+                            <p className="font-medium">{currentSubSkill.name}</p>
+                            <p className="mt-1">{currentSubSkill.description}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+
+                {/* 根据选中的操作显示对应的参数 */}
+                {selectedAction && (() => {
+                  const currentSubSkill = testSkill.subSkills?.find(s => s.action === selectedAction);
+                  if (!currentSubSkill) return null;
+                  
+                  return (
+                    <>
+                      <div className="border-t pt-4 mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">请求参数</h4>
+                        {currentSubSkill.params.map((param) => (
+                          <div key={param.name} className="space-y-2 mb-4">
+                            <Label>
+                              {param.label}
+                              {param.required && <span className="text-red-500 ml-1">*</span>}
+                            </Label>
+                            {param.type === 'enum' ? (
+                              <Select
+                                value={testParams[param.name] || param.defaultValue || ''}
+                                onValueChange={(v) => setTestParams({ ...testParams, [param.name]: v })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={`选择${param.label}`} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {param.enumOptions?.map((opt) => (
+                                    <SelectItem key={opt} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Textarea
+                                placeholder={param.placeholder || `输入${param.label}`}
+                                value={testParams[param.name] || param.defaultValue || ''}
+                                onChange={(e) => setTestParams({ ...testParams, [param.name]: e.target.value })}
+                                rows={param.name === 'targets' || param.name === 'target' || param.name === 'types' ? 2 : 1}
+                              />
+                            )}
+                            {param.description && (
+                              <p className="text-xs text-gray-500">{param.description}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
+              </>
+            ) : (
+              /* 普通技能参数 */
+              <>
+                {/* 参数输入 */}
+                {testSkill?.requestParams?.map((param) => (
+                  <div key={param.name} className="space-y-2">
+                    <Label>
+                      {param.label}
+                      {param.required && <span className="text-red-500 ml-1">*</span>}
+                    </Label>
+                    {param.type === 'enum' ? (
+                      <Select
+                        value={testParams[param.name] || param.defaultValue || ''}
+                        onValueChange={(v) => setTestParams({ ...testParams, [param.name]: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={`选择${param.label}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {param.enumOptions?.map((opt) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt === '-1' ? '所有已办' :
+                               opt === '0' ? '所有待办' :
+                               opt === '1' ? '审批类' :
+                               opt === '2' ? '通知类' :
+                               opt === '3' ? '暂挂类' :
+                               opt === '13' ? '审批+暂挂' : opt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder={param.placeholder || `输入${param.label}`}
+                        value={testParams[param.name] || param.defaultValue || ''}
+                        onChange={(e) => setTestParams({ ...testParams, [param.name]: e.target.value })}
+                      />
+                    )}
+                    {param.description && (
+                      <p className="text-xs text-gray-500">{param.description}</p>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
 
             {/* 测试结果 */}
             {testResult && (

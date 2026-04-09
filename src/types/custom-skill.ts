@@ -120,6 +120,9 @@ export interface CustomSkill {
   
   // 技能调用提示词（用于AI理解如何调用此技能）
   promptHint?: string;
+  
+  // 子技能配置（用于支持多操作的技能如EKP待办服务）
+  subSkills?: EKPNotifySubSkill[];
 }
 
 // ============================================
@@ -142,10 +145,460 @@ export interface SkillExecutionResult {
 // 预置技能模板
 // ============================================
 
+// ============================================
+// EKP 待办服务接口定义
+// ============================================
+
+export type EKPNotifyAction = 'sendTodo' | 'deleteTodo' | 'setTodoDone' | 'getTodo' | 'getTodoCount' | 'updateTodo' | 'getTodoTargets';
+
+export interface EKPNotifyRequestParam {
+  name: string;              // 参数名
+  label: string;             // 显示名称
+  type: ParamType;           // 参数类型
+  required: boolean;         // 是否必填
+  defaultValue?: string;     // 默认值
+  placeholder?: string;      // 输入框占位符
+  description?: string;      // 参数说明
+  enumOptions?: string[];    // 枚举选项（type为enum时使用）
+}
+
+export interface EKPNotifySubSkill {
+  action: EKPNotifyAction;  // 接口操作类型
+  name: string;              // 操作名称
+  description: string;       // 操作描述
+  params: EKPNotifyRequestParam[];  // 请求参数
+}
+
+// EKP待办服务 - 7个接口定义
+export const EKP_NOTIFY_SUB_SKILLS: EKPNotifySubSkill[] = [
+  {
+    action: 'getTodoCount',
+    name: '获取待办数量',
+    description: '获取指定用户的待办数量，支持按类型筛选',
+    params: [
+      {
+        name: 'target',
+        label: '待办所属对象',
+        type: 'string',
+        required: true,
+        placeholder: '{"LoginName":"admin"}',
+        description: '待办所属人，数据格式为JSON，支持类型：Id、PersonNo、DeptNo、PostNo、LoginName等',
+      },
+      {
+        name: 'types',
+        label: '待办类型',
+        type: 'string',
+        required: false,
+        defaultValue: '[{"type":"0"}]',
+        placeholder: '[{"type":"0"}]',
+        description: '-1所有已办，0所有待办，1审批类，2通知类，3暂挂类，13审批+暂挂',
+      },
+    ],
+  },
+  {
+    action: 'getTodo',
+    name: '获取待办列表',
+    description: '获取指定用户的待办事项列表，支持分页和多种筛选条件',
+    params: [
+      {
+        name: 'targets',
+        label: '待办所属对象',
+        type: 'string',
+        required: true,
+        placeholder: '{"LoginName":"admin"}',
+        description: '待办所属人，数据格式为JSON',
+      },
+      {
+        name: 'type',
+        label: '待办类型',
+        type: 'string',
+        required: false,
+        defaultValue: '0',
+        placeholder: '0',
+        description: '-1所有已办，0所有待办，1审批类，2通知类，3暂挂类，4已处理，5已阅，13审批+暂挂',
+      },
+      {
+        name: 'otherCond',
+        label: '其他查询条件',
+        type: 'string',
+        required: false,
+        placeholder: '[{"key":"reviewmain"},{"modelId":"xxx"}]',
+        description: 'JSON数组格式，支持：appName、modelName、modelId、subject、beginTime、endTime等',
+      },
+      {
+        name: 'rowSize',
+        label: '每页条数',
+        type: 'string',
+        required: false,
+        defaultValue: '20',
+        placeholder: '20',
+        description: '每页显示的待办数量，不填取系统默认值',
+      },
+      {
+        name: 'pageNo',
+        label: '页码',
+        type: 'string',
+        required: false,
+        defaultValue: '1',
+        placeholder: '1',
+        description: '要获取的页码，从1开始',
+      },
+    ],
+  },
+  {
+    action: 'sendTodo',
+    name: '发送待办',
+    description: '向指定人员发送待办通知',
+    params: [
+      {
+        name: 'modelName',
+        label: '模块名',
+        type: 'string',
+        required: true,
+        placeholder: 'com.landray.kmss.km_review',
+        description: '标识待办来源的模块',
+      },
+      {
+        name: 'modelId',
+        label: '待办唯一标识',
+        type: 'string',
+        required: true,
+        placeholder: '文档ID',
+        description: '待办在原系统中的唯一标识',
+      },
+      {
+        name: 'subject',
+        label: '待办标题',
+        type: 'string',
+        required: true,
+        placeholder: '请处理:XXX',
+        description: '待办事项的标题',
+      },
+      {
+        name: 'link',
+        label: 'PC端链接',
+        type: 'string',
+        required: true,
+        placeholder: 'https://oa.fjhxrl.com/sys/xxx',
+        description: '待办对应的PC端链接地址(全路径)',
+      },
+      {
+        name: 'mobileLink',
+        label: '移动端链接',
+        type: 'string',
+        required: true,
+        placeholder: 'https://oa.fjhxrl.com/mobile/xxx',
+        description: '待办对应的移动端链接地址(全路径)',
+      },
+      {
+        name: 'padLink',
+        label: 'Pad端链接',
+        type: 'string',
+        required: true,
+        placeholder: 'https://oa.fjhxrl.com/pad/xxx',
+        description: '待办对应的Pad端链接地址(全路径)',
+      },
+      {
+        name: 'type',
+        label: '待办类型',
+        type: 'string',
+        required: true,
+        defaultValue: '1',
+        placeholder: '1',
+        description: '1表示审批类待办，2表示通知类待办',
+      },
+      {
+        name: 'targets',
+        label: '待办接收人',
+        type: 'string',
+        required: true,
+        placeholder: '[{"LoginName":"zhangsan"},{"Id":"xxx"}]',
+        description: '待办接收人，数据格式为JSON数组',
+      },
+      {
+        name: 'createTime',
+        label: '创建时间',
+        type: 'string',
+        required: true,
+        placeholder: '2024-01-15 10:30:00',
+        description: '待办创建时间，格式：yyyy-MM-dd HH:mm:ss',
+      },
+      {
+        name: 'key',
+        label: '关键字',
+        type: 'string',
+        required: false,
+        placeholder: 'reviewmain',
+        description: '用于区分同一文档下不同类型的待办',
+      },
+      {
+        name: 'level',
+        label: '优先级',
+        type: 'string',
+        required: false,
+        defaultValue: '3',
+        placeholder: '3',
+        description: '待办优先级：1紧急，2急，3一般',
+      },
+    ],
+  },
+  {
+    action: 'deleteTodo',
+    name: '删除待办',
+    description: '删除指定的待办事项',
+    params: [
+      {
+        name: 'modelName',
+        label: '模块名',
+        type: 'string',
+        required: true,
+        placeholder: 'com.landray.kmss.km_review',
+        description: '标识待办来源的模块',
+      },
+      {
+        name: 'modelId',
+        label: '待办唯一标识',
+        type: 'string',
+        required: true,
+        placeholder: '文档ID',
+        description: '待办在原系统中的唯一标识',
+      },
+      {
+        name: 'optType',
+        label: '操作类型',
+        type: 'string',
+        required: true,
+        defaultValue: '1',
+        placeholder: '1',
+        description: '1表示删除待办，2表示删除指定待办所属人（已办处理）',
+      },
+      {
+        name: 'type',
+        label: '待办类型',
+        type: 'string',
+        required: false,
+        placeholder: '1',
+        description: '待办类型：1待审，2待阅，3暂挂',
+      },
+      {
+        name: 'targets',
+        label: '待办所属人',
+        type: 'string',
+        required: false,
+        placeholder: '[{"LoginName":"zhangsan"}]',
+        description: '操作类型为2时必填，待办所属人',
+      },
+      {
+        name: 'key',
+        label: '关键字',
+        type: 'string',
+        required: false,
+        placeholder: 'reviewmain',
+        description: '用于区分同一文档下不同类型的待办',
+      },
+    ],
+  },
+  {
+    action: 'setTodoDone',
+    name: '设为已办',
+    description: '将待办标记为已处理状态',
+    params: [
+      {
+        name: 'modelName',
+        label: '模块名',
+        type: 'string',
+        required: true,
+        placeholder: 'com.landray.kmss.km_review',
+        description: '标识待办来源的模块',
+      },
+      {
+        name: 'modelId',
+        label: '待办唯一标识',
+        type: 'string',
+        required: true,
+        placeholder: '文档ID',
+        description: '待办在原系统中的唯一标识',
+      },
+      {
+        name: 'optType',
+        label: '操作类型',
+        type: 'string',
+        required: true,
+        defaultValue: '1',
+        placeholder: '1',
+        description: '1表示设待办为已办，2表示设置目标待办所属人为已办',
+      },
+      {
+        name: 'type',
+        label: '待办类型',
+        type: 'string',
+        required: false,
+        placeholder: '1',
+        description: '待办类型：1待审，2待阅，3暂挂',
+      },
+      {
+        name: 'targets',
+        label: '待办所属人',
+        type: 'string',
+        required: false,
+        placeholder: '[{"LoginName":"zhangsan"}]',
+        description: '操作类型为2时必填，待办所属人',
+      },
+      {
+        name: 'key',
+        label: '关键字',
+        type: 'string',
+        required: false,
+        placeholder: 'reviewmain',
+        description: '用于区分同一文档下不同类型的待办',
+      },
+    ],
+  },
+  {
+    action: 'updateTodo',
+    name: '更新待办',
+    description: '更新已存在的待办信息',
+    params: [
+      {
+        name: 'modelName',
+        label: '模块名',
+        type: 'string',
+        required: true,
+        placeholder: 'com.landray.kmss.km_review',
+        description: '标识待办来源的模块',
+      },
+      {
+        name: 'modelId',
+        label: '待办唯一标识',
+        type: 'string',
+        required: true,
+        placeholder: '文档ID',
+        description: '待办在原系统中的唯一标识',
+      },
+      {
+        name: 'subject',
+        label: '待办标题',
+        type: 'string',
+        required: true,
+        placeholder: '请处理:XXX',
+        description: '更新后的待办标题',
+      },
+      {
+        name: 'link',
+        label: 'PC端链接',
+        type: 'string',
+        required: true,
+        placeholder: 'https://oa.fjhxrl.com/sys/xxx',
+        description: '待办对应的PC端链接地址(全路径)',
+      },
+      {
+        name: 'mobileLink',
+        label: '移动端链接',
+        type: 'string',
+        required: true,
+        placeholder: 'https://oa.fjhxrl.com/mobile/xxx',
+        description: '待办对应的移动端链接地址(全路径)',
+      },
+      {
+        name: 'padLink',
+        label: 'Pad端链接',
+        type: 'string',
+        required: true,
+        placeholder: 'https://oa.fjhxrl.com/pad/xxx',
+        description: '待办对应的Pad端链接地址(全路径)',
+      },
+      {
+        name: 'type',
+        label: '待办类型',
+        type: 'string',
+        required: true,
+        defaultValue: '1',
+        placeholder: '1',
+        description: '待办类型：1待审，2待阅，3暂挂',
+      },
+      {
+        name: 'level',
+        label: '优先级',
+        type: 'string',
+        required: true,
+        defaultValue: '3',
+        placeholder: '3',
+        description: '待办优先级：1紧急，2急，3一般',
+      },
+      {
+        name: 'key',
+        label: '关键字',
+        type: 'string',
+        required: false,
+        placeholder: 'reviewmain',
+        description: '用于区分同一文档下不同类型的待办',
+      },
+    ],
+  },
+  {
+    action: 'getTodoTargets',
+    name: '获取待办接收人',
+    description: '获取指定待办的所有接收人列表',
+    params: [
+      {
+        name: 'fdId',
+        label: '待办ID',
+        type: 'string',
+        required: true,
+        placeholder: '待办在EKP中的唯一标识',
+        description: '要查询的待办ID',
+      },
+    ],
+  },
+];
+
+// ============================================
+// 预置技能模板
+// ============================================
+
 export const SKILL_TEMPLATES = {
+  ekpNotifyService: {
+    name: 'EKP待办服务',
+    description: '蓝凌EKP待办REST服务，支持发送、删除、已办、查询、更新待办等7个接口操作',
+    icon: 'BellRing',
+    category: '企业服务' as SkillCategory,
+    apiConfig: {
+      baseUrl: '',
+      path: '/api/sys-notify/sysNotifyTodoRestService',
+      method: 'POST' as HttpMethod,
+      contentType: 'application/json' as ContentType,
+      timeout: 15000,
+    },
+    authConfig: {
+      type: 'basic' as const,
+      username: '',
+      password: '',
+    },
+    requestParams: [
+      {
+        name: 'action',
+        label: '操作类型',
+        type: 'enum' as ParamType,
+        required: true,
+        defaultValue: 'getTodoCount',
+        description: '选择要执行的待办操作',
+        enumOptions: EKP_NOTIFY_SUB_SKILLS.map(s => s.action),
+      },
+    ],
+    responseParsing: {
+      successField: 'returnState',
+      successValue: '2',
+      dataField: 'message',
+      messageField: 'message',
+      dataIsJson: true,
+    },
+    promptHint: 'EKP待办服务，支持7个操作：getTodoCount(获取待办数量)、getTodo(获取待办列表)、sendTodo(发送待办)、deleteTodo(删除待办)、setTodoDone(设为已办)、updateTodo(更新待办)、getTodoTargets(获取待办接收人)',
+    // EKP待办服务的子技能配置
+    subSkills: EKP_NOTIFY_SUB_SKILLS,
+  },
   ekpTodoCount: {
     name: 'EKP待办查询',
-    description: '查询蓝凌EKP系统的待办数量，支持按类型筛选',
+    description: '查询蓝凌EKP系统的待办数量，支持按类型筛选（兼容旧版）',
     icon: 'Bell',
     category: '企业服务' as SkillCategory,
     apiConfig: {
