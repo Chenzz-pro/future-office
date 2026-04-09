@@ -3,13 +3,13 @@ requires = ["nodejs-24"]
 
 [dev]
 build = ["bash", "./scripts/prepare.sh"]
-run = ["bash", "./scripts/dev.sh"]
-deps = ["git"] # -> apt install git
+run = ["bash", "./scripts/nginx-dev.sh"]
+deps = ["git", "nginx"]
 
 [deploy]
-build = ["bash","./scripts/build.sh"]
-run = ["bash","./scripts/start.sh"]
-deps = ["git"] # -> apt install git
+build = ["bash","./scripts/nginx-build.sh"]
+run = ["bash","./scripts/nginx-start.sh"]
+deps = ["git", "nginx"]
 
 # 环境变量不再在 .coze 文件中配置空值
 # 生产环境变量将在部署时自动注入
