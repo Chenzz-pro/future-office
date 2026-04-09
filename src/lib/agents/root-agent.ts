@@ -310,18 +310,18 @@ export class RootAgent {
    * @param defaultMessage 默认消息
    * @returns 格式化后的文本
    */
-  private formatStructuredData(data: any, defaultMessage: string): string {
+  private formatStructuredData(data: unknown, defaultMessage: string): string {
     // 检查是否是数组
     if (Array.isArray(data)) {
       if (data.length === 0) {
         return `✅ ${defaultMessage || '查询成功，暂无数据'}`;
       }
-      return this.formatArrayData(data);
+      return this.formatArrayData(data, defaultMessage);
     }
 
     // 检查是否是对象
-    if (typeof data === 'object') {
-      return this.formatObjectData(data);
+    if (typeof data === 'object' && data !== null) {
+      return this.formatObjectData(data as Record<string, unknown>, defaultMessage);
     }
 
     // 其他情况，返回默认消息
@@ -331,19 +331,23 @@ export class RootAgent {
   /**
    * 格式化数组数据
    * @param data 数组数据
+   * @param defaultMessage 默认消息
    * @returns 格式化后的文本
    */
-  private formatArrayData(data: any[]): string {
+  private formatArrayData(data: unknown[], defaultMessage?: string): string {
     const items = data.slice(0, 10); // 最多显示10条
-    const lines = [`✅ 查询成功，共 ${data.length} 条记录：\n`];
+    const title = defaultMessage && defaultMessage !== '操作成功' 
+      ? `✅ ${defaultMessage}，共 ${data.length} 条记录：`
+      : `✅ 查询成功，共 ${data.length} 条记录：`;
+    const lines = [`${title}\n`];
 
     items.forEach((item, index) => {
       if (typeof item === 'object' && item !== null) {
         // 提取关键字段
-        const title = item.title || item.name || item.subject || `记录${index + 1}`;
-        const id = item.id || index + 1;
-        const status = item.status ? ` [${item.status}]` : '';
-        const time = item.createTime || item.time || item.date || '';
+        const record = item as Record<string, unknown>;
+        const title = (record.title || record.name || record.subject || `记录${index + 1}`) as string;
+        const status = record.status ? ` [${record.status}]` : '';
+        const time = (record.createTime || record.time || record.date) as string || '';
 
         lines.push(`${index + 1}. ${title}${status}`);
         if (time) {
@@ -362,17 +366,43 @@ export class RootAgent {
   /**
    * 格式化对象数据
    * @param data 对象数据
+   * @param defaultMessage 默认消息
    * @returns 格式化后的文本
    */
-  private formatObjectData(data: any): string {
-    const lines = [`✅ 操作成功：\n`];
+  private formatObjectData(data: Record<string, unknown>, defaultMessage: string): string {
+    const lines: string[] = [];
 
+    // 优先使用 defaultMessage 作为标题
+    if (defaultMessage && defaultMessage !== '操作成功') {
+      lines.push(`✅ ${defaultMessage}\n`);
+    }
+
+    // 遍历对象的每个属性
     for (const [key, value] of Object.entries(data)) {
       if (value !== null && value !== undefined) {
+        // 跳过内部字段
+        if (['code', 'msg', 'success'].includes(key)) {
+          continue;
+        }
+
+        // 格式化字段名（驼峰转空格，首字母大写）
         const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+
+        // 格式化值
+        let displayValue: string;
+        if (typeof value === 'object') {
+          displayValue = JSON.stringify(value, null, 2);
+        } else {
+          displayValue = String(value);
+        }
+
         lines.push(`${label}：${displayValue}`);
       }
+    }
+
+    // 如果没有添加任何行，使用默认消息
+    if (lines.length === 0) {
+      return `✅ ${defaultMessage || '操作成功'}`;
     }
 
     return lines.join('\n');
