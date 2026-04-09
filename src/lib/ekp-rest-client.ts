@@ -964,6 +964,8 @@ export interface SyncedElement {
   staffingLevelName?: string;    // 职级名称（person时有此信息）
   staffingLevelValue?: string;   // 职级大小（person时有此信息）
   customProps?: Record<string, string>; // 自定义属性（person时有此信息）
+  // 层级相关字段（来自 getElementsBaseInfo）
+  hierarchyId?: string;          // 层级路径，格式: xparent1xparent2xcurrentx
 }
 
 /**

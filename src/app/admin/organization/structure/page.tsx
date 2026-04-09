@@ -42,10 +42,11 @@ export default function OrganizationStructurePage() {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   // 列表数据状态
+  const [subOrgList, setSubOrgList] = useState<OrgElement[]>([]);
   const [postList, setPostList] = useState<OrgElement[]>([]);
   const [personList, setPersonList] = useState<OrgPerson[]>([]);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [currentTab, setCurrentTab] = useState<'posts' | 'persons'>('posts');
+  const [currentTab, setCurrentTab] = useState<'orgs' | 'posts' | 'persons'>('orgs');
 
   // 对话框状态
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -56,7 +57,7 @@ export default function OrganizationStructurePage() {
   // 删除确认对话框状态
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<OrgElement | OrgPerson | null>(null);
-  const [deleteItemType, setDeleteItemType] = useState<'post' | 'person'>('post');
+  const [deleteItemType, setDeleteItemType] = useState<'org' | 'post' | 'person'>('org');
 
   // 加载树数据
   const loadTreeData = async () => {
@@ -72,6 +73,26 @@ export default function OrganizationStructurePage() {
       console.error('加载树数据失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 加载子机构/子部门列表
+  const loadSubOrgList = async (parentId: string) => {
+    try {
+      const params = new URLSearchParams({
+        type: 'org',
+        parentId: parentId,
+        ...(searchKeyword && { keyword: searchKeyword }),
+      });
+
+      const response = await fetch(`/api/organization?action=list&${params}`);
+      const data = await response.json();
+      if (data.success) {
+        setSubOrgList(data.data || []);
+      }
+    } catch (error) {
+      console.error('加载子机构/子部门数据失败:', error);
+      setSubOrgList([]);
     }
   };
 
@@ -120,12 +141,14 @@ export default function OrganizationStructurePage() {
     loadTreeData();
   }, []);
 
-  // 监听选择节点变化，加载岗位和人员
+  // 监听选择节点变化，加载子机构、岗位和人员
   useEffect(() => {
     if (selectedNode) {
+      loadSubOrgList(selectedNode.id);
       loadPostList(selectedNode.id);
       loadPersonList(selectedNode.id);
     } else {
+      setSubOrgList([]);
       setPostList([]);
       setPersonList([]);
     }
@@ -135,6 +158,7 @@ export default function OrganizationStructurePage() {
   // 监听搜索关键词变化
   useEffect(() => {
     if (selectedNode) {
+      loadSubOrgList(selectedNode.id);
       loadPostList(selectedNode.id);
       loadPersonList(selectedNode.id);
     }
@@ -156,7 +180,7 @@ export default function OrganizationStructurePage() {
   const handleSelectNode = (node: OrgTreeNode) => {
     setSelectedNode(node);
     setSelectedNodeName(node.name);
-    setCurrentTab('posts'); // 切换到岗位Tab
+    setCurrentTab('orgs'); // 切换到机构Tab
 
     // 如果节点有子节点且未展开，自动展开该节点
     if (node.children && node.children.length > 0 && !expandedNodes.has(node.id)) {
@@ -167,7 +191,7 @@ export default function OrganizationStructurePage() {
   };
 
   // 打开新建对话框
-  const handleCreate = (viewType: 'position' | 'person') => {
+  const handleCreate = (viewType: 'department' | 'position' | 'person') => {
     if (!selectedNode) {
       alert('请先在左侧选择一个部门');
       return;
@@ -180,9 +204,14 @@ export default function OrganizationStructurePage() {
   };
 
   // 打开编辑对话框
-  const handleEdit = (item: OrgElement | OrgPerson, itemType: 'post' | 'person') => {
-    setDeleteItemType(itemType);
-    setDialogViewType(itemType === 'post' ? 'position' : 'person');
+  const handleEdit = (item: OrgElement | OrgPerson, itemType: 'org' | 'post' | 'person') => {
+    if (itemType === 'org') {
+      setDeleteItemType('post'); // 复用post类型，但实际处理org
+      setDialogViewType('department'); // 机构/部门使用department类型
+    } else {
+      setDeleteItemType(itemType === 'post' ? 'post' : 'person');
+      setDialogViewType(itemType === 'post' ? 'position' : 'person');
+    }
     setDialogMode('edit');
     setDialogInitialData(item);
     setDialogOpen(true);
@@ -209,6 +238,7 @@ export default function OrganizationStructurePage() {
       // 刷新数据
       await loadTreeData();
       if (selectedNode) {
+        await loadSubOrgList(selectedNode.id);
         await loadPostList(selectedNode.id);
         await loadPersonList(selectedNode.id);
       }
@@ -219,7 +249,7 @@ export default function OrganizationStructurePage() {
   };
 
   // 打开删除确认对话框
-  const handleDelete = (item: OrgElement | OrgPerson, itemType: 'post' | 'person') => {
+  const handleDelete = (item: OrgElement | OrgPerson, itemType: 'org' | 'post' | 'person') => {
     setDeleteItem(item);
     setDeleteItemType(itemType);
     setDeleteDialogOpen(true);
@@ -230,12 +260,18 @@ export default function OrganizationStructurePage() {
     if (!deleteItem) return;
 
     try {
+      // 根据删除类型确定API类型
+      let apiType = deleteItemType === 'person' ? 'person' : 'position';
+      if (deleteItemType === 'org') {
+        apiType = 'department';
+      }
+
       const response = await fetch('/api/organization', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'delete',
-          type: deleteItemType === 'post' ? 'position' : 'person',
+          type: apiType,
           id: deleteItem.fd_id,
         }),
       });
@@ -248,6 +284,7 @@ export default function OrganizationStructurePage() {
       // 刷新数据
       await loadTreeData();
       if (selectedNode) {
+        await loadSubOrgList(selectedNode.id);
         await loadPostList(selectedNode.id);
         await loadPersonList(selectedNode.id);
       }
@@ -395,6 +432,58 @@ export default function OrganizationStructurePage() {
     );
   };
 
+  // 渲染机构/部门列表项
+  const renderOrgListItem = (item: OrgElement, index: number) => {
+    const isOrg = item.fd_org_type === 1; // 1=机构，2=部门
+
+    return (
+      <Card
+        key={item.fd_id}
+        className="p-4 hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* 序号 */}
+            <span className="text-sm text-gray-400 w-6">{index + 1}</span>
+            
+            {/* 图标 */}
+            <div
+              className={`w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center text-white ${
+                isOrg ? 'from-blue-500 to-blue-600' : 'from-green-500 to-green-600'
+              }`}
+            >
+              {isOrg ? <Building2 className="w-5 h-5" /> : <Briefcase className="w-5 h-5" />}
+            </div>
+
+            {/* 信息 */}
+            <div>
+              <h4 className="font-medium text-gray-900">{item.fd_name}</h4>
+              <p className="text-sm text-gray-500 mt-1">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                  isOrg ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                }`}>
+                  {isOrg ? '机构' : '部门'}
+                </span>
+                {item.fd_no && <span className="ml-2">编号: {item.fd_no}</span>}
+                {item.fd_org_email && <span className="ml-2">邮箱: {item.fd_org_email}</span>}
+              </p>
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => handleEdit(item, 'org')}>
+              <Edit className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(item, 'org')}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-6">
       {/* 左侧树形结构 */}
@@ -473,8 +562,12 @@ export default function OrganizationStructurePage() {
         {/* Tab切换与操作按钮 */}
         <Card className="p-4 mt-4">
           <div className="flex items-center justify-between">
-            <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v as 'posts' | 'persons')}>
+            <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v as 'orgs' | 'posts' | 'persons')}>
               <TabsList>
+                <TabsTrigger value="orgs" className="flex items-center gap-1">
+                  <Building2 className="w-4 h-4" />
+                  机构/部门 ({subOrgList.length})
+                </TabsTrigger>
                 <TabsTrigger value="posts" className="flex items-center gap-1">
                   <Users className="w-4 h-4" />
                   岗位 ({postList.length})
@@ -489,6 +582,16 @@ export default function OrganizationStructurePage() {
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
+                onClick={() => handleCreate('department')}
+                disabled={!selectedNode}
+                title={!selectedNode ? '请先选择一个部门' : '新建子部门'}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                新建子部门
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => handleCreate('position')}
                 disabled={!selectedNode}
                 title={!selectedNode ? '请先选择一个部门' : '新建岗位'}
@@ -519,12 +622,26 @@ export default function OrganizationStructurePage() {
               </div>
             ) : !selectedNode ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <Users className="w-16 h-16 mb-4 opacity-30" />
+                <Building2 className="w-16 h-16 mb-4 opacity-30" />
                 <p className="text-lg font-medium mb-2">请在左侧选择部门</p>
-                <p className="text-sm">选择部门后，可查看该部门的岗位和人员信息</p>
+                <p className="text-sm">选择部门后，可查看该部门的子部门、岗位和人员信息</p>
               </div>
             ) : (
-              <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v as 'posts' | 'persons')}>
+              <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v as 'orgs' | 'posts' | 'persons')}>
+                {/* 机构/部门 Tab */}
+                <TabsContent value="orgs" className="m-0 space-y-2">
+                  {subOrgList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+                      <Building2 className="w-12 h-12 mb-3 opacity-30" />
+                      <p className="text-sm">该部门暂无子部门</p>
+                      <p className="text-xs mt-1">点击"新建子部门"添加</p>
+                    </div>
+                  ) : (
+                    subOrgList.map((item, index) => renderOrgListItem(item, index))
+                  )}
+                </TabsContent>
+
+                {/* 岗位 Tab */}
                 <TabsContent value="posts" className="m-0 space-y-2">
                   {postList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-gray-400">
@@ -536,6 +653,7 @@ export default function OrganizationStructurePage() {
                   )}
                 </TabsContent>
 
+                {/* 人员 Tab */}
                 <TabsContent value="persons" className="m-0 space-y-2">
                   {personList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-gray-400">
@@ -559,6 +677,7 @@ export default function OrganizationStructurePage() {
           setDialogOpen(false);
           loadTreeData();
           if (selectedNode) {
+            loadSubOrgList(selectedNode.id);
             loadPostList(selectedNode.id);
             loadPersonList(selectedNode.id);
           }

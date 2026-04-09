@@ -338,7 +338,7 @@ async function saveDepartment(element: SyncedElement): Promise<boolean> {
     
     // 如果 parent 为空，从 hierarchyId 解析
     if (!parentId && hierarchyId) {
-      const levels = hierarchyId.split('x').filter(l => l && l !== id);
+      const levels = hierarchyId.split('x').filter((l: string) => l && l !== id);
       if (levels.length > 0) {
         parentId = levels[levels.length - 1]; // 最后一个是当前ID的上级
       }
@@ -411,7 +411,7 @@ async function savePost(element: SyncedElement): Promise<boolean> {
     
     // 如果 parent 为空，从 hierarchyId 解析
     if (!parentId && hierarchyId) {
-      const levels = hierarchyId.split('x').filter(l => l && l !== id);
+      const levels = hierarchyId.split('x').filter((l: string) => l && l !== id);
       if (levels.length > 0) {
         parentId = levels[levels.length - 1]; // 最后一个是当前ID的上级
       }

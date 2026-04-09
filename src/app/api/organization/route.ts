@@ -464,6 +464,26 @@ async function getOrgList(type: string, parentId: string, keyword: string) {
       query += ' AND fd_parentorgid = ?';
       params.push(parentId);
     }
+  } else if (type === 'org') {
+    // 查询子机构和子部门列表（type=1 和 type=2，不包含岗位）
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid, fd_parentid, fd_memo
+      FROM sys_org_element
+      WHERE fd_org_type IN (1, 2)
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      // 查询指定父节点下的子机构和子部门
+      // 机构和部门使用 fd_parentorgid
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
+    }
   } else {
     const orgType = type === 'organization' ? 1 : type === 'department' ? 2 : 3;
     query = `
