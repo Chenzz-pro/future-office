@@ -322,7 +322,7 @@ export function OrgElementDialog({
                       ) : organizations.length === 0 ? (
                         <div className="p-2 text-sm text-gray-500">暂无机构</div>
                       ) : (
-                        organizations.map((org) => (
+                        organizations.filter(org => org.fd_id).map((org) => (
                           <SelectItem key={org.fd_id} value={org.fd_id}>
                             {org.fd_name}
                           </SelectItem>
@@ -353,7 +353,7 @@ export function OrgElementDialog({
                           {selectedOrgId || formData.fd_org_id ? '暂无部门' : '请先选择机构'}
                         </div>
                       ) : (
-                        departments.map((dept) => (
+                        departments.filter(dept => dept.fd_id).map((dept) => (
                           <SelectItem key={dept.fd_id} value={dept.fd_id}>
                             {dept.fd_name}
                           </SelectItem>
@@ -410,7 +410,7 @@ export function OrgElementDialog({
                           </button>
                         </div>
                       ) : (
-                        roles.map((role) => (
+                        roles.filter(role => role.fd_id).map((role) => (
                           <SelectItem key={role.fd_id} value={role.fd_id}>
                             <div className="flex items-center gap-2">
                               <Shield className="w-4 h-4 text-orange-600" />
