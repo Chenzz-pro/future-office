@@ -3,12 +3,10 @@
  * POST /api/ekp/ai/process-form-input
  * 
  * 处理自然语言输入，解析并返回表单数据
- * 当检测到提交操作时，自动调用 EKP API 提交表单
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { formService } from '@/lib/ekp/services';
-import { flowService } from '@/lib/ekp/services/flow-service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,33 +20,14 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 解析自然语言
+    // 使用表单服务解析自然语言
     const formData = formService.formatNaturalLanguage(text, businessType, {
       strict: false,
       fillEmpty: true,
     });
 
-    // 检查是否是提交操作
-    const isSubmit = isSubmitAction(text);
-    
-    // 如果是提交操作，调用 EKP API 提交表单
-    let submitResult: { success: boolean; message: string; instanceId?: string } | null = null;
-    if (isSubmit && userId && Object.keys(formData).length > 0) {
-      try {
-        console.log('[API:process-form-input] 开始提交表单:', { businessType, userId, formData });
-        submitResult = await flowService.launchByType(userId, businessType, formData);
-        console.log('[API:process-form-input] 提交结果:', submitResult);
-      } catch (error) {
-        console.error('[API:process-form-input] 提交表单失败:', error);
-        submitResult = {
-          success: false,
-          message: error instanceof Error ? error.message : '提交失败',
-        };
-      }
-    }
-
     // 生成 AI 回复
-    const message = generateResponseMessage(formData, text, isSubmit, submitResult);
+    const message = generateResponseMessage(formData, text);
 
     return NextResponse.json({
       success: true,
@@ -56,8 +35,7 @@ export async function POST(request: NextRequest) {
         message,
         formData,
         isAction: Object.keys(formData).length > 0,
-        actionType: isSubmit ? 'submit' : 'fill_field',
-        submitResult,
+        actionType: isSubmitAction(text) ? 'submit' : 'fill_field',
       },
     });
   } catch (error) {
@@ -70,70 +48,37 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 判断是否是提交操作
- */
-function isSubmitAction(text: string): boolean {
-  const submitKeywords = ['提交', '送出', '发起', '申请', '确认', '确定', 'submit', 'send'];
-  const lowerText = text.toLowerCase();
-  return submitKeywords.some(kw => lowerText.includes(kw));
-}
-
-/**
  * 生成 AI 回复消息
  */
-function generateResponseMessage(
-  formData: Record<string, unknown>, 
-  originalText: string,
-  isSubmit?: boolean,
-  submitResult?: { success: boolean; message: string; instanceId?: string } | null
-): string {
+function generateResponseMessage(formData: Record<string, unknown>, originalText: string): string {
   const fields = Object.keys(formData);
 
-  if (fields.length === 0 && !isSubmit) {
+  if (fields.length === 0) {
     return '抱歉，我没有从您的描述中提取到有效的表单信息。请尝试更具体的描述，例如：\n\n"请事假3天，明天开始"\n"原因：家中有事"';
   }
 
-  // 如果是提交操作
-  if (isSubmit && submitResult) {
-    if (submitResult.success) {
-      return `您的${getBusinessTypeName(originalText)}申请已成功提交！\n\n申请流水号：${submitResult.instanceId || '未知'}\n\n您可以在"我的流程"中查看审批进度。`;
-    } else {
-      const missingFields = fields.map(key => `- ${getFieldLabel(key)}`).join('\n');
-      return `⚠️ 提交遇到问题：${submitResult.message}\n\n请检查以下信息是否完整：\n${missingFields}\n\n或者联系管理员检查 EKP 系统配置。`;
-    }
-  }
-
-  if (isSubmit) {
-    const details = fields.map(key => {
-      const value = formData[key];
-      const valueStr = formatFieldValue(key, value);
-      return `${getFieldLabel(key)}: ${valueStr}`;
-    }).join('\n');
-
-    return `已准备好提交以下信息：\n\n${details}\n\n正在提交表单，请稍候...`;
-  }
-
-  // 普通填表操作
   const details = fields.map(key => {
     const value = formData[key];
     const valueStr = formatFieldValue(key, value);
     return `${getFieldLabel(key)}: ${valueStr}`;
   }).join('\n');
 
+  const isSubmit = isSubmitAction(originalText);
+
+  if (isSubmit) {
+    return `已准备好提交以下信息：\n\n${details}\n\n正在提交表单...`;
+  }
+
   return `已为您填写以下内容：\n\n${details}\n\n还有其他需要补充的吗？`;
 }
 
 /**
- * 获取业务类型名称
+ * 判断是否是提交操作
  */
-function getBusinessTypeName(text: string): string {
+function isSubmitAction(text: string): boolean {
+  const submitKeywords = ['提交', '送出', '发起', '申请', '确认', '确定', 'submit', 'send'];
   const lowerText = text.toLowerCase();
-  if (lowerText.includes('请假') || lowerText.includes('休假')) return '请假';
-  if (lowerText.includes('报销')) return '费用报销';
-  if (lowerText.includes('出差')) return '出差';
-  if (lowerText.includes('采购')) return '采购';
-  if (lowerText.includes('用车')) return '用车';
-  return '申请';
+  return submitKeywords.some(kw => lowerText.includes(kw));
 }
 
 /**
