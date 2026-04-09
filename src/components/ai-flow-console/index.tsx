@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
@@ -117,6 +117,10 @@ export function AIFormConsole({
   const [formFields, setFormFields] = useState<Record<string, unknown>>(initialData);
   const [isFormReady, setIsFormReady] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  // EKP 登录状态：null=未检测, true=已登录, false=未登录
+  const [ekpLoginStatus, setEkpLoginStatus] = useState<boolean | null>(null);
+  // 是否显示登录遮罩
+  const [showLoginOverlay, setShowLoginOverlay] = useState(true);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -150,7 +154,43 @@ export function AIFormConsole({
   // 监听 iframe 加载状态
   const handleIframeLoad = useCallback(() => {
     setIsFormReady(true);
-    addSystemMessage('表单已加载完成，您可以用自然语言描述要填写的内容。');
+    
+    // 尝试检测登录状态（通过检查 iframe 文档内容）
+    try {
+      const iframeDoc = iframeRef.current?.contentDocument;
+      if (iframeDoc) {
+        // 检查是否包含登录表单元素
+        const loginForm = iframeDoc.querySelector('form[action*="login"], input[name="username"], input[name="fd_name"]');
+        if (loginForm) {
+          setEkpLoginStatus(false);
+          setShowLoginOverlay(true);
+          addSystemMessage('⚠️ 检测到 EKP 系统需要登录。请在左侧表单区域输入用户名和密码登录后，点击"我已登录"继续。');
+        } else {
+          setEkpLoginStatus(true);
+          setShowLoginOverlay(false);
+          addSystemMessage('✅ EKP 表单已加载完成，您可以用自然语言描述要填写的内容。');
+        }
+      }
+    } catch (error) {
+      // 跨域访问失败，使用默认状态
+      setEkpLoginStatus(null);
+      setShowLoginOverlay(false);
+      addSystemMessage('表单已加载，由于跨域限制无法检测登录状态。您可以在左侧直接登录 EKP 系统。');
+    }
+  }, []);
+
+  // 确认已登录
+  const handleConfirmLogin = useCallback(() => {
+    setShowLoginOverlay(false);
+    setEkpLoginStatus(true);
+    addSystemMessage('好的，现在您可以在左侧 EKP 表单中填写信息了。我会帮您解析自然语言并指导填表。');
+  }, []);
+
+  // 跳过登录，直接通过 API 提交
+  const handleSkipLoginAndSubmit = useCallback(() => {
+    setShowLoginOverlay(false);
+    setShowSidebar(false); // 隐藏 iframe
+    addSystemMessage('好的，我将通过 EKP API 直接帮您提交申请。请在右侧告诉我您的申请信息。');
   }, []);
 
   // 添加系统消息
@@ -433,6 +473,93 @@ export function AIFormConsole({
                     <Spinner />
                     <p className="text-sm text-muted-foreground">正在加载表单...</p>
                   </div>
+                </div>
+              )}
+
+              {/* EKP 登录遮罩 */}
+              {showLoginOverlay && formUrl && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/95 z-10">
+                  <Card className="w-96 mx-4">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-yellow-500" />
+                        需要登录 EKP 系统
+                      </CardTitle>
+                      <CardDescription>
+                        左侧嵌入的是海峡人力 OA 系统，需要您先登录才能使用表单功能。
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                        <p className="font-medium mb-2">登录步骤：</p>
+                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                          <li>在左侧 iframe 中输入您的 OA 账号密码</li>
+                          <li>点击"登录"按钮</li>
+                          <li>登录成功后，点击下方"我已登录"按钮</li>
+                        </ol>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          💡 <strong>提示：</strong>如果您使用的是海峡人力的 OA 账号，可以直接登录。
+                        </p>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={handleSkipLoginAndSubmit}
+                      >
+                        跳过（API提交）
+                      </Button>
+                      <Button 
+                        className="flex-1"
+                        onClick={handleConfirmLogin}
+                      >
+                        我已登录
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                </div>
+              )}
+
+              {/* 隐藏侧边栏时的提示 */}
+              {!showSidebar && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
+                  <Card className="w-80 mx-4">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Bot className="w-5 h-5 text-primary" />
+                        API 提交模式
+                      </CardTitle>
+                      <CardDescription>
+                        您已切换到 API 直接提交模式，无需登录 EKP 系统。
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                        <p className="font-medium mb-2">功能说明：</p>
+                        <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                          <li>直接通过 EKP REST API 提交申请</li>
+                          <li>无需登录 iframe 表单</li>
+                          <li>请在右侧用自然语言描述您的申请内容</li>
+                        </ul>
+                      </div>
+                    </CardContent>
+                    <CardFooter>
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => {
+                          setShowSidebar(true);
+                          setShowLoginOverlay(true);
+                          addSystemMessage('已切换回 iframe 模式，请在左侧登录 EKP 系统。');
+                        }}
+                      >
+                        切换回 iframe 模式
+                      </Button>
+                    </CardFooter>
+                  </Card>
                 </div>
               )}
             </div>
