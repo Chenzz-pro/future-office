@@ -90,7 +90,11 @@ export abstract class BaseBusinessAgent {
       }
 
       // 2. 权限校验（业务数据权限）
-      const permissionResult = await this.checkPermission(intent.action, userContext);
+      const permissionResult = await this.checkPermission(
+        intent.action, 
+        userContext,
+        intent.context.params || {}
+      );
       if (!permissionResult.granted) {
         return {
           code: '403',
@@ -143,16 +147,19 @@ export abstract class BaseBusinessAgent {
    * 权限校验（业务数据权限）
    * @param action 执行的操作
    * @param userContext 用户上下文
+   * @param params 业务参数（用于权限校验）
    * @returns 校验结果
    */
   protected async checkPermission(
     action: string,
-    userContext: UserContext
+    userContext: UserContext,
+    params: Record<string, unknown> = {}
   ): Promise<{ granted: boolean; reason?: string }> {
     console.log(`[${this.agentType}] 开始业务权限校验:`, {
       action,
       userId: userContext.userId,
       role: userContext.role,
+      params,
     });
 
     // 如果没有配置权限规则，默认允许
@@ -165,7 +172,8 @@ export abstract class BaseBusinessAgent {
     return await ruleEngine.executePermissionRules(
       this.permissionRules,
       userContext,
-      action
+      action,
+      params
     );
   }
 

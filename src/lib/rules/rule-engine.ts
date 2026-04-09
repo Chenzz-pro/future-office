@@ -137,6 +137,44 @@ export class RuleEngine {
     
     console.log('[RuleEngine] 解析 checkLogic:', checkLogic, { params });
 
+    // 0. "仅本人" - 只能操作自己的数据
+    if (logic.includes('仅本人') || logic.includes('仅自己')) {
+      const targetPerson = params?.targetPerson;
+      const targetUserId = params?.userId;
+      
+      // 如果没有目标人员/用户，表示查询自己的数据，直接通过
+      if (!targetPerson && !targetUserId) {
+        return { passed: true };
+      }
+      
+      // 获取当前用户的登录名
+      const currentLoginName = await this.getLoginNameByUserId(context.userId);
+      
+      // 判断是否是操作他人数据
+      const isOtherPerson = 
+        (targetPerson && targetPerson !== currentLoginName && 
+         targetPerson !== context.userId &&
+         targetPerson !== '我' && targetPerson !== '我的') ||
+        (targetUserId && targetUserId !== context.userId);
+      
+      console.log('[RuleEngine] 仅本人判断:', {
+        targetPerson,
+        targetUserId,
+        currentLoginName,
+        contextUserId: context.userId,
+        isOtherPerson,
+      });
+      
+      if (isOtherPerson) {
+        return { 
+          passed: false, 
+          reason: '您没有权限操作他人的数据，只能查询和处理自己的待办' 
+        };
+      }
+      
+      return { passed: true };
+    }
+
     // 1. "用户登录即可" - 只要有 userId 就有权限
     if (logic.includes('登录即可') || logic.includes('登录') && !logic.includes('需要')) {
       if (!context.userId) {
