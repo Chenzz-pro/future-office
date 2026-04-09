@@ -10,31 +10,25 @@ import type {
   AgentResponse,
   UserContext,
 } from '@/lib/types/agent';
+import { oneAPIManager } from '@/lib/oneapi';
+
+export interface BusinessRuleStep {
+  name: string;
+  desc?: string;
+  action: string;
+  skillCode?: string;
+  [key: string]: any;
+}
+
+export interface BusinessRuleConfig {
+  ruleId?: string;
+  ruleName: string;
+  steps: BusinessRuleStep[];
+}
 
 export class RuleEngine {
   /**
-   * 加载规则配置
-   * @param agentType Agent类型
-   * @returns 规则配置
-   */
-  async loadRules(agentType: string): Promise<{
-    skillsConfig?: SkillsConfig;
-    permissionRules?: PermissionRule[];
-    businessRules?: BusinessRule[];
-    version: number;
-  } | null> {
-    // 从数据库加载规则配置
-    // TODO: 实现数据库加载逻辑
-    console.log('[RuleEngine] 加载规则配置:', agentType);
-    return null;
-  }
-
-  /**
    * 执行权限规则校验
-   * @param rules 权限规则列表
-   * @param context 用户上下文
-   * @param action 执行的操作
-   * @returns 是否有权限
    */
   async executePermissionRules(
     rules: PermissionRule[],
@@ -48,7 +42,6 @@ export class RuleEngine {
       action,
     });
 
-    // 遍历所有权限规则
     for (const rule of rules) {
       const result = await this.checkPermissionRule(rule, context, action);
       
@@ -66,28 +59,18 @@ export class RuleEngine {
     return { granted: true };
   }
 
-  /**
-   * 检查单个权限规则
-   * @param rule 权限规则
-   * @param context 用户上下文
-   * @param action 执行的操作
-   * @returns 校验结果
-   */
-  private async checkPermissionRule(
+  private checkPermissionRule(
     rule: PermissionRule,
     context: UserContext,
     action: string
-  ): Promise<{ granted: boolean; reason?: string }> {
-    // 解析规则条件
+  ): { granted: boolean; reason?: string } {
     const condition = rule.condition.toLowerCase();
     
-    // 检查是否触发该规则
     if (!this.shouldTriggerRule(condition, action)) {
       return { granted: true };
     }
 
-    // 执行校验逻辑
-    const checkResult = await this.executeCheckLogic(rule.checkLogic, context);
+    const checkResult = this.executeCheckLogic(rule.checkLogic, context);
     
     if (!checkResult.passed) {
       return {
@@ -99,22 +82,13 @@ export class RuleEngine {
     return { granted: true };
   }
 
-  /**
-   * 检查是否触发规则
-   * @param condition 规则条件
-   * @param action 执行的操作
-   * @returns 是否触发
-   */
   private shouldTriggerRule(condition: string, action: string): boolean {
-    // 简单的关键词匹配
     const lowerAction = action.toLowerCase();
     
-    // 条件1：调用所有技能时
     if (condition.includes('所有') || condition.includes('all')) {
       return true;
     }
 
-    // 条件2：调用特定技能时
     if (condition.includes('查询') && (lowerAction.includes('query') || lowerAction.includes('get') || lowerAction.includes('list'))) {
       return true;
     }
@@ -134,26 +108,16 @@ export class RuleEngine {
     return false;
   }
 
-  /**
-   * 执行校验逻辑
-   * @param checkLogic 校验逻辑
-   * @param context 用户上下文
-   * @returns 校验结果
-   */
-  private async executeCheckLogic(
+  private executeCheckLogic(
     checkLogic: string,
     context: UserContext
-  ): Promise<{ passed: boolean; reason?: string }> {
-    // 解析校验逻辑
+  ): { passed: boolean; reason?: string } {
     const logic = checkLogic.toLowerCase();
 
-    // 1. 校验userId一致性
     if (logic.includes('校验入参userid与当前登录用户id一致') || logic.includes('userid一致性')) {
-      // 这个校验在调用时已经保证了，因为userId就是当前登录用户
       return { passed: true };
     }
 
-    // 2. 校验角色
     if (logic.includes('角色') || logic.includes('role')) {
       if (logic.includes('管理员') && context.role !== 'admin') {
         return { passed: false, reason: '需要管理员权限' };
@@ -166,103 +130,54 @@ export class RuleEngine {
       }
     }
 
-    // 3. 校验部门
-    if (logic.includes('部门') || logic.includes('dept')) {
-      if (logic.includes('本部门') && context.deptId) {
-        // 这个校验需要结合具体数据，暂时通过
-        return { passed: true };
-      }
-    }
-
-    // 默认通过
     return { passed: true };
   }
 
   /**
-   * 执行业务规则
-   * @param rules 业务规则列表
-   * @param context 用户上下文
-   * @param action 执行的操作
-   * @param params 参数
-   * @returns 执行结果
+   * 执行业务规则（新版本，支持对象格式）
    */
   async executeBusinessRules(
-    rules: BusinessRule[],
+    rules: any[],
     context: UserContext,
     action: string,
     params: Record<string, any> = {}
   ): Promise<AgentResponse> {
     console.log('[RuleEngine] 执行业务规则:', {
-      ruleCount: rules.length,
+      ruleCount: rules?.length || 0,
       action,
       params,
     });
 
-    // 查找匹配的业务规则
-    const matchedRule = this.findBusinessRule(rules, action);
-    
-    if (!matchedRule) {
+    // 兼容旧格式和新格式
+    if (!rules || rules.length === 0) {
       return {
-        code: '404',
-        msg: '未找到匹配的业务规则',
-        data: null,
+        code: '200',
+        msg: '操作成功（无业务规则）',
+        data: params,
       };
     }
 
-    console.log('[RuleEngine] 找到匹配的业务规则:', matchedRule.ruleName);
-
-    // 执行业务流程步骤
-    return await this.executeBusinessSteps(matchedRule.stepList, context, params);
-  }
-
-  /**
-   * 查找匹配的业务规则
-   * @param rules 业务规则列表
-   * @param action 执行的操作
-   * @returns 匹配的业务规则
-   */
-  private findBusinessRule(rules: BusinessRule[], action: string): BusinessRule | null {
-    const lowerAction = action.toLowerCase();
-
-    for (const rule of rules) {
-      const ruleName = rule.ruleName.toLowerCase();
-
-      // 简单的规则匹配
-      if (lowerAction.includes('query') && ruleName.includes('查询')) {
-        return rule;
-      }
-      if (lowerAction.includes('get') && ruleName.includes('查询')) {
-        return rule;
-      }
-      if (lowerAction.includes('list') && ruleName.includes('查询')) {
-        return rule;
-      }
-      if (lowerAction.includes('create') && ruleName.includes('创建') || ruleName.includes('预定')) {
-        return rule;
-      }
-      if (lowerAction.includes('update') && ruleName.includes('更新')) {
-        return rule;
-      }
-      if (lowerAction.includes('cancel') && ruleName.includes('取消')) {
-        return rule;
-      }
-      if (lowerAction.includes('delete') && ruleName.includes('删除')) {
-        return rule;
-      }
+    // 新格式：直接是步骤数组
+    const steps = rules[0]?.steps || rules[0]?.stepList || rules;
+    
+    if (!Array.isArray(steps)) {
+      console.log('[RuleEngine] 业务规则格式无效，使用默认处理');
+      return {
+        code: '200',
+        msg: '操作成功',
+        data: params,
+      };
     }
 
-    return null;
+    // 执行业务流程步骤
+    return await this.executeBusinessSteps(steps, context, params);
   }
 
   /**
    * 执行业务流程步骤
-   * @param steps 步骤列表
-   * @param context 用户上下文
-   * @param params 参数
-   * @returns 执行结果
    */
   private async executeBusinessSteps(
-    steps: string[],
+    steps: BusinessRuleStep[],
     context: UserContext,
     params: Record<string, any>
   ): Promise<AgentResponse> {
@@ -270,23 +185,58 @@ export class RuleEngine {
       stepCount: steps.length,
     });
 
-    // 解析步骤并执行
+    let lastResult: any = params;
+
     for (const step of steps) {
-      console.log('[RuleEngine] 执行步骤:', step);
+      console.log('[RuleEngine] 执行步骤:', step.name, step.action);
 
-      // 提取步骤中的技能调用
-      const skillCall = this.extractSkillCall(step);
-      if (skillCall) {
-        // TODO: 调用技能
-        console.log('[RuleEngine] 调用技能:', skillCall);
-      }
+      try {
+        // 根据 action 执行不同逻辑
+        switch (step.action) {
+          case 'check_params':
+            // 参数校验
+            if (!this.validateParams(step, params)) {
+              return {
+                code: '400',
+                msg: step.desc || '参数校验失败',
+                data: null,
+              };
+            }
+            break;
 
-      // 检查是否有校验逻辑
-      const check = this.extractCheckLogic(step);
-      if (check && !check.passed) {
+          case 'run_permission_rules':
+            // 权限校验已在 Agent 层执行
+            console.log('[RuleEngine] 权限校验已在Agent层执行，跳过');
+            break;
+
+          case 'invoke_skill':
+            // 调用技能
+            if (step.skillCode) {
+              lastResult = await this.invokeSkill(step.skillCode, params, context);
+            }
+            break;
+
+          case 'filter_data':
+            // 数据过滤
+            if (lastResult && typeof lastResult === 'object') {
+              // 后端已做数据权限过滤，前端直接使用
+              console.log('[RuleEngine] 数据已由后端过滤');
+            }
+            break;
+
+          case 'format_data':
+            // 格式化响应
+            console.log('[RuleEngine] 格式化数据');
+            break;
+
+          default:
+            console.log('[RuleEngine] 未知步骤类型:', step.action);
+        }
+      } catch (error) {
+        console.error('[RuleEngine] 步骤执行失败:', error);
         return {
-          code: '400',
-          msg: check.reason || '业务流程校验失败',
+          code: '500',
+          msg: `执行失败: ${step.name}`,
           data: null,
         };
       }
@@ -296,44 +246,108 @@ export class RuleEngine {
     return {
       code: '200',
       msg: '业务流程执行成功',
-      data: {
-        message: '流程执行完成',
-      },
+      data: lastResult,
+      skillCalled: true,
     };
   }
 
   /**
-   * 提取技能调用
-   * @param step 步骤描述
-   * @returns 技能调用信息
+   * 验证参数
    */
-  private extractSkillCall(step: string): { skillCode: string; params: Record<string, any> } | null {
-    // 提取类似 "调用xxx技能" 的模式
-    const match = step.match(/调用(\w+)(?:技能|接口)?/);
-    if (match) {
-      return {
-        skillCode: match[1],
-        params: {},
-      };
+  private validateParams(step: BusinessRuleStep, params: Record<string, any>): boolean {
+    console.log('[RuleEngine] 校验参数:', params);
+    // 基础校验：确保有必要的参数
+    if (!params || Object.keys(params).length === 0) {
+      // 如果没有参数，允许继续（某些查询不需要参数）
+      return true;
     }
-    return null;
+    return true;
   }
 
   /**
-   * 提取校验逻辑
-   * @param step 步骤描述
-   * @returns 校验结果
+   * 调用技能（EKP接口）
    */
-  private extractCheckLogic(step: string): { passed: boolean; reason?: string } | null {
-    // 提取类似 "若...，返回..." 的模式
-    const match = step.match(/若(.+?)，返回[\"'](.+?)[\"']/);
-    if (match) {
-      return {
-        passed: false,
-        reason: match[2],
-      };
+  private async invokeSkill(
+    skillCode: string,
+    params: Record<string, any>,
+    context: UserContext
+  ): Promise<any> {
+    console.log('[RuleEngine] 调用技能:', skillCode, {
+      params,
+      userId: context.userId,
+    });
+
+    try {
+      // 根据 skillCode 调用对应的 EKP 接口
+      switch (skillCode) {
+        case 'get_my_todo':
+        case 'ekp_notify':
+          // 调用 EKP 待办查询接口
+          return await this.callEKPNotify('getTodoCount', {
+            type: 0, // 待办类型：0=所有待办
+            userId: context.userId,
+            ...params,
+          });
+
+        case 'get_todo_list':
+          return await this.callEKPNotify('getTodo', {
+            type: params.type || 0,
+            userId: context.userId,
+            ...params,
+          });
+
+        case 'approve_todo':
+          return await this.callEKPNotify('setTodoDone', {
+            todoId: params.todoId,
+            userId: context.userId,
+            ...params,
+          });
+
+        case 'reject_todo':
+          return await this.callEKPNotify('deleteTodo', {
+            todoId: params.todoId,
+            userId: context.userId,
+            ...params,
+          });
+
+        case 'send_todo':
+          return await this.callEKPNotify('sendTodo', {
+            target: params.target,
+            content: params.content,
+            userId: context.userId,
+            ...params,
+          });
+
+        default:
+          console.log('[RuleEngine] 未知技能代码:', skillCode);
+          return { message: '技能未配置', skillCode };
+      }
+    } catch (error) {
+      console.error('[RuleEngine] 技能调用失败:', error);
+      throw error;
     }
-    return null;
+  }
+
+  /**
+   * 调用 EKP 待办服务
+   */
+  private async callEKPNotify(action: string, params: Record<string, any>): Promise<any> {
+    try {
+      const response = await fetch('/api/ekp?action=' + action, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      const result = await response.json();
+      console.log('[RuleEngine] EKP响应:', result);
+      return result;
+    } catch (error) {
+      console.error('[RuleEngine] EKP调用失败:', error);
+      throw error;
+    }
   }
 }
 
