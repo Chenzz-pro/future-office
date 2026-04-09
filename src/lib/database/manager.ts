@@ -92,10 +92,19 @@ export class DatabaseManager {
    */
   public async disconnect(): Promise<void> {
     if (this.pool) {
-      await this.pool.end();
+      try {
+        await this.pool.end();
+        console.log('✅ 数据库连接已断开');
+      } catch (error) {
+        // 忽略 "already closed" 错误
+        const mysqlError = error as { code?: string };
+        if (mysqlError.code !== 'PROTOCOL_CONNECTION_LOST' && 
+            mysqlError.code !== 'ECONNRESET') {
+          console.warn('断开数据库连接时出现警告:', error);
+        }
+      }
       this.pool = null;
       this.config = null;
-      console.log('✅ 数据库连接已断开');
     }
 
     // 停止心跳保活
