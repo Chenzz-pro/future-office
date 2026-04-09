@@ -115,12 +115,15 @@ export abstract class BaseBusinessAgent {
 
       console.log(`[${this.agentType}] 业务规则执行完成:`, businessResult);
 
+      // ⚠️ 重要：如果是 403 权限拒绝，permissionGranted 应该为 false
+      const isForbidden = businessResult.code === '403';
+
       // 添加执行日志
       return {
         ...businessResult,
         agentType: this.agentType,
         permissionChecked: true,
-        permissionGranted: true,
+        permissionGranted: !isForbidden,
         skillCalled: businessResult.skillCalled || false,
       };
     } catch (error) {

@@ -11,6 +11,7 @@ import type {
   UserContext,
 } from '@/lib/types/agent';
 import { oneAPIManager } from '@/lib/oneapi';
+import { dbManager } from '@/lib/database';
 
 export interface BusinessRuleStep {
   name: string;
@@ -135,6 +136,7 @@ export class RuleEngine {
 
   /**
    * 执行业务规则（新版本，支持对象格式）
+   * 包含：查询他人数据的权限校验
    */
   async executeBusinessRules(
     rules: any[],
@@ -146,7 +148,45 @@ export class RuleEngine {
       ruleCount: rules?.length || 0,
       action,
       params,
+      userId: context.userId,
     });
+
+    // ⚠️ 关键校验：检查是否在查询他人数据
+    const targetPerson = params?.targetPerson;
+    if (targetPerson) {
+      console.log('[RuleEngine] 检测到查询目标人员:', targetPerson);
+      
+      // 尝试获取当前用户的登录名
+      const currentLoginName = await this.getLoginNameByUserId(context.userId);
+      console.log('[RuleEngine] 当前用户登录名:', currentLoginName);
+
+      // 如果查询的是他人，需要管理员权限
+      if (targetPerson !== currentLoginName && targetPerson !== context.userId) {
+        console.log('[RuleEngine] 查询他人数据，需要校验权限:', {
+          targetPerson,
+          currentLoginName,
+          currentUserId: context.userId,
+          role: context.role,
+        });
+
+        // 只有管理员角色才能查询他人数据
+        if (context.role !== 'admin') {
+          console.warn('[RuleEngine] 非管理员用户尝试查询他人数据，已拒绝');
+          return {
+            code: '403',
+            msg: `您无权查询 ${targetPerson} 的待办。提示：普通用户只能查询自己的待办，如需查询他人待办，请联系管理员。`,
+            data: null,
+            permissionChecked: true,
+            permissionGranted: false,
+            skillCalled: false,
+          };
+        }
+        
+        console.log('[RuleEngine] 管理员权限校验通过，允许查询他人数据');
+      } else {
+        console.log('[RuleEngine] 查询自己的数据，权限校验通过');
+      }
+    }
 
     // 兼容旧格式和新格式
     if (!rules || rules.length === 0) {
@@ -171,6 +211,48 @@ export class RuleEngine {
 
     // 执行业务流程步骤
     return await this.executeBusinessSteps(steps, context, params);
+  }
+
+  /**
+   * 根据用户ID获取登录名
+   */
+  private async getLoginNameByUserId(userId: string): Promise<string | null> {
+    try {
+      const dbConfig = dbManager.getConfig();
+      if (!dbConfig) {
+        console.log('[RuleEngine] 未获取到数据库配置');
+        return null;
+      }
+
+      // 创建临时连接池
+      const mysql = await import('mysql2/promise');
+      const tempPool = mysql.createPool({
+        host: dbConfig.host,
+        port: dbConfig.port,
+        user: dbConfig.username,
+        password: dbConfig.password,
+        database: dbConfig.databaseName,
+        waitForConnections: true,
+        connectionLimit: 1,
+      });
+
+      try {
+        const [rows] = await tempPool.execute(
+          'SELECT fd_login_name FROM sys_org_person WHERE fd_id = ?',
+          [userId]
+        ) as [any[], any];
+
+        if (rows && rows.length > 0) {
+          return rows[0].fd_login_name;
+        }
+        return null;
+      } finally {
+        await tempPool.end();
+      }
+    } catch (error) {
+      console.error('[RuleEngine] 获取用户登录名失败:', error);
+      return null;
+    }
   }
 
   /**

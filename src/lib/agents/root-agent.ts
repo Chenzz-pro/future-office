@@ -29,7 +29,7 @@ export class RootAgent {
 
 你的职责：
 1. 识别用户意图（审批/会议/数据/个人助理）
-2. 提取关键参数
+2. 提取关键参数，特别是查询目标人员
 3. 返回结构化的意图识别结果
 
 可用的业务Agent：
@@ -53,6 +53,15 @@ export class RootAgent {
 }
 \`\`\`
 
+⚠️ 重要：目标人员提取规则
+- "查询我的待办" → params: {}
+- "查询张三的待办" → params: { targetPerson: "张三" }
+- "查询landray的代办" → params: { targetPerson: "landray" }
+- "查询李四的待办数量" → params: { targetPerson: "李四" }
+- "帮我查一下王五的待办" → params: { targetPerson: "王五" }
+
+如果用户没有明确指定查询谁，默认就是查询"我的"，params: {}
+
 示例：
 用户："查询我的待办"
 返回：
@@ -63,6 +72,21 @@ export class RootAgent {
   "context": {
     "userId": "user-id",
     "params": {}
+  }
+}
+\`\`\`
+
+用户："查询landray的代办"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "get_my_todo",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "targetPerson": "landray"
+    }
   }
 }
 \`\`\`
@@ -86,6 +110,7 @@ export class RootAgent {
 重要规则：
 - 一定要返回纯JSON格式，不要有任何其他文本
 - 如果无法识别意图，返回 agentId: "unknown"
+- 特别注意：如果用户提到"xxx的待办/代办"，一定要在 params.targetPerson 中提取这个人的名字
 - 不要添加任何解释或说明`;
   }
 

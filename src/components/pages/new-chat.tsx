@@ -206,17 +206,28 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     console.log('[sendMessage] 用户信息:', { userId, deptId, role, roleId });
 
     // 如果没有当前会话，创建一个
+    // ⚠️ 注意：必须在函数开始时获取 session，并在整个函数执行期间使用同一个 session
     let session = currentSession;
+    let sessionId = session?.id;
+    
     if (!session) {
       console.log('[sendMessage] 创建新会话');
       try {
         session = await createSession(selectedModel, activeKey?.provider || 'unknown');
+        sessionId = session?.id;
       } catch (err) {
         console.error('[sendMessage] 创建会话失败:', err);
         setError('创建会话失败，请重试');
         setIsLoading(false);
         return;
       }
+    }
+    
+    if (!sessionId) {
+      console.error('[sendMessage] 会话ID不存在');
+      setError('会话不存在');
+      setIsLoading(false);
+      return;
     }
 
     const userMessage: Message = {
@@ -230,8 +241,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     try {
       // 先添加用户消息到会话中（等待完成）
-      console.log('[sendMessage] 开始添加用户消息到会话');
-      await addMessage(session.id, userMessage);
+      console.log('[sendMessage] 开始添加用户消息到会话, sessionId:', sessionId);
+      await addMessage(sessionId, userMessage);
       console.log('[sendMessage] 用户消息已添加到会话');
 
       // 清空输入框和错误信息（在消息添加成功后）
@@ -294,11 +305,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
       console.log('[sendMessage] 准备添加助手消息:', assistantMessage);
 
-      if (session) {
-        await addMessage(session.id, assistantMessage);
+      if (sessionId) {
+        await addMessage(sessionId, assistantMessage);
         console.log('[sendMessage] 助手消息已添加');
       } else {
-        console.warn('[sendMessage] 会话不存在，无法添加助手消息');
+        console.warn('[sendMessage] 会话ID不存在，无法添加助手消息');
       }
     } catch (err) {
       console.error('[sendMessage] Chat error:', err);
