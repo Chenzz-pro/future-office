@@ -484,6 +484,42 @@ async function getOrgList(type: string, parentId: string, keyword: string) {
       query += ' AND fd_parentorgid = ?';
       params.push(parentId);
     }
+  } else if (type === 'organization') {
+    // 查询子机构列表（type=1）
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid, fd_parentid, fd_memo
+      FROM sys_org_element
+      WHERE fd_org_type = 1
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
+    }
+  } else if (type === 'department') {
+    // 查询子部门列表（type=2）
+    tableName = 'sys_org_element';
+    query = `
+      SELECT fd_id, fd_org_type, fd_name, fd_no, fd_org_email, fd_order, fd_parentorgid, fd_parentid, fd_memo
+      FROM sys_org_element
+      WHERE fd_org_type = 2
+    `;
+
+    if (keyword) {
+      query += ' AND (fd_name LIKE ? OR fd_no LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (parentId) {
+      query += ' AND fd_parentorgid = ?';
+      params.push(parentId);
+    }
   } else {
     const orgType = type === 'organization' ? 1 : type === 'department' ? 2 : 3;
     query = `
