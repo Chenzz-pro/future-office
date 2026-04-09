@@ -10,7 +10,9 @@ import {
   User,
   ChevronRight,
   Key,
-  LogOut
+  LogOut,
+  Database,
+  Shield
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -40,6 +42,11 @@ const menuItems = [
   { id: 'task-center', label: '任务控制中心', icon: LayoutDashboard },
   { id: 'agents', label: '智能体', icon: Bot },
   { id: 'skills', label: '技能', icon: Sparkles },
+];
+
+const adminMenuItems = [
+  { id: 'ekp-integration', label: 'EKP接口管理中心', icon: Database, path: '/admin/integration/ekp' },
+  { id: 'admin-dashboard', label: '管理员后台', icon: Shield, path: '/admin' },
 ];
 
 export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, onSelectSession }: SidebarProps) {
@@ -77,6 +84,7 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
   // 退出登录
   const handleLogout = () => {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('current-user-id');
     router.push('/login');
   };
 
@@ -123,6 +131,25 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
               ))}
             </nav>
           </div>
+
+          {/* 管理员菜单 */}
+          {currentUser?.role === 'admin' && (
+            <div className="px-3 mb-4">
+              <p className="text-xs text-muted-foreground px-2 mb-2">管理</p>
+              <nav className="space-y-1">
+                {adminMenuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => router.push(item.path)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+                  >
+                    <item.icon className="w-4 h-4" />
+                    <span className="flex-1 text-left">{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+          )}
 
           {/* 历史对话 */}
           <div className="px-3">
@@ -196,15 +223,6 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
               <Settings className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
-
-          {/* 退出登录按钮 */}
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 hover:border hover:border-red-200 transition-all duration-200"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>退出登录</span>
-          </button>
         </div>
       </div>
 

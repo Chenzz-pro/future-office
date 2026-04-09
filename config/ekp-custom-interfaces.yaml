@@ -1,0 +1,281 @@
+# ============================================
+# 蓝凌EKP二开接口配置文件
+# 用于存储定制开发的接口配置
+# ============================================
+
+custom:
+  # ============================================
+  # 请假类接口
+  # ============================================
+  - code: leave.apply
+    name: 发起请假申请
+    category: 流程
+    path: /api/custom/leave/apply
+    serviceId: customLeaveService
+    method: POST
+    enabled: true
+    request:
+      templateId: "{templateId}"
+      formValues: {}
+    response:
+      successPath: success
+      dataPath: data.fdId
+    description: 二开：发起请假申请流程
+    version: 1.0
+
+  - code: leave.cancel
+    name: 取消请假申请
+    category: 流程
+    path: /api/custom/leave/cancel
+    serviceId: customLeaveService
+    method: POST
+    enabled: true
+    request:
+      processId: "{processId}"
+      reason: "{reason}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：取消已发起的请假申请
+    version: 1.0
+
+  - code: leave.history
+    name: 查询请假历史
+    category: 流程
+    path: /api/custom/leave/history
+    serviceId: customLeaveService
+    method: POST
+    enabled: true
+    request:
+      personId: "{personId}"
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询员工请假历史记录
+    version: 1.0
+
+  # ============================================
+  # 报销类接口
+  # ============================================
+  - code: expense.submit
+    name: 提交报销申请
+    category: 流程
+    path: /api/custom/expense/submit
+    serviceId: customExpenseService
+    method: POST
+    enabled: true
+    request:
+      templateId: "{templateId}"
+      amount: "{amount}"
+      expenseType: "{expenseType}"
+      items: []
+    response:
+      successPath: success
+      dataPath: data.docId
+    description: 二开：提交报销申请
+    version: 1.0
+
+  - code: expense.approve
+    name: 审批报销申请
+    category: 流程
+    path: /api/custom/expense/approve
+    serviceId: customExpenseService
+    method: POST
+    enabled: true
+    request:
+      docId: "{docId}"
+      opinion: "{opinion}"
+      action: "{action}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：审批报销申请
+    version: 1.0
+
+  - code: expense.summary
+    name: 报销统计汇总
+    category: 统计
+    path: /api/custom/expense/summary
+    serviceId: customExpenseService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      departmentId: "{departmentId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询部门报销统计
+    version: 1.0
+
+  # ============================================
+  # 采购类接口
+  # ============================================
+  - code: purchase.create
+    name: 创建采购申请
+    category: 流程
+    path: /api/custom/purchase/create
+    serviceId: customPurchaseService
+    method: POST
+    enabled: true
+    request:
+      templateId: "{templateId}"
+      items:
+        - itemId: "{itemId}"
+          quantity: "{quantity}"
+          price: "{price}"
+    response:
+      successPath: success
+      dataPath: data.docId
+    description: 二开：创建采购申请
+    version: 1.0
+
+  - code: purchase.approve
+    name: 审批采购申请
+    category: 流程
+    path: /api/custom/purchase/approve
+    serviceId: customPurchaseService
+    method: POST
+    enabled: true
+    request:
+      docId: "{docId}"
+      opinion: "{opinion}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：审批采购申请
+    version: 1.0
+
+  # ============================================
+  # 统计类接口
+  # ============================================
+  - code: stats.leaveSummary
+    name: 请假统计汇总
+    category: 统计
+    path: /api/custom/stats/leaveSummary
+    serviceId: customStatsService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      personId: "{personId}"
+      departmentId: "{departmentId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询员工请假统计
+    version: 1.0
+
+  - code: stats.attendanceSummary
+    name: 考勤统计汇总
+    category: 统计
+    path: /api/custom/stats/attendanceSummary
+    serviceId: customStatsService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      personId: "{personId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询员工考勤统计
+    version: 1.0
+
+  - code: stats.approvalEfficiency
+    name: 审批效率统计
+    category: 统计
+    path: /api/custom/stats/approvalEfficiency
+    serviceId: customStatsService
+    method: POST
+    enabled: true
+    request:
+      startDate: "{startDate}"
+      endDate: "{endDate}"
+      departmentId: "{departmentId}"
+    response:
+      successPath: success
+      dataPath: data
+    description: 二开：查询审批效率统计
+    version: 1.0
+
+  # ============================================
+  # 组织架构类接口
+  # ============================================
+  - code: org.getElementsBaseInfo
+    name: 获取所有组织架构基本信息
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/getElementsBaseInfo
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      returnOrgType: '[{"type":"org"},{"type":"dept"},{"type":"post"},{"type":"person"}]'
+      returnType: '[{"type":"no"},{"type":"order"},{"type":"keyword"}]'
+    response:
+      successPath: returnState == 2
+      dataPath: message
+      countPath: count
+    description: 获取所有组织架构基本信息（包含id, name, type, no, order, keyword等）
+    version: 1.0
+
+  - code: org.getUpdatedElements
+    name: 获取更新的组织架构信息（增量同步）
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/getUpdatedElements
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      returnOrgType: '[]'
+      count: 500
+      beginTimeStamp: "{beginTimeStamp}"
+    response:
+      successPath: returnState == 2
+      dataPath: message
+      countPath: count
+      timestampPath: timeStamp
+    description: 获取更新的组织架构信息（支持按时间戳增量同步）
+    version: 1.0
+
+  - code: org.getUpdatedElementsByToken
+    name: 分页获取更新的组织架构信息
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/getUpdatedElementsByToken
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      returnOrgType: '[]'
+      pageNo: 1
+      count: 500
+      token: "{token}"
+      beginTimeStamp: "{beginTimeStamp}"
+    response:
+      successPath: returnState == 2
+      dataPath: message
+      countPath: count
+      tokenPath: token
+    description: 分页获取更新的组织架构信息（防止大量数据一次性返回）
+    version: 1.0
+
+  - code: org.findByExtendPara
+    name: 根据扩展参数查询组织
+    category: organization
+    path: /api/sys-organization/sysSynchroGetOrg/findByExtendPara
+    serviceId: sysOrgRestService
+    method: POST
+    enabled: true
+    request:
+      extendPara: "{}"
+      count: 100
+    response:
+      successPath: returnState == 2
+      dataPath: message
+    description: 根据扩展参数查询组织（支持按ID、登录名、关键字等查询）
+    version: 1.0

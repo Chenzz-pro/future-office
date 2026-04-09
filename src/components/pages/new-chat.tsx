@@ -25,7 +25,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useChatHistory, Message, ChatSession } from '@/hooks/use-chat-history';
+import { useChatHistory, getCurrentUser, Message, ChatSession } from '@/hooks/use-chat-history';
 import { useLLMConfig } from '@/hooks/use-llm-config';
 import { CustomSkill } from '@/types/custom-skill';
 
@@ -85,10 +85,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { sessions, currentSession, setCurrentSession, createSession, addMessage, updateSession } = useChatHistory();
-
-  // 获取当前用户ID
-  const currentUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('currentUser') || '{}') : null;
-  const userId = currentUser?.id;
 
   // 使用配置钩子（仅全局配置）
   const { config: activeKey, source: configSource, loading: configLoading } = useLLMConfig();
@@ -160,146 +156,180 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   }, []);
 
   const sendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    const trimmedInput = inputValue.trim();
+    if (!trimmedInput || isLoading) return;
 
     console.log('[sendMessage] 开始发送消息');
-    console.log('[sendMessage] dbConnected:', dbConnected);
-    console.log('[sendMessage] activeKey:', activeKey ? '已配置' : '未配置');
+
+    // 立即设置 loading 状态，防止重复发送
+    setIsLoading(true);
+
+    // 获取当前用户完整信息（优先从后端获取最新，确保 deptId 和 role 正确）
+    let userContext = getCurrentUser();
+    
+    // 如果有 userId，尝试从后端获取完整信息（包括 deptId 和 role）
+    if (userContext.userId) {
+      try {
+        const response = await fetch('/api/auth/current', {
+          headers: {
+            'X-User-ID': userContext.userId,
+          },
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data) {
+            userContext = {
+              userId: result.data.userId,
+              deptId: result.data.deptId,
+              role: result.data.role?.code || 'user',
+              roleId: result.data.role?.id,
+              username: result.data.username,
+              personName: result.data.personName,
+            };
+            console.log('[sendMessage] 从后端获取到完整用户信息:', userContext);
+          }
+        }
+      } catch (err) {
+        console.warn('[sendMessage] 获取后端用户信息失败，使用本地缓存:', err);
+      }
+    }
+
+    const { userId, deptId, role, roleId } = userContext;
+
+    if (!userId) {
+      console.error('[sendMessage] 用户ID未找到，请先登录');
+      setError('⚠️ 未找到用户信息，请先登录');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[sendMessage] 用户信息:', { userId, deptId, role, roleId });
 
     // 如果没有当前会话，创建一个
+    // ⚠️ 注意：必须在函数开始时获取 session，并在整个函数执行期间使用同一个 session
     let session = currentSession;
+    let sessionId = session?.id;
+    
     if (!session) {
       console.log('[sendMessage] 创建新会话');
-      session = createSession(selectedModel, activeKey?.provider || 'unknown');
+      try {
+        session = await createSession(selectedModel, activeKey?.provider || 'unknown');
+        sessionId = session?.id;
+      } catch (err) {
+        console.error('[sendMessage] 创建会话失败:', err);
+        setError('创建会话失败，请重试');
+        setIsLoading(false);
+        return;
+      }
+    }
+    
+    if (!sessionId) {
+      console.error('[sendMessage] 会话ID不存在');
+      setError('会话不存在');
+      setIsLoading(false);
+      return;
     }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue.trim(),
+      content: trimmedInput,
       timestamp: new Date(),
     };
 
     console.log('[sendMessage] 添加用户消息:', userMessage.content);
 
-    // 先添加用户消息到界面
-    addMessage(session.id, userMessage);
-    setInputValue('');
-    setIsLoading(true);
-    setError(null);
-
-    // 检查数据库连接和API配置
-    if (!dbConnected) {
-      console.log('[sendMessage] 数据库未连接');
-      setError('数据库未连接，消息已显示但无法保存到历史记录。请稍后重试或联系管理员检查数据库配置。');
-      setIsLoading(false);
-      return;
-    }
-
-    if (!activeKey) {
-      console.log('[sendMessage] API Key 未配置');
-      setError('API Key 未配置，消息已显示但无法获取 AI 回复。请联系管理员配置 AI 模型 API Key。');
-      setIsLoading(false);
-      return;
-    }
-
-    // 添加用户消息
-    addMessage(session.id, userMessage);
-    setInputValue('');
-    setIsLoading(true);
-    setError(null);
-
-    // 构建消息历史
-    const chatMessages = [
-      { role: 'system' as const, content: '你是一个有帮助的 AI 助手。' },
-      ...(session.messages.map(m => ({ role: m.role, content: m.content }))),
-      { role: 'user' as const, content: userMessage.content },
-    ];
-
-    console.log('[sendMessage] 调用 Chat API');
-    console.log('[sendMessage] 消息数量:', chatMessages.length);
-    console.log('[sendMessage] 模型:', selectedModel);
-    console.log('[sendMessage] 提供商:', activeKey.provider);
-
     try {
-      const response = await fetch('/api/chat', {
+      // 先添加用户消息到会话中（等待完成）
+      console.log('[sendMessage] 开始添加用户消息到会话, sessionId:', sessionId);
+      await addMessage(sessionId, userMessage);
+      console.log('[sendMessage] 用户消息已添加到会话');
+
+      // 清空输入框和错误信息（在消息添加成功后）
+      setInputValue('');
+      setError(null);
+
+      // 构建对话历史（使用添加用户消息之前的历史）
+      const conversationHistory = session.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      console.log('[sendMessage] 调用新的统一聊天API');
+      console.log('[sendMessage] 对话历史长度:', conversationHistory.length);
+      console.log('[sendMessage] 对话历史内容:', conversationHistory.map(m => `${m.role}: ${m.content.substring(0, 30)}...`));
+
+      // 添加超时机制，防止 API 调用卡住
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error('[sendMessage] API 调用超时');
+      }, 30000); // 30秒超时
+
+      // 调用 RootAgent API（统一的智能体入口）
+      const response = await fetch('/api/agents/root', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
-          messages: chatMessages,
-          model: selectedModel,
-          apiKey: activeKey.apiKey,
-          baseUrl: activeKey.baseUrl,
-          provider: activeKey.provider,
+          message: userMessage.content,
+          userId,
+          deptId,
+          role,
         }),
       });
 
-      console.log('[sendMessage] Chat API 响应状态:', response.status);
+      clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[sendMessage] Chat API 错误:', errorData);
-        throw new Error(errorData.error || '请求失败');
+      console.log('[sendMessage] API 响应:', { status: response.status, ok: response.ok });
+
+      const data = await response.json();
+      console.log('[sendMessage] 响应数据:', JSON.stringify(data, null, 2));
+
+      if (!response.ok || !data.success) {
+        console.error('[sendMessage] API 错误:', data);
+        throw new Error(data.error || '请求失败');
       }
 
-      // 流式读取响应
-      const reader = response.body?.getReader();
-      if (!reader) {
-        console.error('[sendMessage] 无法读取响应');
-        throw new Error('无法读取响应');
-      }
+      // 添加助手消息 - 优先使用 message 字段（RootAgent 返回格式）
+      const assistantContent = data.data?.message || data.data?.content || data.data || '处理完成';
+      console.log('[sendMessage] 助手回复内容:', assistantContent);
+      console.log('[sendMessage] 助手回复长度:', assistantContent.length);
 
-      let assistantContent = '';
-      const decoder = new TextDecoder();
-      let chunksReceived = 0;
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: assistantContent,
+        timestamp: new Date(),
+      };
 
-      console.log('[sendMessage] 开始读取流式响应');
+      console.log('[sendMessage] 准备添加助手消息:', assistantMessage);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          console.log('[sendMessage] 流式响应结束，共收到', chunksReceived, '个数据块');
-          break;
-        }
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        chunksReceived++;
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed === '' || trimmed === 'data: [DONE]') continue;
-
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(trimmed.slice(6));
-              if (data.content) {
-                assistantContent += data.content;
-                console.log('[sendMessage] 收到内容片段:', assistantContent.length, '字符');
-              }
-            } catch (err) {
-              console.error('[sendMessage] 解析数据块失败:', err);
-            }
-          }
-        }
-      }
-
-      console.log('[sendMessage] 助手回复完成，总长度:', assistantContent.length);
-
-      // 添加助手消息
-      if (assistantContent) {
-        console.log('[sendMessage] 添加助手消息');
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: assistantContent,
-          timestamp: new Date(),
-        };
-        addMessage(session.id, assistantMessage);
+      if (sessionId) {
+        await addMessage(sessionId, assistantMessage);
+        console.log('[sendMessage] 助手消息已添加');
+      } else {
+        console.warn('[sendMessage] 会话ID不存在，无法添加助手消息');
       }
     } catch (err) {
       console.error('[sendMessage] Chat error:', err);
-      setError(err instanceof Error ? err.message : '请求失败，请重试');
+
+      // 区分不同类型的错误
+      let errorMessage = '请求失败，请重试';
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = '请求超时，请检查网络连接后重试';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
+      console.error('[sendMessage] 错误详情:', {
+        message: errorMessage,
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
       console.log('[sendMessage] 发送消息流程结束');

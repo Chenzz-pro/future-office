@@ -1,0 +1,60 @@
+{
+  "_comment": "数据Agent业务规则配置",
+  "_description": "数据Agent的业务流程规则，定义各操作的具体执行步骤",
+  "_agentType": "data",
+  "_version": "1.0.0",
+
+  "businessRules": [
+    {
+      "ruleId": "query-data",
+      "ruleName": "数据查询",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询数据" },
+        { "name": "filter_data", "action": "filter_data", "desc": "过滤数据" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "export-data",
+      "ruleName": "数据导出",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询数据" },
+        { "name": "export_file", "action": "format_data", "desc": "导出文件" }
+      ]
+    },
+    {
+      "ruleId": "generate-report",
+      "ruleName": "生成报表",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询数据" },
+        { "name": "generate_report", "action": "format_data", "desc": "生成报表" }
+      ]
+    },
+    {
+      "ruleId": "get-statistics",
+      "ruleName": "数据统计",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询统计数据" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-dashboard",
+      "ruleName": "获取仪表盘",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询仪表盘数据" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    }
+  ]
+}

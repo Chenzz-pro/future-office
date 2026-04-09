@@ -5,18 +5,23 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  LayoutDashboard, 
-  Bot, 
-  Sparkles, 
-  Users, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Bot,
+  Sparkles,
+  Users,
+  Settings,
   ChevronRight,
   LogOut,
   Menu,
   X,
   Search,
-  Bell
+  Bell,
+  Database,
+  Clock,
+  AlertTriangle,
+  Link2,
+  Cpu
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,8 +52,7 @@ const menuItems: MenuItem[] = [
     icon: <Bot className="w-5 h-5" />,
     path: '/admin/agents',
     subItems: [
-      { id: 'agents-list', label: '智能体列表', path: '/admin/agents/list' },
-      { id: 'agents-create', label: '创建智能体', path: '/admin/agents/create' },
+      { id: 'agents-list', label: '智能体列表', path: '/admin/agents' },
     ],
   },
   {
@@ -56,10 +60,6 @@ const menuItems: MenuItem[] = [
     label: '技能',
     icon: <Sparkles className="w-5 h-5" />,
     path: '/admin/skills',
-    subItems: [
-      { id: 'skills-list', label: '技能列表', path: '/admin/skills/list' },
-      { id: 'skills-templates', label: '技能模板', path: '/admin/skills/templates' },
-    ],
   },
   {
     id: 'organization',
@@ -67,22 +67,49 @@ const menuItems: MenuItem[] = [
     icon: <Users className="w-5 h-5" />,
     path: '/admin/organization',
     subItems: [
-      { id: 'org-overview', label: '组织概览', path: '/admin/organization/overview' },
       { id: 'org-structure', label: '组织架构', path: '/admin/organization/structure' },
-      { id: 'org-members', label: '成员管理', path: '/admin/organization/members' },
       { id: 'org-permissions', label: '权限管理', path: '/admin/organization/permissions' },
     ],
   },
   {
     id: 'integration',
-    label: '集成中心',
-    icon: <Settings className="w-5 h-5" />,
+    label: '第三方系统集成',
+    icon: <Link2 className="w-5 h-5" />,
     path: '/admin/integration',
     subItems: [
-      { id: 'int-overview', label: '集成概览', path: '/admin/integration/overview' },
-      { id: 'int-api', label: 'API 管理', path: '/admin/integration/api' },
-      { id: 'int-webhook', label: 'Webhook 配置', path: '/admin/integration/webhook' },
+      { id: 'int-overview', label: '集成概览', path: '/admin/integration' },
+      { id: 'int-llm', label: 'AI服务配置', path: '/admin/integration/llm' },
+      { id: 'int-ekp', label: '蓝凌EKP', path: '/admin/integration/ekp' },
+      { id: 'int-dingtalk', label: '钉钉', path: '/admin/integration/dingtalk' },
+      { id: 'int-wechat', label: '企业微信', path: '/admin/integration/wechat' },
     ],
+  },
+  {
+    id: 'scheduler',
+    label: '定时任务',
+    icon: <Clock className="w-5 h-5" />,
+    path: '/admin/scheduler',
+    subItems: [
+      { id: 'scheduler-tasks', label: '任务列表', path: '/admin/scheduler/tasks' },
+      { id: 'scheduler-history', label: '执行历史', path: '/admin/scheduler/history' },
+    ],
+  },
+  {
+    id: 'monitor',
+    label: '监控中心',
+    icon: <AlertTriangle className="w-5 h-5" />,
+    path: '/admin/monitor',
+    subItems: [
+      { id: 'monitor-alerts', label: '告警列表', path: '/admin/monitor/alerts' },
+      { id: 'monitor-rules', label: '告警规则', path: '/admin/monitor/rules' },
+      { id: 'monitor-channels', label: '通知渠道', path: '/admin/monitor/channels' },
+    ],
+  },
+  {
+    id: 'database',
+    label: '数据库配置',
+    icon: <Database className="w-5 h-5" />,
+    path: '/admin/database',
   },
 ];
 
@@ -95,7 +122,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: { id: string; code: string; name: string; isAdmin: boolean }; email: string } | null>(null);
 
   useEffect(() => {
     // 检查用户登录状态和角色
@@ -106,7 +133,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     }
 
     const user = JSON.parse(userStr);
-    if (user.role !== 'admin') {
+
+    // 判断是否为管理员角色
+    const isAdmin = user.role?.isAdmin === true;
+
+    if (!isAdmin) {
       router.push('/');
       return;
     }
@@ -125,6 +156,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = () => {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('current-user-id');
     router.push('/login');
   };
 

@@ -16,27 +16,69 @@ export default function Home() {
   const router = useRouter();
   const { loadSession, setCurrentSession } = useChatHistory();
 
+  // 设置已挂载状态
   useEffect(() => {
     setMounted(true);
+  }, []);
 
-    // 检查用户登录状态
-    const userStr = localStorage.getItem('currentUser');
-    if (!userStr) {
-      router.push('/login');
-      return;
-    }
+  // 检查用户登录状态
+  useEffect(() => {
+    const checkAuthStatus = () => {
+      // 检查是否已登录（localStorage 中有 current-user-id）
+      const userId = localStorage.getItem('current-user-id');
+      const currentUser = localStorage.getItem('currentUser');
 
-    const user = JSON.parse(userStr);
+      console.log('[Home] 检查登录状态:', {
+        hasUserId: !!userId,
+        hasCurrentUser: !!currentUser,
+        userId,
+      });
 
-    // 如果是管理员，跳转到管理员页面
-    if (user.role === 'admin') {
-      router.push('/admin/overview');
-      return;
-    }
+      if (!userId || !currentUser) {
+        router.push('/login');
+        return;
+      }
 
-    // 普通用户设置认证状态
-    setAuthenticated(true);
+      const user = JSON.parse(currentUser);
+
+      // 判断是否为管理员角色
+      const isAdmin = user.role?.isAdmin === true;
+
+      // 如果是管理员，跳转到管理员页面
+      if (isAdmin) {
+        router.push('/admin/overview');
+        return;
+      }
+
+      // 普通用户设置认证状态
+      console.log('[Home] 普通用户，设置认证状态为 true');
+      setAuthenticated(true);
+    };
+
+    checkAuthStatus();
   }, [router]);
+
+  // 监听 localStorage 变化，当用户登录后重新加载
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'current-user-id' && e.newValue) {
+        console.log('[Home] 检测到用户登录，重新检查认证状态');
+        // 重新检查认证状态
+        const userId = localStorage.getItem('current-user-id');
+        const currentUser = localStorage.getItem('currentUser');
+
+        if (userId && currentUser) {
+          const user = JSON.parse(currentUser);
+          if (!user.role?.isAdmin) {
+            setAuthenticated(true);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // 处理选择历史会话
   const handleSelectSession = (session: ChatSession) => {

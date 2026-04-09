@@ -1,0 +1,100 @@
+{
+  "_comment": "审批Agent业务规则配置",
+  "_description": "审批Agent的业务流程规则，定义各操作的具体执行步骤",
+  "_agentType": "approval",
+  "_version": "1.0.0",
+
+  "businessRules": [
+    {
+      "ruleId": "get-my-todo",
+      "ruleName": "获取我的待办",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-todo-count",
+      "ruleName": "获取待办数量",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-todo-list",
+      "ruleName": "获取待办列表",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办接口" },
+        { "name": "filter_data", "action": "filter_data", "desc": "过滤数据" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "approve-todo",
+      "ruleName": "审批通过",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP审批接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "reject-todo",
+      "ruleName": "审批驳回",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP驳回接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "delegate-todo",
+      "ruleName": "转交待办",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP转交接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-todo-detail",
+      "ruleName": "获取待办详情",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办详情接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-done-list",
+      "ruleName": "获取已办列表",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP已办接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-notify-list",
+      "ruleName": "获取通知列表",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP通知接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    }
+  ]
+}

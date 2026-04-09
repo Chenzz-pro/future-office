@@ -99,12 +99,21 @@ export async function executeSkill(
   skill: CustomSkill,
   params: Record<string, unknown>
 ): Promise<SkillExecutionResult> {
-  const url = getFullApiUrl(skill);
+  let url = getFullApiUrl(skill);
   const headers = buildHeaders(skill);
   const timeout = skill.apiConfig.timeout || 10000;
   
   try {
     let response: Response;
+    
+    // 处理EKP待办服务的多操作
+    const action = params.action as string | undefined;
+    if (action && skill.subSkills) {
+      // 动态构建API路径：baseUrl + /{action}
+      const baseUrl = skill.apiConfig.baseUrl.replace(/\/+$/, '');
+      const servicePath = skill.apiConfig.path.replace(/\/+$/, '');
+      url = `${baseUrl}${servicePath}/${action}`;
+    }
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -242,6 +251,28 @@ export async function testSkill(skill: CustomSkill): Promise<SkillExecutionResul
   // 使用默认参数测试
   const testParams: Record<string, unknown> = {};
   
+  // 处理EKP待办服务 - 默认使用getTodoCount操作
+  if (skill.subSkills && skill.subSkills.length > 0) {
+    const defaultAction = skill.subSkills.find(s => s.action === 'getTodoCount') || skill.subSkills[0];
+    testParams.action = defaultAction.action;
+    
+    // 为默认操作的必填参数设置测试值
+    for (const param of defaultAction.params) {
+      if (param.defaultValue !== undefined) {
+        testParams[param.name] = param.defaultValue;
+      } else if (param.required) {
+        // 对于必填参数，使用认证信息中的用户名或默认值
+        if ((param.name === 'target' || param.name === 'targets' || param.name === 'loginName') && skill.authConfig.type === 'basic') {
+          testParams[param.name] = `{"LoginName":"${skill.authConfig.username}"}`;
+        } else {
+          testParams[param.name] = 'test_value';
+        }
+      }
+    }
+    return executeSkill(skill, testParams);
+  }
+  
+  // 处理普通技能
   for (const param of skill.requestParams) {
     if (param.defaultValue !== undefined) {
       testParams[param.name] = param.defaultValue;

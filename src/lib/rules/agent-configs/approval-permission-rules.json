@@ -1,0 +1,51 @@
+{
+  "_comment": "审批Agent权限规则配置",
+  "_description": "审批Agent的权限规则，定义各操作的权限校验逻辑",
+  "_agentType": "approval",
+  "_version": "1.0.0",
+
+  "permissionRules": [
+    {
+      "ruleId": "approval-query-self",
+      "ruleName": "待办查询-查询本人",
+      "condition": "查询",
+      "checkLogic": "用户登录即可",
+      "interceptAction": "您没有权限查询待办"
+    },
+    {
+      "ruleId": "approval-query-other",
+      "ruleName": "待办查询-查询他人",
+      "condition": "查询",
+      "checkLogic": "查询他人数据:需要管理员",
+      "interceptAction": "您无权查询他人的待办，普通用户只能查询自己的待办"
+    },
+    {
+      "ruleId": "approval-approve",
+      "ruleName": "待办审批",
+      "condition": "审批",
+      "checkLogic": "用户登录即可",
+      "interceptAction": "您没有权限审批此待办"
+    },
+    {
+      "ruleId": "approval-reject",
+      "ruleName": "待办驳回",
+      "condition": "取消",
+      "checkLogic": "用户登录即可",
+      "interceptAction": "您没有权限驳回此待办"
+    },
+    {
+      "ruleId": "approval-delegate",
+      "ruleName": "待办转交",
+      "condition": "所有",
+      "checkLogic": "用户登录即可",
+      "interceptAction": "您没有权限转交此待办"
+    },
+    {
+      "ruleId": "approval-detail",
+      "ruleName": "待办详情",
+      "condition": "查询",
+      "checkLogic": "用户登录即可",
+      "interceptAction": "您没有权限查看待办详情"
+    }
+  ]
+}

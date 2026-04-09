@@ -8,7 +8,8 @@
 export enum OrgElementType {
   ORGANIZATION = 1,  // 机构
   DEPARTMENT = 2,    // 部门
-  POSITION = 3       // 岗位
+  POSITION = 3,      // 岗位
+  GROUP = 4          // 群组
 }
 
 /**
@@ -17,7 +18,8 @@ export enum OrgElementType {
 export const OrgElementTypeLabels: Record<OrgElementType, string> = {
   [OrgElementType.ORGANIZATION]: '机构',
   [OrgElementType.DEPARTMENT]: '部门',
-  [OrgElementType.POSITION]: '岗位'
+  [OrgElementType.POSITION]: '岗位',
+  [OrgElementType.GROUP]: '群组'
 };
 
 /**
@@ -101,7 +103,11 @@ export interface OrgElementDTO {
   fd_super_leaderid?: string;
   fd_parentorgid?: string;
   fd_parentid?: string;
+  fd_hierarchy_id?: string; // EKP返回的层级路径（x{id1}x{id2}x...格式）
   fd_creator_id?: string;
+  fd_persons_number?: number; // 群组成员数量
+  fd_name_pinyin?: string; // 拼音名称
+  fd_name_simple_pinyin?: string; // 名称简拼
 }
 
 // ============================================
@@ -242,36 +248,15 @@ export interface StaffingLevelDTO {
 // ============================================
 
 /**
- * 组织架构树节点接口
+ * 组织架构树节点接口（只包含机构和部门）
  */
 export interface OrgTreeNode {
   id: string;
   name: string;
-  type: OrgElementType;
-  typeLabel: string;
-  order: number;
-  no?: string;
-  isAvailable: boolean;
-  isBusiness: boolean;
-  email?: string;
-  personsNumber: number;
-  memo?: string;
-  hierarchyId?: string;
-  createTime: Date;
-  isExternal: boolean;
-  thisLeaderId?: string;
-  thisLeaderName?: string;
-  superLeaderId?: string;
-  superLeaderName?: string;
-  parentOrgId?: string;
-  parentOrgName?: string;
+  type: OrgElementType;  // 1=机构, 2=部门
   parentId?: string;
-  parentName?: string;
-  creatorId?: string;
   children?: OrgTreeNode[];
-  personCount: number;  // 人员数量（含下级）
-  level: number;  // 层级深度
-  path?: string[];  // 完整路径
+  personCount?: number;  // 人员数量（含下级）
 }
 
 // ============================================
