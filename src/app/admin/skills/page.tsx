@@ -112,8 +112,10 @@ export default function SkillsManagement() {
       const data = await response.json();
       if (data.success && data.data) {
         // 转换为 SkillRecord 格式
-        const converted: SkillRecord[] = data.data.map((skill: any) => ({
-          id: skill.id,
+      // 优先使用 code 作为技能ID，code 不存在时使用数据库 id
+      const converted: SkillRecord[] = data.data.map((skill: any) => ({
+          id: skill.code || skill.id,
+          dbId: skill.id, // 保留数据库主键用于内部操作
           name: skill.name,
           description: skill.description,
           icon: 'Settings',
@@ -172,8 +174,8 @@ export default function SkillsManagement() {
       }
 
       // 合并数据库技能和本地自定义技能
-      // 从数据库加载的技能用 'db-' 前缀标识
-      const dbSkillRecords = dbSkillList.map(s => ({ ...s, id: `db-${s.id}` }));
+      // 数据库技能使用 code 作为 ID，已在上面转换好
+      const dbSkillRecords = dbSkillList.map(s => ({ ...s, id: s.code || s.id }));
 
       setSkills([...dbSkillRecords, ...customSkills]);
     } catch (error) {
@@ -198,7 +200,8 @@ export default function SkillsManagement() {
   const stats = {
     total: skills.length,
     enabled: skills.filter(s => s.enabled).length,
-    custom: skills.filter(s => !s.id.startsWith('ekp-') && !s.id.startsWith('db-')).length,
+    // 自定义技能：不在数据库技能列表中的（通过 dbId 判断是否是数据库技能）
+    custom: skills.filter(s => !s.dbId && !s.id.startsWith('ekp-')).length,
     dbSkills: dbSkills.length,
     categories: [...new Set(skills.map(s => s.category))].length,
   };
