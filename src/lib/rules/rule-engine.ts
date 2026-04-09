@@ -29,57 +29,68 @@ export interface BusinessRuleConfig {
 
 export class RuleEngine {
   /**
-   * 执行权限规则校验
+   * 执行权限规则校验（优化版：支持按ruleId匹配）
+   * 权限规则格式：
+   * [
+   *   {
+   *     "ruleId": "approval-notify",
+   *     "ruleName": "待办查询权限",
+   *     "condition": "查询",
+   *     "checkLogic": "用户登录即可",
+   *     "interceptAction": "您没有权限查询待办"
+   *   },
+   *   {
+   *     "ruleId": "approval-notify-other",
+   *     "ruleName": "查询他人待办权限",
+   *     "condition": "查询",
+   *     "checkLogic": "查询他人数据:需要管理员",
+   *     "interceptAction": "您无权查询他人的待办，普通用户只能查询自己的待办"
+   *   }
+   * ]
    */
   async executePermissionRules(
     rules: PermissionRule[],
     context: UserContext,
-    action: string
+    action: string,
+    params: Record<string, any> = {}
   ): Promise<{ granted: boolean; reason?: string }> {
     console.log('[RuleEngine] 执行权限规则校验:', {
       ruleCount: rules.length,
       userId: context.userId,
       role: context.role,
       action,
+      params,
     });
 
-    for (const rule of rules) {
-      const result = await this.checkPermissionRule(rule, context, action);
+    // 1. 查找匹配的规则
+    // 优先按 ruleId 匹配（ruleId 格式：{action}-{场景}）
+    const matchingRules = rules.filter(rule => {
+      // 检查 condition 是否匹配 action
+      return this.shouldTriggerRule(rule.condition, action);
+    });
+
+    console.log('[RuleEngine] 匹配的权限规则:', matchingRules.length, matchingRules.map(r => r.ruleId));
+
+    // 2. 逐个执行匹配的规则
+    for (const rule of matchingRules) {
+      console.log('[RuleEngine] 执行权限规则:', rule.ruleId, rule.checkLogic);
       
-      if (!result.granted) {
+      const result = await this.executeCheckLogic(rule.checkLogic, context, params);
+      
+      if (!result.passed) {
         console.log('[RuleEngine] 权限检查失败:', {
           ruleId: rule.ruleId,
           ruleName: rule.ruleName,
-          reason: result.reason,
+          reason: result.reason || rule.interceptAction,
         });
-        return result;
+        return {
+          granted: false,
+          reason: result.reason || rule.interceptAction,
+        };
       }
     }
 
     console.log('[RuleEngine] 所有权限规则校验通过');
-    return { granted: true };
-  }
-
-  private checkPermissionRule(
-    rule: PermissionRule,
-    context: UserContext,
-    action: string
-  ): { granted: boolean; reason?: string } {
-    const condition = rule.condition.toLowerCase();
-    
-    if (!this.shouldTriggerRule(condition, action)) {
-      return { granted: true };
-    }
-
-    const checkResult = this.executeCheckLogic(rule.checkLogic, context);
-    
-    if (!checkResult.passed) {
-      return {
-        granted: false,
-        reason: rule.interceptAction,
-      };
-    }
-
     return { granted: true };
   }
 
@@ -109,34 +120,146 @@ export class RuleEngine {
     return false;
   }
 
-  private executeCheckLogic(
+  /**
+   * 执行权限检查逻辑（增强版）
+   * checkLogic 格式支持：
+   * 1. "用户登录即可" - 只要有 userId 就有权限
+   * 2. "需要管理员" - 只有 admin 角色有权限
+   * 3. "需要主管或管理员" - admin 或包含 manager 角色
+   * 4. "查询他人数据:需要管理员" - 查询他人数据时需要管理员
+   * 5. "校验入参userid与当前登录用户id一致" - userId 必须一致
+   * 6. "只读" - 只读操作，直接通过
+   */
+  private async executeCheckLogic(
     checkLogic: string,
-    context: UserContext
-  ): { passed: boolean; reason?: string } {
+    context: UserContext,
+    params: Record<string, any> = {}
+  ): Promise<{ passed: boolean; reason?: string }> {
     const logic = checkLogic.toLowerCase();
+    
+    console.log('[RuleEngine] 解析 checkLogic:', checkLogic, { params });
 
-    if (logic.includes('校验入参userid与当前登录用户id一致') || logic.includes('userid一致性')) {
+    // 1. "用户登录即可" - 只要有 userId 就有权限
+    if (logic.includes('登录即可') || logic.includes('登录') && !logic.includes('需要')) {
+      if (!context.userId) {
+        return { passed: false, reason: '请先登录' };
+      }
       return { passed: true };
     }
 
-    if (logic.includes('角色') || logic.includes('role')) {
-      if (logic.includes('管理员') && context.role !== 'admin') {
-        return { passed: false, reason: '需要管理员权限' };
-      }
-      if (logic.includes('员工') && context.role !== 'user') {
-        return { passed: false, reason: '需要员工权限' };
-      }
-      if (logic.includes('主管') && !context.role?.includes('manager')) {
-        return { passed: false, reason: '需要主管权限' };
+    // 2. 特殊场景：查询他人数据权限
+    if (logic.includes('查询他人数据')) {
+      const targetPerson = params?.targetPerson;
+      
+      if (targetPerson) {
+        // 尝试获取当前用户的登录名
+        const currentLoginName = await this.getLoginNameByUserId(context.userId);
+        
+        // 判断是否是查询他人
+        const isQueryingOthers = targetPerson !== currentLoginName && 
+                                 targetPerson !== context.userId &&
+                                 targetPerson !== '我' && 
+                                 targetPerson !== '我的';
+        
+        console.log('[RuleEngine] 查询他人判断:', {
+          targetPerson,
+          currentLoginName,
+          contextUserId: context.userId,
+          isQueryingOthers,
+        });
+        
+        if (isQueryingOthers) {
+          // 查询他人数据，需要检查权限要求
+          if (logic.includes('需要管理员')) {
+            if (context.role !== 'admin') {
+              return { 
+                passed: false, 
+                reason: `您无权查询 ${targetPerson} 的待办。普通用户只能查询自己的待办，如需查询他人待办，请联系管理员。` 
+              };
+            }
+            console.log('[RuleEngine] 管理员权限，允许查询他人数据');
+          } else if (logic.includes('需要主管')) {
+            if (context.role !== 'admin' && !context.role?.includes('manager')) {
+              return { 
+                passed: false, 
+                reason: `您无权查询 ${targetPerson} 的待办。需要主管或管理员权限。` 
+              };
+            }
+          }
+          // 其他情况，默认允许
+        } else {
+          // 查询自己的数据，直接通过
+          console.log('[RuleEngine] 查询自己的数据，权限校验通过');
+          return { passed: true };
+        }
+      } else {
+        // 没有 targetPerson，表示查询自己的数据，直接通过
+        return { passed: true };
       }
     }
 
+    // 3. "只读" 操作
+    if (logic.includes('只读')) {
+      return { passed: true };
+    }
+
+    // 4. "需要管理员" 角色检查
+    if (logic.includes('管理员') && !logic.includes('需要')) {
+      // "需要管理员" 才检查
+    }
+    if (logic.includes('需要管理员')) {
+      if (context.role !== 'admin') {
+        return { passed: false, reason: '需要管理员权限' };
+      }
+      return { passed: true };
+    }
+
+    // 5. "需要主管或管理员" 角色检查
+    if (logic.includes('需要主管') || logic.includes('需要经理')) {
+      if (context.role !== 'admin' && !context.role?.includes('manager')) {
+        return { passed: false, reason: '需要主管或管理员权限' };
+      }
+      return { passed: true };
+    }
+
+    // 6. "需要员工" 角色检查
+    if (logic.includes('需要员工') && context.role !== 'user') {
+      return { passed: false, reason: '需要员工权限' };
+    }
+
+    // 7. "userid一致性" 检查
+    if (logic.includes('userid一致性') || logic.includes('校验入参userid')) {
+      const targetUserId = params?.userId;
+      if (targetUserId && targetUserId !== context.userId) {
+        return { passed: false, reason: '只能操作自己的数据' };
+      }
+    }
+
+    // 默认：允许
     return { passed: true };
   }
 
   /**
-   * 执行业务规则（新版本，支持对象格式）
-   * 包含：查询他人数据的权限校验
+   * 执行业务规则（优化版：支持按ruleId匹配）
+   * 业务规则格式（数组）：
+   * [
+   *   {
+   *     "ruleId": "approval-notify",
+   *     "ruleName": "待办查询流程",
+   *     "steps": [
+   *       { "name": "check_params", "action": "check_params" },
+   *       { "name": "call_ekp", "action": "invoke_skill", "skillCode": "ekp_notify" }
+   *     ]
+   *   },
+   *   {
+   *     "ruleId": "approval-meeting",
+   *     "ruleName": "会议查询流程",
+   *     "steps": [
+   *       { "name": "check_params", "action": "check_params" },
+   *       { "name": "call_ekp", "action": "invoke_skill", "skillCode": "ekp_meeting" }
+   *     ]
+   *   }
+   * ]
    */
   async executeBusinessRules(
     rules: any[],
@@ -151,45 +274,31 @@ export class RuleEngine {
       userId: context.userId,
     });
 
-    // ⚠️ 关键校验：检查是否在查询他人数据
-    const targetPerson = params?.targetPerson;
-    if (targetPerson) {
-      console.log('[RuleEngine] 检测到查询目标人员:', targetPerson);
+    // 1. 查找匹配的业务规则
+    // 匹配逻辑：按 ruleId 匹配（ruleId 应该与 action 对应）
+    // 例如：action="get_my_todo" → ruleId="get_my_todo" 或包含 "notify"
+    let matchedRule = null;
+    
+    if (rules && rules.length > 0) {
+      // 优先按 ruleId 精确匹配
+      matchedRule = rules.find(r => 
+        r.ruleId === action || 
+        r.ruleId === action.replace(/_/g, '-') ||
+        r.ruleId?.includes(action) ||
+        action.includes(r.ruleId)
+      );
       
-      // 尝试获取当前用户的登录名
-      const currentLoginName = await this.getLoginNameByUserId(context.userId);
-      console.log('[RuleEngine] 当前用户登录名:', currentLoginName);
-
-      // 如果查询的是他人，需要管理员权限
-      if (targetPerson !== currentLoginName && targetPerson !== context.userId) {
-        console.log('[RuleEngine] 查询他人数据，需要校验权限:', {
-          targetPerson,
-          currentLoginName,
-          currentUserId: context.userId,
-          role: context.role,
-        });
-
-        // 只有管理员角色才能查询他人数据
-        if (context.role !== 'admin') {
-          console.warn('[RuleEngine] 非管理员用户尝试查询他人数据，已拒绝');
-          return {
-            code: '403',
-            msg: `您无权查询 ${targetPerson} 的待办。提示：普通用户只能查询自己的待办，如需查询他人待办，请联系管理员。`,
-            data: null,
-            permissionChecked: true,
-            permissionGranted: false,
-            skillCalled: false,
-          };
-        }
-        
-        console.log('[RuleEngine] 管理员权限校验通过，允许查询他人数据');
+      // 如果没有精确匹配，取第一个规则（兼容旧格式）
+      if (!matchedRule) {
+        matchedRule = rules[0];
+        console.log('[RuleEngine] 未找到匹配的规则，使用第一个规则:', matchedRule?.ruleId);
       } else {
-        console.log('[RuleEngine] 查询自己的数据，权限校验通过');
+        console.log('[RuleEngine] 找到匹配的规则:', matchedRule.ruleId);
       }
     }
 
-    // 兼容旧格式和新格式
-    if (!rules || rules.length === 0) {
+    // 2. 如果没有配置业务规则，返回默认结果
+    if (!matchedRule) {
       return {
         code: '200',
         msg: '操作成功（无业务规则）',
@@ -197,11 +306,11 @@ export class RuleEngine {
       };
     }
 
-    // 新格式：直接是步骤数组
-    const steps = rules[0]?.steps || rules[0]?.stepList || rules;
+    // 3. 获取步骤列表
+    const steps = matchedRule.steps || matchedRule.stepList;
     
-    if (!Array.isArray(steps)) {
-      console.log('[RuleEngine] 业务规则格式无效，使用默认处理');
+    if (!steps || !Array.isArray(steps) || steps.length === 0) {
+      console.log('[RuleEngine] 业务规则无有效步骤，使用默认处理');
       return {
         code: '200',
         msg: '操作成功',
@@ -209,7 +318,9 @@ export class RuleEngine {
       };
     }
 
-    // 执行业务流程步骤
+    console.log('[RuleEngine] 执行步骤数:', steps.length, steps.map(s => s.name));
+
+    // 4. 执行业务流程步骤
     return await this.executeBusinessSteps(steps, context, params);
   }
 
@@ -307,8 +418,20 @@ export class RuleEngine {
             break;
 
           case 'format_data':
-            // 格式化响应
-            console.log('[RuleEngine] 格式化数据');
+            /**
+             * 格式化响应
+             * ⚠️ 重要：此步骤不调用 LLM！
+             * 格式化逻辑由 RootAgent.formatResponse() 内网代码处理
+             * 
+             * 响应格式化原则：
+             * 1. 由内网代码（JavaScript/TypeScript）格式化响应
+             * 2. 保证数据安全性（无需LLM介入）
+             * 3. 提高响应速度
+             * 4. 确保响应格式一致性
+             */
+            console.log('[RuleEngine] 格式化数据（由内网代码处理，不调用LLM）');
+            // RootAgent.formatResponse() 会处理最终的响应格式化
+            // 此步骤仅作为标记，由 RootAgent 决定如何格式化
             break;
 
           default:
