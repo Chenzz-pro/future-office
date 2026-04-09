@@ -121,33 +121,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     }
   }, [activeKey]);
 
-  const checkDatabaseConnection = async () => {
-    try {
-      setDbCheckLoading(true);
-      const response = await fetch('/api/database');
-      const data = await response.json();
-      setDbConnected(data.success || false);
-      if (!data.success) {
-        console.log('[NewChat] 数据库未连接:', data.error);
-      }
-    } catch (error) {
-      console.error('[NewChat] 检查数据库连接失败:', error);
-      setDbConnected(false);
-    } finally {
-      setDbCheckLoading(false);
-    }
-  };
-
-  // 设置默认模型
-  useEffect(() => {
-    if (activeKey) {
-      if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
-      else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
-      else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
-      else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
-    }
-  }, [activeKey]);
-
   // 加载自定义技能
   useEffect(() => {
     try {
