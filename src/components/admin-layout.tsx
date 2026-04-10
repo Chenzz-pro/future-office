@@ -81,7 +81,6 @@ const menuItems: MenuItem[] = [
       { id: 'int-overview', label: '集成概览', path: '/admin/integration' },
       { id: 'int-llm', label: 'AI服务配置', path: '/admin/integration/llm' },
       { id: 'int-ekp', label: '蓝凌EKP', path: '/admin/integration/ekp' },
-      { id: 'int-ekp-flow-mapping', label: '流程映射管理', path: '/admin/integration/flow-mapping' },
       { id: 'int-dingtalk', label: '钉钉', path: '/admin/integration/dingtalk' },
       { id: 'int-wechat', label: '企业微信', path: '/admin/integration/wechat' },
     ],
