@@ -42,15 +42,36 @@ export async function getLoginSessionId(loginName: string): Promise<SSOLoginResu
   </soap:Body>
 </soap:Envelope>`;
 
-    const response = await fetch(`${baseUrl}${config.ssoWebservicePath || '/sys/webserviceservice/'}`, {
+    // 构建认证头
+    const authHeader = config.username 
+      ? `Basic ${Buffer.from(`${config.username}:${config.password || ''}`).toString('base64')}`
+      : null;
+    
+    console.log('[getLoginSessionId] EKP 地址:', baseUrl);
+    console.log('[getLoginSessionId] WebService 路径:', config.ssoWebservicePath || '/sys/webserviceservice/');
+    console.log('[getLoginSessionId] 认证用户名:', config.username);
+    console.log('[getLoginSessionId] 认证头:', authHeader ? '已设置' : '未设置');
+    
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'text/xml; charset=utf-8',
+      'SOAPAction': `http://webservice.sys.ekp.landray.com.cn/${serviceId}/getLoginSessionId`,
+    };
+    
+    if (authHeader) {
+      requestHeaders['Authorization'] = authHeader;
+    }
+    
+    // 构建 WebService URL（确保只有一个斜杠）
+    const baseUrlClean = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const wsPath = (config.ssoWebservicePath || '/sys/webserviceservice/').startsWith('/') 
+      ? config.ssoWebservicePath || '/sys/webserviceservice/'
+      : '/' + (config.ssoWebservicePath || 'sys/webserviceservice/');
+    const wsUrl = `${baseUrlClean}${wsPath}`;
+    console.log('[getLoginSessionId] 完整请求 URL:', wsUrl);
+    
+    const response = await fetch(wsUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/xml; charset=utf-8',
-        'SOAPAction': `http://webservice.sys.ekp.landray.com.cn/${serviceId}/getLoginSessionId`,
-        ...(config.username ? {
-          'Authorization': `Basic ${Buffer.from(`${config.username}:${config.password || ''}`).toString('base64')}`
-        } : {}),
-      },
+      headers: requestHeaders,
       body: soapBody,
     });
 
@@ -63,9 +84,17 @@ export async function getLoginSessionId(loginName: string): Promise<SSOLoginResu
     console.log('[getLoginSessionId] SOAP 响应长度:', text.length);
     
     // 检查响应是否是 HTML（登录页面），说明认证失败
-    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+    if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('<script')) {
       console.error('[getLoginSessionId] 收到 HTML 响应，可能是认证失败');
-      return { success: false, error: 'WebService 认证失败，请检查 EKP 配置中的用户名和密码' };
+      // 提取页面标题或关键信息
+      const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const title = titleMatch ? titleMatch[1] : '无标题';
+      console.error('[getLoginSessionId] HTML 页面标题:', title);
+      // 检查是否是登录页面
+      if (text.includes('login') || text.includes('Login') || text.includes('登录')) {
+        return { success: false, error: 'WebService 认证失败，请检查 EKP 配置中的用户名和密码' };
+      }
+      return { success: false, error: `WebService 返回异常页面: ${title}` };
     }
     
     // 解析 SOAP 响应
