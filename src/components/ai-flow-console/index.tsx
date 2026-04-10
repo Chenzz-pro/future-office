@@ -125,6 +125,8 @@ export function AIFormConsole({
   const [isSSOLoading, setIsSSOLoading] = useState(false);
   // 当前 iframe 的 SSO sessionId
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  // iframe 目标 URL（使用 SSO 登录）
+  const [iframeTargetUrl, setIframeTargetUrl] = useState<string | null>(null);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -154,6 +156,53 @@ export function AIFormConsole({
 
     setMessages([welcomeMessage]);
   }, [businessType]);
+
+  // 获取 SSO sessionId 并构建 iframe URL
+  useEffect(() => {
+    if (!formUrl) return;
+
+    const fetchSSOAndBuildUrl = async () => {
+      try {
+        // 解析 formUrl
+        let targetUrl = formUrl;
+        if (formUrl.startsWith('http://') || formUrl.startsWith('https://')) {
+          const url = new URL(formUrl);
+          targetUrl = url.pathname + url.search;
+        }
+
+        // 调用 SSO 接口获取 sessionId
+        const response = await fetch('/api/ekp/sso/get-session-id', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': userId,
+          },
+          body: JSON.stringify({ targetUrl }),
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          // 使用 SSO 返回的 iframeSrc
+          setIframeTargetUrl(result.data.iframeSrc);
+          setCurrentSessionId(result.data.sessionId);
+        } else {
+          // SSO 失败，回退到直接加载表单（需要手动登录）
+          console.warn('[AIFormConsole] SSO 获取 sessionId 失败:', result.error);
+          // 直接加载表单
+          const [path, query] = formUrl.split('?');
+          setIframeTargetUrl(`/api/ekp-proxy/${path.replace(/^\//, '')}${query ? '?' + query : ''}`);
+        }
+      } catch (error) {
+        console.error('[AIFormConsole] 获取 SSO URL 失败:', error);
+        // 回退到直接加载表单
+        const [path, query] = formUrl.split('?');
+        setIframeTargetUrl(`/api/ekp-proxy/${path.replace(/^\//, '')}${query ? '?' + query : ''}`);
+      }
+    };
+
+    fetchSSOAndBuildUrl();
+  }, [formUrl, userId]);
 
   // 检查 EKP 登录状态（通过 API 代理检测）
   useEffect(() => {
@@ -547,38 +596,24 @@ export function AIFormConsole({
           <div className="w-1/2 border-r flex flex-col">
             <div className="flex-1 relative bg-muted/30">
               {/* 代理模式：使用 /api/ekp-proxy/ 前缀访问 EKP */}
-              {/* 例如：/api/ekp-proxy/km/review/km_review_main/kmReviewMain.do?method=add&fdTemplateId=xxx */}
-              {formUrl ? (
+              {/* 通过 SSO 登录获取 sessionId，然后重定向到目标表单 */}
+              {formUrl && iframeTargetUrl ? (
                 <iframe
                   ref={iframeRef}
-                  src={(() => {
-                    // 解析 formUrl，提取路径和查询参数
-                    let path: string;
-                    let query: string = '';
-                    
-                    if (formUrl.startsWith('http://') || formUrl.startsWith('https://')) {
-                      // 完整 URL，提取路径和查询参数
-                      const url = new URL(formUrl);
-                      path = url.pathname;
-                      query = url.search;
-                    } else {
-                      // 只有路径
-                      const [urlPath, urlQuery] = formUrl.split('?');
-                      path = urlPath;
-                      query = urlQuery ? `?${urlQuery}` : '';
-                    }
-                    
-                    // 清理路径中的双斜杠
-                    path = path.replace(/\/+/g, '/').replace(/^\//, '');
-                    
-                    // 构建代理 URL
-                    return `/api/ekp-proxy/${path}${query}`;
-                  })()}
+                  src={iframeTargetUrl}
                   className="w-full h-full border-0"
                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
                   onLoad={handleIframeLoad}
                   title="EKP 表单"
                 />
+              ) : formUrl ? (
+                // SSO 加载中，显示加载状态
+                <div className="flex items-center justify-center h-full">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">正在通过 SSO 登录 EKP...</p>
+                  </div>
+                </div>
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <Card className="w-80">

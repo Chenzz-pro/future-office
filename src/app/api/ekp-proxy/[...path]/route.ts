@@ -75,6 +75,20 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
     targetUrl.searchParams.set(key, value);
   });
 
+  // 关键：从 URL 参数或 Cookie 获取 sessionId，并添加到目标 URL
+  // 这样可以绕过 iframe Cookie 跨域限制
+  let sessionId = searchParams.get('sessionId');
+  if (!sessionId) {
+    // 尝试从 Cookie 获取
+    const cookieHeader = request.headers.get('Cookie');
+    if (cookieHeader) {
+      const match = cookieHeader.match(/sessionId=([^;]+)/);
+      if (match) {
+        sessionId = match[1];
+      }
+    }
+  }
+
   try {
     // 获取请求体
     let body: string | undefined;
@@ -82,7 +96,7 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
       body = await request.text();
     }
 
-    // 构建代理请求
+    // 构建代理请求头
     const headers: Record<string, string> = {
       'Content-Type': request.headers.get('Content-Type') || 'application/x-www-form-urlencoded',
       'Accept': request.headers.get('Accept') || '*/*',
@@ -91,6 +105,17 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
     // 添加来源标记
     headers['X-Proxy-From'] = 'ekp-proxy';
     headers['X-Proxy-Path'] = `/${targetPath}`;
+
+    // 传递必要的请求头
+    const userAgent = request.headers.get('User-Agent');
+    if (userAgent) {
+      headers['User-Agent'] = userAgent;
+    }
+
+    // 关键：如果 URL 中有 sessionId，也要添加到目标 URL
+    if (sessionId && !targetUrl.searchParams.has('sessionId')) {
+      targetUrl.searchParams.set('sessionId', sessionId);
+    }
 
     // 构造代理请求
     const proxyResponse = await fetch(targetUrl.toString(), {
@@ -112,6 +137,7 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
             const locUrl = new URL(location);
             const proxyPath = config.proxyPath || '/api/ekp-proxy';
             redirectUrl = `/api/ekp-proxy/${locUrl.pathname.replace(/^\//, '')}`;
+            // 保留原查询参数
             if (locUrl.search) {
               redirectUrl += locUrl.search;
             }
@@ -121,14 +147,35 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
         } else {
           // 相对路径
           redirectUrl = `/api/ekp-proxy/${location.replace(/^\//, '')}`;
+          // 保留原查询参数（如果有）
+          const locSearchMatch = location.match(/\?(.+)$/);
+          if (locSearchMatch) {
+            redirectUrl = redirectUrl.replace(/\?.*$/, '') + '?' + locSearchMatch[1];
+          }
+        }
+
+        // 关键：在重定向 URL 中保留 sessionId（用于 SSO 认证）
+        const urlObj = new URL(redirectUrl, 'http://localhost');
+        if (sessionId && !urlObj.searchParams.has('sessionId')) {
+          urlObj.searchParams.set('sessionId', sessionId);
+        }
+        redirectUrl = urlObj.pathname + urlObj.search;
+
+        // 构建响应头
+        const responseHeaders: Record<string, string> = {
+          'Location': redirectUrl,
+          'X-Proxy-Redirect': 'true',
+        };
+
+        // 转发 Set-Cookie（SESSION JSESSIONID）
+        const setCookie = proxyResponse.headers.get('set-cookie');
+        if (setCookie) {
+          responseHeaders['Set-Cookie'] = setCookie;
         }
 
         return new NextResponse(null, {
           status: proxyResponse.status,
-          headers: {
-            'Location': redirectUrl,
-            'X-Proxy-Redirect': 'true',
-          },
+          headers: responseHeaders,
         });
       }
     }
@@ -143,13 +190,22 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
       processedBody = processHtmlContent(responseBody, baseUrl, config.proxyPath || '/api/ekp-proxy');
     }
 
+    // 构建响应头
+    const responseHeaders: Record<string, string> = {
+      'Content-Type': contentType,
+      'X-Proxy-Target': targetUrl.toString(),
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    };
+
+    // 转发 Set-Cookie（SESSION JSESSIONID）
+    const setCookie = proxyResponse.headers.get('set-cookie');
+    if (setCookie) {
+      responseHeaders['Set-Cookie'] = setCookie;
+    }
+
     return new NextResponse(processedBody, {
       status: proxyResponse.status,
-      headers: {
-        'Content-Type': contentType,
-        'X-Proxy-Target': targetUrl.toString(),
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error('EKP 代理请求失败:', error);
