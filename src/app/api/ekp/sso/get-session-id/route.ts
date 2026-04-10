@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getLoginSessionId, buildSSOLoginUrl } from '@/lib/ekp/ekp-sso-client';
+import { ekpConfigManager } from '@/lib/ekp/ekp-config-manager';
 import { dbManager } from '@/lib/database';
 
 /**
@@ -30,6 +31,11 @@ export async function POST(request: NextRequest) {
         { success: false, error: '未提供用户ID' },
         { status: 401 }
       );
+    }
+
+    // 确保 EKP 配置已加载
+    if (!ekpConfigManager.isLoaded()) {
+      await ekpConfigManager.load();
     }
 
     const body = await request.json();
@@ -71,22 +77,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取 EKP 配置以获取密码
-    let ekpPassword = '';
+    // 获取 EKP 配置以获取 WebService 路径
+    let ssoServiceId = 'loginWebserviceService';
+    let ssoWebservicePath = '/sys/webserviceservice/';
     try {
-      const ekpConfigResult = await dbManager.query<{ password: string }>(
-        'SELECT password FROM ekp_configs LIMIT 1'
+      const ekpConfigResult = await dbManager.query<{ sso_service_id: string; sso_webservice_path: string }>(
+        'SELECT sso_service_id, sso_webservice_path FROM ekp_configs LIMIT 1'
       );
       if (ekpConfigResult.rows && ekpConfigResult.rows.length > 0) {
-        ekpPassword = ekpConfigResult.rows[0].password || '';
+        ssoServiceId = ekpConfigResult.rows[0].sso_service_id || ssoServiceId;
+        ssoWebservicePath = ekpConfigResult.rows[0].sso_webservice_path || ssoWebservicePath;
       }
     } catch (e) {
-      console.warn('[SSO] 获取 EKP 配置密码失败，使用空密码');
+      console.warn('[SSO] 获取 EKP SSO 配置失败，使用默认值');
     }
 
     // 调用 EKP WebService 获取 sessionId
-    // 注意：实际项目中可能需要用户输入密码，或者使用其他认证方式
-    const result = await getLoginSessionId(loginName, ekpPassword);
+    // 注意：根据官方文档，getLoginSessionId 接口只需要 loginName，不需要密码
+    const result = await getLoginSessionId(loginName);
 
     if (!result.success || !result.sessionId) {
       console.error('[SSO] 获取 sessionId 失败:', result.error);

@@ -16,10 +16,10 @@ export interface SSOLoginResult {
 
 /**
  * 调用 EKP WebService 获取 sessionId
+ * 根据官方文档，getLoginSessionId 接口只需要 loginName 参数
  * @param loginName 登录名
- * @param password 密码
  */
-export async function getLoginSessionId(loginName: string, password: string): Promise<SSOLoginResult> {
+export async function getLoginSessionId(loginName: string): Promise<SSOLoginResult> {
   const config = ekpConfigManager.getConfig();
   const baseUrl = config.baseUrl;
   
@@ -29,13 +29,15 @@ export async function getLoginSessionId(loginName: string, password: string): Pr
 
   try {
     // 构造 SOAP 请求
+    // 注意：根据官方文档，getLoginSessionId 接口只需要 loginName 参数（arg0）
+    // arg1 参数可以为空或任意值
     const serviceId = config.ssoServiceId || 'loginWebserviceService';
     const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <getLoginSessionId xmlns="http://webservice.sys.ekp.landray.com.cn/">
       <arg0>${escapeXml(loginName)}</arg0>
-      <arg1>${escapeXml(password)}</arg1>
+      <arg1></arg1>
     </getLoginSessionId>
   </soap:Body>
 </soap:Envelope>`;
@@ -45,6 +47,9 @@ export async function getLoginSessionId(loginName: string, password: string): Pr
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
         'SOAPAction': `http://webservice.sys.ekp.landray.com.cn/${serviceId}/getLoginSessionId`,
+        ...(config.username ? {
+          'Authorization': `Basic ${Buffer.from(`${config.username}:${config.password || ''}`).toString('base64')}`
+        } : {}),
       },
       body: soapBody,
     });
@@ -54,6 +59,14 @@ export async function getLoginSessionId(loginName: string, password: string): Pr
     }
 
     const text = await response.text();
+    console.log('[getLoginSessionId] SOAP 响应状态:', response.status);
+    console.log('[getLoginSessionId] SOAP 响应长度:', text.length);
+    
+    // 检查响应是否是 HTML（登录页面），说明认证失败
+    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+      console.error('[getLoginSessionId] 收到 HTML 响应，可能是认证失败');
+      return { success: false, error: 'WebService 认证失败，请检查 EKP 配置中的用户名和密码' };
+    }
     
     // 解析 SOAP 响应
     const sessionId = extractSoapValue(text, 'return');
@@ -61,7 +74,11 @@ export async function getLoginSessionId(loginName: string, password: string): Pr
     if (sessionId) {
       return { success: true, sessionId, loginName };
     } else {
-      return { success: false, error: '获取 sessionId 失败' };
+      // 尝试解析 result 和 errorMsg
+      const result = extractSoapValue(text, 'result');
+      const errorMsg = extractSoapValue(text, 'errorMsg');
+      console.log('[getLoginSessionId] 解析结果:', { result, errorMsg });
+      return { success: false, error: errorMsg || '获取 sessionId 失败' };
     }
   } catch (error) {
     console.error('getLoginSessionId 失败:', error);
@@ -195,14 +212,23 @@ function escapeXml(str: string): string {
 
 // 辅助函数：从 SOAP 响应中提取值
 function extractSoapValue(xml: string, tagName: string): string | null {
-  // 尝试匹配 <return>...</return> 或 <ns2:return>...</ns2:return>
+  // 首先检查是否有 <return> 标签，尝试从其中提取
+  const returnMatch = xml.match(/<return[^>]*>([\s\S]*?)<\/return>/i);
+  let searchXml = xml;
+  
+  if (returnMatch && returnMatch[1]) {
+    searchXml = returnMatch[1];
+    console.log('[extractSoapValue] 从 <return> 中提取:', { tagName, content: searchXml });
+  }
+  
+  // 尝试匹配 <tagName>...</tagName> 或 <ns:tagName>...</ns:tagName>
   const patterns = [
     new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i'),
     new RegExp(`<[^:]*:${tagName}[^>]*>([^<]*)</[^:]*:${tagName}>`, 'i'),
   ];
   
   for (const pattern of patterns) {
-    const match = xml.match(pattern);
+    const match = searchXml.match(pattern);
     if (match && match[1]) {
       return match[1].trim();
     }
