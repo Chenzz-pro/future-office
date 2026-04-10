@@ -120,10 +120,8 @@ export function AIFormConsole({
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   // EKP 登录状态：null=未检测, true=已登录, false=未登录
   const [ekpLoginStatus, setEkpLoginStatus] = useState<boolean | null>(null);
-  // 是否显示登录遮罩（现在改为 SSO 绑定提示）
-  const [showSSOBindingPrompt, setShowSSOBindingPrompt] = useState(false);
-  // 是否已绑定 EKP 账号
-  const [isEKPBound, setIsEKPBound] = useState<boolean | null>(null);
+  // 是否显示 API 提交模式提示
+  const [showAPIModeHint, setShowAPIModeHint] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -154,42 +152,30 @@ export function AIFormConsole({
     setMessages([welcomeMessage]);
   }, [businessType]);
 
-  // 检查 EKP 绑定状态
+  // 检查 EKP 登录状态（通过 API 代理检测）
   useEffect(() => {
     if (!userId || !formUrl) return;
 
-    const checkEKPBinding = async () => {
+    const checkEKPLogin = async () => {
       try {
-        const response = await fetch('/api/ekp/binding', {
+        const response = await fetch(`/api/ekp-proxy/sys/org/sys-inf/sysInfo.do?method=currentUser`, {
           headers: {
             'X-User-ID': userId,
           },
         });
-        const result = await response.json();
-        
-        if (result.success && result.data) {
-          setIsEKPBound(true);
-          // 已绑定，检查 Session 是否有效
-          const sessionValid = await checkEKPJSESSION(userId);
-          if (sessionValid) {
-            setEkpLoginStatus(true);
-            setShowSSOBindingPrompt(false);
-          } else {
-            setEkpLoginStatus(false);
-            setShowSSOBindingPrompt(true);
-          }
+        // 如果返回 200，说明已登录
+        if (response.ok) {
+          setEkpLoginStatus(true);
         } else {
-          setIsEKPBound(false);
-          setShowSSOBindingPrompt(true);
+          setEkpLoginStatus(false);
         }
-      } catch (error) {
-        console.error('检查 EKP 绑定状态失败:', error);
-        setIsEKPBound(false);
-        setShowSSOBindingPrompt(true);
+      } catch {
+        // 无法检测，设置为未知
+        setEkpLoginStatus(null);
       }
     };
 
-    checkEKPBinding();
+    checkEKPLogin();
   }, [userId, formUrl]);
 
   // 检查 EKP Session 是否有效（通过代理 API）
@@ -229,41 +215,28 @@ export function AIFormConsole({
         const loginForm = iframeDoc.querySelector('form[action*="login"], input[name="username"], input[name="fd_name"]');
         if (loginForm) {
           setEkpLoginStatus(false);
-          setShowSSOBindingPrompt(true);
-          addSystemMessage('⚠️ 检测到 EKP 系统需要登录。请先绑定您的 EKP 账号（SSO 单点登录），绑定后即可自动登录。');
+          // 在 AI 对话区域显示提示，而不是弹出遮罩
+          addSystemMessage('⚠️ 检测到 EKP 系统需要登录。请在左侧 iframe 中输入您的 OA 账号密码进行登录，登录成功后即可自动填表。\n\n💡 或者您可以点击右侧下方的"切换到 API 提交模式"来跳过 iframe 登录。');
         } else {
           setEkpLoginStatus(true);
-          setShowSSOBindingPrompt(false);
           addSystemMessage('✅ EKP 表单已加载完成，您可以用自然语言描述要填写的内容。');
         }
       }
     } catch (error) {
       // 跨域访问失败（使用代理后应该不会失败），使用默认状态
       setEkpLoginStatus(null);
-      setShowSSOBindingPrompt(false);
       addSystemMessage('表单已加载。现在您可以在 EKP 表单中填写信息了。我会帮您解析自然语言并指导填表。');
     }
   }, [addSystemMessage]);
 
-  // 确认已登录
+  // 确认已登录（刷新 iframe 状态检测）
   const handleConfirmLogin = useCallback(() => {
-    setShowSSOBindingPrompt(false);
-    setEkpLoginStatus(true);
-    addSystemMessage('好的，现在您可以在左侧 EKP 表单中填写信息了。我会帮您解析自然语言并指导填表。');
-  }, [addSystemMessage]);
-
-  // 打开 EKP 绑定页面
-  const handleOpenBindingPage = useCallback(() => {
-    // 打开集成中心页面进行绑定
-    window.open('/admin/integration/ekp/binding', '_blank', 'width=600,height=400');
-    addSystemMessage('请在新窗口中完成 EKP 账号绑定，绑定完成后刷新此页面。');
-  }, [addSystemMessage]);
-
-  // 跳过登录，直接通过 API 提交
-  const handleSkipLoginAndSubmit = useCallback(() => {
-    setShowSSOBindingPrompt(false);
-    setShowSidebar(false); // 隐藏 iframe
-    addSystemMessage('好的，我将通过 EKP API 直接帮您提交申请。请在右侧告诉我您的申请信息。');
+    setIsFormReady(false); // 重置加载状态以触发重新检测
+    addSystemMessage('正在检测登录状态...');
+    // 重新加载 iframe
+    if (iframeRef.current) {
+      iframeRef.current.src = iframeRef.current.src;
+    }
   }, [addSystemMessage]);
 
   // 发送消息
@@ -544,54 +517,7 @@ export function AIFormConsole({
                 </div>
               )}
 
-              {/* SSO 绑定提示遮罩（替代原来的登录遮罩） */}
-              {showSSOBindingPrompt && formUrl && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/95 z-10">
-                  <Card className="w-96 mx-4">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-blue-500" />
-                        SSO 单点登录绑定
-                      </CardTitle>
-                      <CardDescription>
-                        为了实现 iframe 内自动登录 EKP 系统，请先绑定您的 EKP 账号。
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="bg-muted/50 rounded-lg p-3 text-sm">
-                        <p className="font-medium mb-2">绑定步骤：</p>
-                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                          <li>点击下方"绑定 EKP 账号"按钮</li>
-                          <li>在新窗口中输入您的 OA 账号和密码</li>
-                          <li>绑定成功后，返回此页面刷新</li>
-                        </ol>
-                      </div>
-                      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                        <p className="text-sm text-blue-800 dark:text-blue-200">
-                          💡 <strong>技术方案：</strong>通过 Nginx 反向代理 + Cookie 桥接，实现同源 iframe 嵌入和 SSO 自动登录。
-                        </p>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        className="flex-1"
-                        onClick={handleSkipLoginAndSubmit}
-                      >
-                        跳过（API提交）
-                      </Button>
-                      <Button 
-                        className="flex-1"
-                        onClick={handleOpenBindingPage}
-                      >
-                        绑定 EKP 账号
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </div>
-              )}
-
-              {/* 隐藏侧边栏时的提示 */}
+              {/* API 提交模式提示（当隐藏侧边栏时显示） */}
               {!showSidebar && (
                 <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
                   <Card className="w-80 mx-4">
@@ -615,7 +541,7 @@ export function AIFormConsole({
                       </div>
                       <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mt-3">
                         <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                          💡 <strong>注意：</strong>API 提交模式可能无法自动填充 EKP 表单某些字段，如有需要建议绑定 EKP 账号使用 iframe 模式。
+                          💡 <strong>注意：</strong>API 提交模式可能无法自动填充 EKP 表单某些字段，如有需要建议使用 iframe 模式登录 EKP。
                         </p>
                       </div>
                     </CardContent>
@@ -625,8 +551,7 @@ export function AIFormConsole({
                         className="w-full"
                         onClick={() => {
                           setShowSidebar(true);
-                          setShowSSOBindingPrompt(true);
-                          addSystemMessage('已切换回 iframe 模式，请在左侧绑定 EKP 账号实现 SSO 自动登录。');
+                          addSystemMessage('已切换回 iframe 模式。请在左侧 EKP 表单中手动登录，登录成功后即可自动填表。');
                         }}
                       >
                         切换回 iframe 模式
@@ -783,9 +708,23 @@ export function AIFormConsole({
                 )}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              例如："请事假3天，明天开始，原因家中有事"
-            </p>
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-xs text-muted-foreground">
+                例如："请事假3天，明天开始，原因家中有事"
+              </p>
+              {showSidebar && (
+                <button
+                  type="button"
+                  className="text-xs text-blue-500 hover:text-blue-600 hover:underline"
+                  onClick={() => {
+                    setShowSidebar(false);
+                    addSystemMessage('已切换到 API 提交模式。请在右侧用自然语言描述您的申请内容，我会通过 EKP API 直接帮您提交。');
+                  }}
+                >
+                  切换到 API 提交模式
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
