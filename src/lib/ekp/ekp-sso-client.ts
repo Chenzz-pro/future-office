@@ -6,6 +6,7 @@
  */
 
 import { ekpConfigManager } from './ekp-config-manager';
+import type http from 'http';
 
 export interface SSOLoginResult {
   success: boolean;
@@ -33,6 +34,7 @@ async function nativeRequest(url: string, options: {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       : require('http');
     
+    const http = client as typeof import('http');
     const reqOptions = {
       hostname: urlObj.hostname,
       port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
@@ -41,7 +43,7 @@ async function nativeRequest(url: string, options: {
       headers: options.headers,
     };
     
-    const req = client.request(reqOptions, (res) => {
+    const req = http.request(reqOptions, (res: http.IncomingMessage) => {
       let body = '';
       res.on('data', (chunk: Buffer) => {
         body += chunk.toString();
