@@ -147,16 +147,35 @@ export class DatabaseManager {
   }
 
   /**
-   * 执行查询
+   * 执行查询（带超时控制）
    */
   public async query<T = unknown>(sql: string, params?: unknown[]): Promise<QueryResult<T>> {
     if (!this.pool) {
       throw new Error('数据库未连接');
     }
 
+    // 设置查询超时为 10 秒
+    const timeoutMs = 10000;
+    let timeoutHandle: NodeJS.Timeout | null = null;
+
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const [results] = await this.pool.execute(sql, params as any);
+      // 创建一个超时 Promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`查询超时 (${timeoutMs}ms): ${sql.substring(0, 100)}...`));
+        }, timeoutMs);
+      });
+
+      // 竞速执行查询和超时
+      const [results] = await Promise.race([
+        this.pool.execute(sql, params as any),
+        timeoutPromise,
+      ]) as [unknown, unknown];
+
+      // 清除超时
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
        
       return {
          
@@ -167,8 +186,20 @@ export class DatabaseManager {
         insertId: (results as any).insertId,
       };
     } catch (error: unknown) {
+      // 清除超时
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      
       // 检查是否是连接丢失错误
-      const mysqlError = error as { code?: string };
+      const mysqlError = error as { code?: string; message?: string };
+      
+      // 如果是超时错误，直接抛出
+      if (mysqlError.message?.includes('查询超时')) {
+        console.error('[Query] 查询超时:', mysqlError.message);
+        throw error;
+      }
+      
       if (mysqlError.code === 'PROTOCOL_CONNECTION_LOST' || 
           mysqlError.code === 'ECONNRESET' ||
           mysqlError.code === 'ER_SERVER_LOST' ||

@@ -81,7 +81,7 @@ class EKPConfigManager {
       if (result.rows && result.rows.length > 0) {
         const row = result.rows[0];
         this.config = {
-          baseUrl: (row.base_url as string) || (row.url as string) || '',
+          baseUrl: (row.ekp_address as string) || (row.base_url as string) || (row.url as string) || '',
           username: (row.username as string) || '',
           password: (row.password as string) || '',
           apiPath: (row.api_path as string) || '/api/sys-notify/sysNotifyTodoRestService/getTodo',
@@ -122,6 +122,57 @@ class EKPConfigManager {
       this.loaded = true;
     } catch (error) {
       console.error('EKPConfigManager: 加载配置失败', error);
+    }
+  }
+
+  /**
+   * 确保数据库表有所有需要的字段
+   */
+  private async ensureColumnsExist(): Promise<void> {
+    try {
+      // 获取当前表的字段列表
+      const columnsResult = await dbManager.query<{ Field: string }>(
+        `SELECT COLUMN_NAME as Field FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ekp_configs'`
+      );
+      const existingColumns = new Set(
+        columnsResult.rows?.map(row => row.Field.toLowerCase()) || []
+      );
+      
+      // 需要确保存在的字段
+      const requiredColumns = [
+        { name: 'enabled', definition: 'TINYINT(1) DEFAULT 0' },
+        { name: 'api_path', definition: 'VARCHAR(256) DEFAULT "/api/sys-notify/sysNotifyTodoRestService/getTodo"' },
+        { name: 'sso_enabled', definition: 'TINYINT(1) DEFAULT 1' },
+        { name: 'sso_service_id', definition: 'VARCHAR(128) DEFAULT "loginWebserviceService"' },
+        { name: 'sso_webservice_path', definition: 'VARCHAR(256) DEFAULT "/sys/webserviceservice/"' },
+        { name: 'sso_login_path', definition: 'VARCHAR(256) DEFAULT "/sys/authentication/sso/login_auto.jsp"' },
+        { name: 'sso_session_verify_path', definition: 'VARCHAR(256) DEFAULT "/sys/org/sys-inf/sysInfo.do?method=currentUser"' },
+        { name: 'proxy_enabled', definition: 'TINYINT(1) DEFAULT 1' },
+        { name: 'proxy_path', definition: 'VARCHAR(128) DEFAULT "/api/ekp-proxy"' },
+        { name: 'leave_template_id', definition: 'VARCHAR(128) DEFAULT ""' },
+        { name: 'expense_template_id', definition: 'VARCHAR(128) DEFAULT ""' },
+        { name: 'trip_template_id', definition: 'VARCHAR(128) DEFAULT ""' },
+        { name: 'purchase_template_id', definition: 'VARCHAR(128) DEFAULT ""' },
+      ];
+      
+      for (const col of requiredColumns) {
+        if (!existingColumns.has(col.name.toLowerCase())) {
+          console.log(`[EKPConfigManager] 添加缺失字段: ${col.name}`);
+          try {
+            await dbManager.query(
+              `ALTER TABLE ekp_configs ADD COLUMN ${col.name} ${col.definition}`
+            );
+          } catch (alterError) {
+            // 忽略字段已存在的错误
+            const mysqlError = alterError as { code?: string };
+            if (mysqlError.code !== 'ER_DUP_FIELDNAME') {
+              console.error(`[EKPConfigManager] 添加字段 ${col.name} 失败:`, alterError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[EKPConfigManager] 检查字段失败:', error);
     }
   }
 
@@ -232,91 +283,125 @@ class EKPConfigManager {
     }
 
     try {
-      // 合并配置
-      const newConfig = { ...this.getConfig(), ...config };
-
-      // 检查是否存在记录
-      const checkResult = await dbManager.query<{ count: number }>('SELECT COUNT(*) as count FROM ekp_configs');
-      const exists = checkResult.rows && checkResult.rows.length > 0 && (checkResult.rows[0].count || 0) > 0;
-
-      if (exists) {
-        // 更新
+      console.log('[EKPConfigManager:save] 开始保存配置...');
+      
+      // 首先确保 ekp_configs 表存在记录
+      const checkResult = await dbManager.query<{ id: string }>('SELECT id FROM ekp_configs LIMIT 1');
+      let recordExists = checkResult.rows && checkResult.rows.length > 0;
+      
+      if (!recordExists) {
+        // 插入默认记录
+        console.log('[EKPConfigManager:save] 表中无记录，插入默认记录...');
         await dbManager.query(
-          `UPDATE ekp_configs SET
-           base_url = ?,
-           url = ?,
-           username = ?,
-           password = ?,
-           api_path = ?,
-           enabled = ?,
-           sso_enabled = ?,
-           sso_service_id = ?,
-           sso_webservice_path = ?,
-           sso_login_path = ?,
-           sso_session_verify_path = ?,
-           proxy_enabled = ?,
-           proxy_path = ?,
-           leave_template_id = ?,
-           expense_template_id = ?,
-           trip_template_id = ?,
-           purchase_template_id = ?,
-           updated_at = NOW()
-           WHERE id = (SELECT id FROM ekp_configs LIMIT 1)`,
-          [
-            newConfig.baseUrl,
-            newConfig.baseUrl,
-            newConfig.username,
-            newConfig.password,
-            newConfig.apiPath,
-            newConfig.enabled ? 1 : 0,
-            newConfig.ssoEnabled ? 1 : 0,
-            newConfig.ssoServiceId,
-            newConfig.ssoWebservicePath,
-            newConfig.ssoLoginPath,
-            newConfig.ssoSessionVerifyPath,
-            newConfig.proxyEnabled ? 1 : 0,
-            newConfig.proxyPath,
-            newConfig.leaveTemplateId,
-            newConfig.expenseTemplateId,
-            newConfig.tripTemplateId,
-            newConfig.purchaseTemplateId,
-          ]
+          `INSERT INTO ekp_configs (id, ekp_address, username, auth_type) VALUES ('default', '', '', 'basic')`
         );
-      } else {
-        // 创建
-        await dbManager.query(
-          `INSERT INTO ekp_configs (
-           id, base_url, url, username, password, api_path, enabled,
-           sso_enabled, sso_service_id, sso_webservice_path, sso_login_path, sso_session_verify_path,
-           proxy_enabled, proxy_path, leave_template_id, expense_template_id, trip_template_id, purchase_template_id,
-           created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-          [
-            'default',
-            newConfig.baseUrl,
-            newConfig.baseUrl,
-            newConfig.username,
-            newConfig.password,
-            newConfig.apiPath,
-            newConfig.enabled ? 1 : 0,
-            newConfig.ssoEnabled ? 1 : 0,
-            newConfig.ssoServiceId,
-            newConfig.ssoWebservicePath,
-            newConfig.ssoLoginPath,
-            newConfig.ssoSessionVerifyPath,
-            newConfig.proxyEnabled ? 1 : 0,
-            newConfig.proxyPath,
-            newConfig.leaveTemplateId,
-            newConfig.expenseTemplateId,
-            newConfig.tripTemplateId,
-            newConfig.purchaseTemplateId,
-          ]
-        );
+        recordExists = true;
+      }
+      
+      // 确保所有需要的字段存在
+      await this.ensureColumnsExist();
+      
+      // 直接使用传入的配置
+      const newConfig = { ...config };
+      
+      // 构建动态 UPDATE SQL，只更新提供的字段
+      const updateFields: string[] = [];
+      const updateValues: unknown[] = [];
+
+      if (config.baseUrl !== undefined) {
+        updateFields.push('ekp_address = ?');
+        updateValues.push(config.baseUrl);
+      }
+      if (config.username !== undefined) {
+        updateFields.push('username = ?');
+        updateValues.push(config.username);
+      }
+      if (config.password !== undefined) {
+        updateFields.push('password = ?');
+        updateValues.push(config.password);
+      }
+      if (config.apiPath !== undefined) {
+        updateFields.push('api_path = ?');
+        updateValues.push(config.apiPath);
+      }
+      if (config.enabled !== undefined) {
+        updateFields.push('enabled = ?');
+        updateValues.push(config.enabled ? 1 : 0);
+      }
+      if (config.ssoEnabled !== undefined) {
+        updateFields.push('sso_enabled = ?');
+        updateValues.push(config.ssoEnabled ? 1 : 0);
+      }
+      if (config.ssoServiceId !== undefined) {
+        updateFields.push('sso_service_id = ?');
+        updateValues.push(config.ssoServiceId);
+      }
+      if (config.ssoWebservicePath !== undefined) {
+        updateFields.push('sso_webservice_path = ?');
+        updateValues.push(config.ssoWebservicePath);
+      }
+      if (config.ssoLoginPath !== undefined) {
+        updateFields.push('sso_login_path = ?');
+        updateValues.push(config.ssoLoginPath);
+      }
+      if (config.ssoSessionVerifyPath !== undefined) {
+        updateFields.push('sso_session_verify_path = ?');
+        updateValues.push(config.ssoSessionVerifyPath);
+      }
+      if (config.proxyEnabled !== undefined) {
+        updateFields.push('proxy_enabled = ?');
+        updateValues.push(config.proxyEnabled ? 1 : 0);
+      }
+      if (config.proxyPath !== undefined) {
+        updateFields.push('proxy_path = ?');
+        updateValues.push(config.proxyPath);
+      }
+      if (config.leaveTemplateId !== undefined) {
+        updateFields.push('leave_template_id = ?');
+        updateValues.push(config.leaveTemplateId);
+      }
+      if (config.expenseTemplateId !== undefined) {
+        updateFields.push('expense_template_id = ?');
+        updateValues.push(config.expenseTemplateId);
+      }
+      if (config.tripTemplateId !== undefined) {
+        updateFields.push('trip_template_id = ?');
+        updateValues.push(config.tripTemplateId);
+      }
+      if (config.purchaseTemplateId !== undefined) {
+        updateFields.push('purchase_template_id = ?');
+        updateValues.push(config.purchaseTemplateId);
+      }
+
+      if (updateFields.length === 0) {
+        console.log('[EKPConfigManager:save] 没有字段需要更新');
+        return true;
+      }
+
+      updateFields.push('updated_at = NOW()');
+
+      // 直接执行 UPDATE
+      const updateSql = `UPDATE ekp_configs SET ${updateFields.join(', ')} LIMIT 1`;
+      console.log('[EKPConfigManager:save] 执行更新 SQL...');
+      
+      const result = await dbManager.query(updateSql, updateValues);
+      console.log('[EKPConfigManager:save] 更新结果:', result);
+
+      // 检查是否影响行
+      if (result.affectedRows === 0) {
+        // 如果没有更新任何行，尝试插入新记录
+        console.log('[EKPConfigManager:save] 没有更新任何行，尝试插入...');
+        const insertFields = ['id', ...updateFields.slice(0, -1)]; // 移除 updated_at
+        const insertPlaceholders = ['?', ...Array(insertFields.length - 1).fill('?')];
+        
+        const insertSql = `INSERT INTO ekp_configs (${insertFields.join(', ')}) VALUES (${insertPlaceholders.join(', ')})`;
+        await dbManager.query(insertSql, ['default', ...updateValues.slice(0, -1)]);
       }
 
       // 更新内存中的配置
-      this.config = newConfig;
+      this.config = { ...this.config, ...newConfig } as EKPConfig;
       this.loaded = true;
+      console.log('[EKPConfigManager:save] 配置保存成功');
       return true;
     } catch (error) {
       console.error('EKPConfigManager: 保存配置失败', error);
