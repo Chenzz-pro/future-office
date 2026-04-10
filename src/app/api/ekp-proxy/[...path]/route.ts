@@ -114,8 +114,10 @@ async function proxyRequest(
           const newPath = location
             .replace('https://oa.fjhxrl.com', '')
             .replace('http://oa.fjhxrl.com', '');
+          // 清理路径开头的斜杠并转换重定向路径
+          const cleanPath = newPath.replace(/^\/+/, '');
           return NextResponse.redirect(
-            new URL(`/ekp/${newPath}`, request.url),
+            new URL(`/api/ekp-proxy/${cleanPath}`, request.url),
             response.status
           );
         }

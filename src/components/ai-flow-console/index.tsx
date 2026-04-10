@@ -480,14 +480,32 @@ export function AIFormConsole({
           <div className="w-1/2 border-r flex flex-col">
             <div className="flex-1 relative bg-muted/30">
               {/* 代理模式：使用 /api/ekp-proxy/ 前缀访问 EKP */}
-              {/* 例如：/api/ekp-proxy/sys/form/main.jsp?fdTemplateId=xxx */}
+              {/* 例如：/api/ekp-proxy/km/review/km_review_main/kmReviewMain.do?method=add&fdTemplateId=xxx */}
               {formUrl ? (
                 <iframe
                   ref={iframeRef}
                   src={(() => {
-                    // 清理 formUrl 中的双斜杠
-                    const cleanPath = formUrl.replace(/\/+/g, '/').replace(/^\//, '');
-                    return `/api/ekp-proxy/${cleanPath}`;
+                    // 解析 formUrl，提取路径和查询参数
+                    let path: string;
+                    let query: string = '';
+                    
+                    if (formUrl.startsWith('http://') || formUrl.startsWith('https://')) {
+                      // 完整 URL，提取路径和查询参数
+                      const url = new URL(formUrl);
+                      path = url.pathname;
+                      query = url.search;
+                    } else {
+                      // 只有路径
+                      const [urlPath, urlQuery] = formUrl.split('?');
+                      path = urlPath;
+                      query = urlQuery ? `?${urlQuery}` : '';
+                    }
+                    
+                    // 清理路径中的双斜杠
+                    path = path.replace(/\/+/g, '/').replace(/^\//, '');
+                    
+                    // 构建代理 URL
+                    return `/api/ekp-proxy/${path}${query}`;
                   })()}
                   className="w-full h-full border-0"
                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
