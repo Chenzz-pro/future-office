@@ -145,8 +145,6 @@ export async function getLoginSessionId(loginName: string): Promise<SSOLoginResu
     
     console.log('[getLoginSessionId] 使用原生模块发送请求');
     console.log('[getLoginSessionId] 完整请求 URL:', wsUrl);
-    
-    // 使用原生模块发送请求
     const response = await nativeRequest(wsUrl, {
       method: 'POST',
       headers: requestHeaders,
@@ -155,8 +153,6 @@ export async function getLoginSessionId(loginName: string): Promise<SSOLoginResu
 
     console.log('[getLoginSessionId] 响应状态:', response.status);
     console.log('[getLoginSessionId] 响应头 Location:', response.headers.location);
-    
-    // 检查是否是重定向
     if (response.status === 302 || response.status === 301) {
       const location = response.headers.location;
       console.log('[getLoginSessionId] 收到重定向到:', location);

@@ -80,7 +80,6 @@ class EKPConfigManager {
       const result = await dbManager.query<Record<string, unknown>>('SELECT * FROM ekp_configs LIMIT 1');
       if (result.rows && result.rows.length > 0) {
         const row = result.rows[0];
-        console.log('[EKPConfigManager] 从数据库加载配置，密码字段原始值:', row.password ? '已设置' : '未设置', '长度:', row.password ? (row.password as string).length : 0);
         this.config = {
           baseUrl: (row.ekp_address as string) || (row.base_url as string) || (row.url as string) || '',
           username: (row.username as string) || '',
