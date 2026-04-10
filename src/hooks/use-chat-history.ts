@@ -39,7 +39,6 @@ function getCurrentUserId(): string | null {
 
   console.log('[getCurrentUserId] localStorage 读取:', {
     currentUserId: userId,
-    localStorageKeys: Object.keys(localStorage),
   });
 
   if (!userId) {
@@ -47,15 +46,75 @@ function getCurrentUserId(): string | null {
     return null; // 返回 null 表示未登录
   }
 
-  // 验证 userId 格式（应该是 UUID 格式）
+  // 兼容校验：支持 UUID 格式、MD5/MD4/MD2 格式（31-32位十六进制字符串）
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(userId)) {
+  const mdHashRegex = /^[0-9a-f]{31,32}$/i;
+  
+  if (!uuidRegex.test(userId) && !mdHashRegex.test(userId)) {
     console.error('[getCurrentUserId] current-user-id 格式无效:', userId);
+    // 不直接返回 null，而是尝试从 currentUser 中获取
+    const currentUser = localStorage.getItem('currentUser');
+    if (currentUser) {
+      try {
+        const user = JSON.parse(currentUser);
+        if (user?.id) {
+          console.log('[getCurrentUserId] 从 currentUser 中获取到 userId:', user.id);
+          return user.id;
+        }
+      } catch (e) {
+        console.error('[getCurrentUserId] 解析 currentUser 失败:', e);
+      }
+    }
     return null;
   }
 
   console.log('[getCurrentUserId] 用户 ID 有效:', userId);
   return userId;
+}
+
+/**
+ * 获取当前用户完整信息
+ */
+export function getCurrentUser(): {
+  userId: string | null;
+  deptId: string | null;
+  role: string;
+  roleId: string | null;
+  username: string | null;
+  personName: string | null;
+  mobile?: string | null;
+  rtxAccount?: string | null;
+} {
+  // 优先从 currentUser 获取完整信息
+  const currentUserStr = localStorage.getItem('currentUser');
+  if (currentUserStr) {
+    try {
+      const currentUser = JSON.parse(currentUserStr);
+      return {
+        userId: currentUser.id || null,
+        deptId: currentUser.deptId || null,
+        role: currentUser.role?.code || currentUser.role || 'user',
+        roleId: currentUser.role?.id || null,
+        username: currentUser.username || null,
+        personName: currentUser.personName || null,
+        mobile: currentUser.mobile || null,
+        rtxAccount: currentUser.rtxAccount || null,
+      };
+    } catch (e) {
+      console.error('[getCurrentUser] 解析 currentUser 失败:', e);
+    }
+  }
+
+  // 降级：从 current-user-id 获取
+  const userId = localStorage.getItem('current-user-id');
+  return {
+    userId: userId || null,
+    deptId: null,
+    role: 'user',
+    roleId: null,
+    username: null,
+    personName: null,
+  };
 }
 
 // 降级到 localStorage
@@ -696,3 +755,6 @@ export function useChatHistory() {
     retrySync,
   };
 }
+
+// 导出 getCurrentUserId 函数供其他组件使用
+export { getCurrentUserId };

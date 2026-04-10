@@ -1,0 +1,197 @@
+{
+  "_description": "所有业务Agent权限规则汇总配置",
+  "_version": "1.0.0",
+  "_lastUpdated": "2025-01-20",
+
+  "approval": {
+    "_agentName": "审批Agent",
+    "_permissionRules": [
+      {
+        "ruleId": "approval-query-self",
+        "ruleName": "待办查询-查询本人",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限查询待办"
+      },
+      {
+        "ruleId": "approval-query-other",
+        "ruleName": "待办查询-查询他人",
+        "condition": "查询",
+        "checkLogic": "查询他人数据:需要管理员",
+        "interceptAction": "您无权查询他人的待办，普通用户只能查询自己的待办"
+      },
+      {
+        "ruleId": "approval-approve",
+        "ruleName": "待办审批",
+        "condition": "审批",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限审批此待办"
+      },
+      {
+        "ruleId": "approval-reject",
+        "ruleName": "待办驳回",
+        "condition": "取消",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限驳回此待办"
+      },
+      {
+        "ruleId": "approval-delegate",
+        "ruleName": "待办转交",
+        "condition": "所有",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限转交此待办"
+      },
+      {
+        "ruleId": "approval-detail",
+        "ruleName": "待办详情",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限查看待办详情"
+      }
+    ]
+  },
+
+  "meeting": {
+    "_agentName": "会议Agent",
+    "_permissionRules": [
+      {
+        "ruleId": "meeting-query-self",
+        "ruleName": "会议查询-查询本人",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限查询会议"
+      },
+      {
+        "ruleId": "meeting-query-other",
+        "ruleName": "会议查询-查询他人",
+        "condition": "查询",
+        "checkLogic": "查询他人数据:需要管理员",
+        "interceptAction": "您无权查询他人的会议，普通用户只能查询自己的会议"
+      },
+      {
+        "ruleId": "meeting-create",
+        "ruleName": "会议创建",
+        "condition": "创建",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限创建会议"
+      },
+      {
+        "ruleId": "meeting-update-own",
+        "ruleName": "会议更新-自己的会议",
+        "condition": "更新",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限更新此会议"
+      },
+      {
+        "ruleId": "meeting-update-other",
+        "ruleName": "会议更新-他人的会议",
+        "condition": "更新",
+        "checkLogic": "查询他人数据:需要管理员",
+        "interceptAction": "您没有权限更新他人的会议"
+      },
+      {
+        "ruleId": "meeting-cancel-own",
+        "ruleName": "会议取消-自己的会议",
+        "condition": "取消",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限取消此会议"
+      },
+      {
+        "ruleId": "meeting-cancel-other",
+        "ruleName": "会议取消-他人的会议",
+        "condition": "取消",
+        "checkLogic": "查询他人数据:需要管理员",
+        "interceptAction": "您没有权限取消他人的会议"
+      },
+      {
+        "ruleId": "meeting-detail",
+        "ruleName": "会议详情",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限查看会议详情"
+      }
+    ]
+  },
+
+  "assistant": {
+    "_agentName": "助理Agent",
+    "_permissionRules": [
+      {
+        "ruleId": "assistant-query",
+        "ruleName": "助理查询",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限使用此功能"
+      },
+      {
+        "ruleId": "assistant-query-other",
+        "ruleName": "助理查询-他人数据",
+        "condition": "查询",
+        "checkLogic": "查询他人数据:需要管理员",
+        "interceptAction": "您没有权限查询他人的数据"
+      },
+      {
+        "ruleId": "assistant-create",
+        "ruleName": "助理创建",
+        "condition": "创建",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限创建"
+      },
+      {
+        "ruleId": "assistant-update",
+        "ruleName": "助理更新",
+        "condition": "更新",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限更新"
+      },
+      {
+        "ruleId": "assistant-delete",
+        "ruleName": "助理删除",
+        "condition": "取消",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限删除"
+      }
+    ]
+  },
+
+  "data": {
+    "_agentName": "数据Agent",
+    "_permissionRules": [
+      {
+        "ruleId": "data-query-self",
+        "ruleName": "数据查询-本人数据",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限查询数据"
+      },
+      {
+        "ruleId": "data-query-other",
+        "ruleName": "数据查询-他人数据",
+        "condition": "查询",
+        "checkLogic": "查询他人数据:需要管理员",
+        "interceptAction": "您没有权限查询他人的数据"
+      },
+      {
+        "ruleId": "data-export",
+        "ruleName": "数据导出",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限导出数据"
+      },
+      {
+        "ruleId": "data-report",
+        "ruleName": "报表生成",
+        "condition": "创建",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限生成报表"
+      },
+      {
+        "ruleId": "data-statistics",
+        "ruleName": "数据统计",
+        "condition": "查询",
+        "checkLogic": "用户登录即可",
+        "interceptAction": "您没有权限查看统计数据"
+      }
+    ]
+  }
+}

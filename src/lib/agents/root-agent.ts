@@ -29,7 +29,7 @@ export class RootAgent {
 
 你的职责：
 1. 识别用户意图（审批/会议/数据/个人助理）
-2. 提取关键参数
+2. 提取关键参数，特别是查询目标人员和业务类型
 3. 返回结构化的意图识别结果
 
 可用的业务Agent：
@@ -53,6 +53,21 @@ export class RootAgent {
 }
 \`\`\`
 
+⚠️ 重要：目标人员提取规则
+- "查询我的待办" → params: {}
+- "查询张三的待办" → params: { targetPerson: "张三" }
+- "查询landray的代办" → params: { targetPerson: "landray" }
+- "查询李四的待办数量" → params: { targetPerson: "李四" }
+- "帮我查一下王五的待办" → params: { targetPerson: "王五" }
+
+⚠️ 重要：业务类型提取规则（用于发起流程）
+- "我要请假"/"请事假"/"申请请假" → params: { businessType: "leave" }
+- "我要报销"/"费用报销"/"申请报销" → params: { businessType: "expense" }
+- "我要出差"/"出差申请"/"申请出差" → params: { businessType: "trip" }
+- "我要采购"/"采购申请"/"申请采购" → params: { businessType: "purchase" }
+
+如果用户没有明确指定查询谁，默认就是查询"我的"，params: {}
+
 示例：
 用户："查询我的待办"
 返回：
@@ -63,6 +78,68 @@ export class RootAgent {
   "context": {
     "userId": "user-id",
     "params": {}
+  }
+}
+\`\`\`
+
+用户："我要请假"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "launch_flow",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "businessType": "leave"
+    }
+  }
+}
+\`\`\`
+
+用户："请事假3天"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "launch_flow",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "businessType": "leave",
+      "description": "请事假3天"
+    }
+  }
+}
+\`\`\`
+
+用户："报销差旅费500元"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "launch_flow",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "businessType": "expense",
+      "description": "报销差旅费500元"
+    }
+  }
+}
+\`\`\`
+
+用户："查询landray的代办"
+返回：
+\`\`\`json
+{
+  "agentId": "approval-agent",
+  "action": "get_my_todo",
+  "context": {
+    "userId": "user-id",
+    "params": {
+      "targetPerson": "landray"
+    }
   }
 }
 \`\`\`
@@ -86,6 +163,7 @@ export class RootAgent {
 重要规则：
 - 一定要返回纯JSON格式，不要有任何其他文本
 - 如果无法识别意图，返回 agentId: "unknown"
+- 特别注意：如果用户提到"xxx的待办/代办"，一定要在 params.targetPerson 中提取这个人的名字
 - 不要添加任何解释或说明`;
   }
 
@@ -230,19 +308,16 @@ export class RootAgent {
 
     // 2. 基础功能权限检查（只检查用户是否有权限访问该Agent功能）
     // 注意：这里不做业务数据权限，业务权限由业务Agent自己校验
+    // 业务规则可以控制更细粒度的权限（如只有特定角色才能审批）
 
     // 2.1 检查是否需要登录
     if (!userContext.userId) {
       return { granted: false, reason: '请先登录' };
     }
 
-    // 2.2 检查角色权限（路由级别）
-    // 某些Agent可能需要特定角色才能访问
-    if (intentResult.agentId === 'approval-agent' && !['admin', 'manager'].includes(userContext.role || '')) {
-      return { granted: false, reason: '您没有权限使用审批功能' };
-    }
-
-    console.log('[RootAgent] 路由权限校验通过，将请求转发给业务Agent进行业务权限校验');
+    // 2.2 RootAgent 只做基础的路由权限检查（确保用户已登录）
+    // 具体的业务权限（如查询/审批）由业务Agent的业务规则控制
+    console.log('[RootAgent] 路由权限校验通过（已登录），业务权限由业务Agent校验');
     return { granted: true };
   }
 
@@ -270,7 +345,13 @@ export class RootAgent {
 
       // 如果业务Agent返回的是结构化数据，使用内网代码格式化
       if (typeof businessResponse.data === 'object' && businessResponse.data !== null) {
-        return this.formatStructuredData(businessResponse.data, businessResponse.msg);
+        // 检查是否有 action 字段（需要打开表单）
+        const data = businessResponse.data as Record<string, unknown>;
+        if (data.action && typeof data.action === 'object') {
+          // 返回特殊格式，前端识别 action 并打开表单
+          return `::ACTION::${JSON.stringify(data.action)}::${businessResponse.msg}`;
+        }
+        return this.formatStructuredData(data, businessResponse.msg);
       }
 
       // 其他情况，返回消息
@@ -288,18 +369,18 @@ export class RootAgent {
    * @param defaultMessage 默认消息
    * @returns 格式化后的文本
    */
-  private formatStructuredData(data: any, defaultMessage: string): string {
+  private formatStructuredData(data: unknown, defaultMessage: string): string {
     // 检查是否是数组
     if (Array.isArray(data)) {
       if (data.length === 0) {
         return `✅ ${defaultMessage || '查询成功，暂无数据'}`;
       }
-      return this.formatArrayData(data);
+      return this.formatArrayData(data, defaultMessage);
     }
 
     // 检查是否是对象
-    if (typeof data === 'object') {
-      return this.formatObjectData(data);
+    if (typeof data === 'object' && data !== null) {
+      return this.formatObjectData(data as Record<string, unknown>, defaultMessage);
     }
 
     // 其他情况，返回默认消息
@@ -309,19 +390,23 @@ export class RootAgent {
   /**
    * 格式化数组数据
    * @param data 数组数据
+   * @param defaultMessage 默认消息
    * @returns 格式化后的文本
    */
-  private formatArrayData(data: any[]): string {
+  private formatArrayData(data: unknown[], defaultMessage?: string): string {
     const items = data.slice(0, 10); // 最多显示10条
-    const lines = [`✅ 查询成功，共 ${data.length} 条记录：\n`];
+    const title = defaultMessage && defaultMessage !== '操作成功' 
+      ? `✅ ${defaultMessage}，共 ${data.length} 条记录：`
+      : `✅ 查询成功，共 ${data.length} 条记录：`;
+    const lines = [`${title}\n`];
 
     items.forEach((item, index) => {
       if (typeof item === 'object' && item !== null) {
         // 提取关键字段
-        const title = item.title || item.name || item.subject || `记录${index + 1}`;
-        const id = item.id || index + 1;
-        const status = item.status ? ` [${item.status}]` : '';
-        const time = item.createTime || item.time || item.date || '';
+        const record = item as Record<string, unknown>;
+        const title = (record.title || record.name || record.subject || `记录${index + 1}`) as string;
+        const status = record.status ? ` [${record.status}]` : '';
+        const time = (record.createTime || record.time || record.date) as string || '';
 
         lines.push(`${index + 1}. ${title}${status}`);
         if (time) {
@@ -340,17 +425,43 @@ export class RootAgent {
   /**
    * 格式化对象数据
    * @param data 对象数据
+   * @param defaultMessage 默认消息
    * @returns 格式化后的文本
    */
-  private formatObjectData(data: any): string {
-    const lines = [`✅ 操作成功：\n`];
+  private formatObjectData(data: Record<string, unknown>, defaultMessage: string): string {
+    const lines: string[] = [];
 
+    // 优先使用 defaultMessage 作为标题
+    if (defaultMessage && defaultMessage !== '操作成功') {
+      lines.push(`✅ ${defaultMessage}\n`);
+    }
+
+    // 遍历对象的每个属性
     for (const [key, value] of Object.entries(data)) {
       if (value !== null && value !== undefined) {
+        // 跳过内部字段
+        if (['code', 'msg', 'success'].includes(key)) {
+          continue;
+        }
+
+        // 格式化字段名（驼峰转空格，首字母大写）
         const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+
+        // 格式化值
+        let displayValue: string;
+        if (typeof value === 'object') {
+          displayValue = JSON.stringify(value, null, 2);
+        } else {
+          displayValue = String(value);
+        }
+
         lines.push(`${label}：${displayValue}`);
       }
+    }
+
+    // 如果没有添加任何行，使用默认消息
+    if (lines.length === 0) {
+      return `✅ ${defaultMessage || '操作成功'}`;
     }
 
     return lines.join('\n');

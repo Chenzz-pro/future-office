@@ -42,6 +42,11 @@ const menuItems = [
   { id: 'task-center', label: '任务控制中心', icon: LayoutDashboard },
   { id: 'agents', label: '智能体', icon: Bot },
   { id: 'skills', label: '技能', icon: Sparkles },
+  { id: 'ai-flow-console', label: 'AI流程操控台', icon: Bot, path: '/demo/ai-flow-console' },
+];
+
+const userMenuItems = [
+  { id: 'ekp-sso', label: 'EKP账号绑定', icon: Shield, path: '/ekp-sso' },
 ];
 
 const adminMenuItems = [
@@ -127,6 +132,23 @@ export function Sidebar({ activeTab, setActiveTab, showHistory, setShowHistory, 
                       {item.shortcut}
                     </span>
                   )}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {/* 用户菜单 */}
+          <div className="px-3 mb-4">
+            <p className="text-xs text-muted-foreground px-2 mb-2">账户</p>
+            <nav className="space-y-1">
+              {userMenuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => router.push(item.path)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span className="flex-1 text-left">{item.label}</span>
                 </button>
               ))}
             </nav>

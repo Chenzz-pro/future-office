@@ -1,0 +1,89 @@
+{
+  "_comment": "会议Agent业务规则配置",
+  "_description": "会议Agent的业务流程规则，定义各操作的具体执行步骤",
+  "_agentType": "meeting",
+  "_version": "1.0.0",
+
+  "businessRules": [
+    {
+      "ruleId": "get-my-meeting",
+      "ruleName": "获取我的会议",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-meeting-list",
+      "ruleName": "获取会议列表",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议列表接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-meeting-detail",
+      "ruleName": "获取会议详情",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议详情接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "create-meeting",
+      "ruleName": "创建会议",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议创建接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "update-meeting",
+      "ruleName": "更新会议",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议更新接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "cancel-meeting",
+      "ruleName": "取消会议",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议取消接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "invite-meeting",
+      "ruleName": "邀请参会",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议邀请接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    },
+    {
+      "ruleId": "get-meeting-room",
+      "ruleName": "获取会议室",
+      "steps": [
+        { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+        { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+        { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议室接口" },
+        { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+      ]
+    }
+  ]
+}

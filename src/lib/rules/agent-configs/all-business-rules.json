@@ -1,0 +1,311 @@
+{
+  "_description": "所有业务Agent业务规则汇总配置",
+  "_version": "1.0.0",
+  "_lastUpdated": "2025-01-20",
+
+  "approval": {
+    "_agentName": "审批Agent",
+    "_businessRules": [
+      {
+        "ruleId": "get-my-todo",
+        "ruleName": "获取我的待办",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-todo-count",
+        "ruleName": "获取待办数量",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-todo-list",
+        "ruleName": "获取待办列表",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办接口" },
+          { "name": "filter_data", "action": "filter_data", "desc": "过滤数据" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "approve-todo",
+        "ruleName": "审批通过",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP审批接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "reject-todo",
+        "ruleName": "审批驳回",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP驳回接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "delegate-todo",
+        "ruleName": "转交待办",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP转交接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-todo-detail",
+        "ruleName": "获取待办详情",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP待办详情接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-done-list",
+        "ruleName": "获取已办列表",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP已办接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-notify-list",
+        "ruleName": "获取通知列表",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_ekp", "action": "invoke_skill", "skillCode": "ekp_notify", "desc": "调用EKP通知接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      }
+    ]
+  },
+
+  "meeting": {
+    "_agentName": "会议Agent",
+    "_businessRules": [
+      {
+        "ruleId": "get-my-meeting",
+        "ruleName": "获取我的会议",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-meeting-list",
+        "ruleName": "获取会议列表",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议列表接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-meeting-detail",
+        "ruleName": "获取会议详情",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议详情接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "create-meeting",
+        "ruleName": "创建会议",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议创建接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "update-meeting",
+        "ruleName": "更新会议",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议更新接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "cancel-meeting",
+        "ruleName": "取消会议",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议取消接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "invite-meeting",
+        "ruleName": "邀请参会",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议邀请接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-meeting-room",
+        "ruleName": "获取会议室",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_meeting", "action": "invoke_skill", "skillCode": "ekp_meeting", "desc": "调用会议室接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      }
+    ]
+  },
+
+  "assistant": {
+    "_agentName": "助理Agent",
+    "_businessRules": [
+      {
+        "ruleId": "get-weather",
+        "ruleName": "查询天气",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_skill", "action": "invoke_skill", "skillCode": "weather", "desc": "调用天气接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-calendar",
+        "ruleName": "查询日程",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_skill", "action": "invoke_skill", "skillCode": "calendar", "desc": "调用日程接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "search-knowledge",
+        "ruleName": "知识搜索",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_skill", "action": "invoke_skill", "skillCode": "knowledge", "desc": "调用知识库接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "send-notification",
+        "ruleName": "发送通知",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_skill", "action": "invoke_skill", "skillCode": "notification", "desc": "调用通知接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "translate",
+        "ruleName": "翻译",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "invoke_skill", "action": "invoke_skill", "skillCode": "translate", "desc": "调用翻译接口" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "calculate",
+        "ruleName": "计算",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "calculate", "action": "calculate", "desc": "执行计算" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      }
+    ]
+  },
+
+  "data": {
+    "_agentName": "数据Agent",
+    "_businessRules": [
+      {
+        "ruleId": "query-data",
+        "ruleName": "数据查询",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询数据" },
+          { "name": "filter_data", "action": "filter_data", "desc": "过滤数据" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "export-data",
+        "ruleName": "数据导出",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询数据" },
+          { "name": "export_file", "action": "format_data", "desc": "导出文件" }
+        ]
+      },
+      {
+        "ruleId": "generate-report",
+        "ruleName": "生成报表",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询数据" },
+          { "name": "generate_report", "action": "format_data", "desc": "生成报表" }
+        ]
+      },
+      {
+        "ruleId": "get-statistics",
+        "ruleName": "数据统计",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询统计数据" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      },
+      {
+        "ruleId": "get-dashboard",
+        "ruleName": "获取仪表盘",
+        "steps": [
+          { "name": "check_params", "action": "check_params", "desc": "参数校验" },
+          { "name": "check_permission", "action": "run_permission_rules", "desc": "权限校验" },
+          { "name": "query_data", "action": "invoke_skill", "skillCode": "ekp_data", "desc": "查询仪表盘数据" },
+          { "name": "format_result", "action": "format_data", "desc": "格式化结果" }
+        ]
+      }
+    ]
+  }
+}

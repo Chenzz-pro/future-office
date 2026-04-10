@@ -4,21 +4,20 @@
  */
 
 import { agentRepository } from '@/lib/database/repositories/agent.repository';
-import { ruleEngine } from '@/lib/rules/rule-engine';
+import { ruleEngine, BusinessRuleConfig } from '@/lib/rules/rule-engine';
 import type {
   AgentResponse,
   UserContext,
   IntentResult,
   AgentConfig,
   PermissionRule,
-  BusinessRule,
 } from '@/lib/types/agent';
 
 export abstract class BaseBusinessAgent {
   protected agentType: string;
   protected config: AgentConfig | null = null;
   protected permissionRules: PermissionRule[] = [];
-  protected businessRules: BusinessRule[] = [];
+  protected businessRules: BusinessRuleConfig[] = [];
 
   constructor(agentType: string) {
     this.agentType = agentType;
@@ -49,9 +48,16 @@ export abstract class BaseBusinessAgent {
         console.log(`[${this.agentType}] 权限规则为空或无效，使用空数组`);
       }
 
-      // 加载业务规则（确保是数组）
-      if (this.config.businessRules && Array.isArray(this.config.businessRules)) {
-        this.businessRules = this.config.businessRules;
+      // 加载业务规则（兼容数组和对象格式）
+      if (this.config.businessRules) {
+        if (Array.isArray(this.config.businessRules)) {
+          this.businessRules = this.config.businessRules as unknown as BusinessRuleConfig[];
+        } else if (typeof this.config.businessRules === 'object') {
+          // 兼容对象格式：将对象包装为数组
+          this.businessRules = [this.config.businessRules as unknown as BusinessRuleConfig];
+        } else {
+          this.businessRules = [];
+        }
         console.log(`[${this.agentType}] 业务规则加载成功:`, this.businessRules.length);
       } else {
         this.businessRules = [];
@@ -84,7 +90,11 @@ export abstract class BaseBusinessAgent {
       }
 
       // 2. 权限校验（业务数据权限）
-      const permissionResult = await this.checkPermission(intent.action, userContext);
+      const permissionResult = await this.checkPermission(
+        intent.action, 
+        userContext,
+        intent.context.params || {}
+      );
       if (!permissionResult.granted) {
         return {
           code: '403',
@@ -108,12 +118,15 @@ export abstract class BaseBusinessAgent {
 
       console.log(`[${this.agentType}] 业务规则执行完成:`, businessResult);
 
+      // ⚠️ 重要：如果是 403 权限拒绝，permissionGranted 应该为 false
+      const isForbidden = businessResult.code === '403';
+
       // 添加执行日志
       return {
         ...businessResult,
         agentType: this.agentType,
         permissionChecked: true,
-        permissionGranted: true,
+        permissionGranted: !isForbidden,
         skillCalled: businessResult.skillCalled || false,
       };
     } catch (error) {
@@ -134,16 +147,19 @@ export abstract class BaseBusinessAgent {
    * 权限校验（业务数据权限）
    * @param action 执行的操作
    * @param userContext 用户上下文
+   * @param params 业务参数（用于权限校验）
    * @returns 校验结果
    */
   protected async checkPermission(
     action: string,
-    userContext: UserContext
+    userContext: UserContext,
+    params: Record<string, unknown> = {}
   ): Promise<{ granted: boolean; reason?: string }> {
     console.log(`[${this.agentType}] 开始业务权限校验:`, {
       action,
       userId: userContext.userId,
       role: userContext.role,
+      params,
     });
 
     // 如果没有配置权限规则，默认允许
@@ -156,7 +172,8 @@ export abstract class BaseBusinessAgent {
     return await ruleEngine.executePermissionRules(
       this.permissionRules,
       userContext,
-      action
+      action,
+      params
     );
   }
 
@@ -214,7 +231,7 @@ export abstract class BaseBusinessAgent {
   /**
    * 获取业务规则
    */
-  getBusinessRules(): BusinessRule[] {
+  getBusinessRules(): BusinessRuleConfig[] {
     return this.businessRules;
   }
 }

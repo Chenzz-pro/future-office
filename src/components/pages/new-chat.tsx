@@ -25,7 +25,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useChatHistory, Message, ChatSession } from '@/hooks/use-chat-history';
+import { useChatHistory, getCurrentUser, Message, ChatSession } from '@/hooks/use-chat-history';
 import { useLLMConfig } from '@/hooks/use-llm-config';
 import { CustomSkill } from '@/types/custom-skill';
 
@@ -81,6 +81,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const [executingSkill, setExecutingSkill] = useState<string | null>(null);
   const [dbConnected, setDbConnected] = useState(false);
   const [dbCheckLoading, setDbCheckLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<{ type: string; businessType: string; formUrl?: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -93,33 +94,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   useEffect(() => {
     checkDatabaseConnection();
   }, []);
-
-  const checkDatabaseConnection = async () => {
-    try {
-      setDbCheckLoading(true);
-      const response = await fetch('/api/database');
-      const data = await response.json();
-      setDbConnected(data.success || false);
-      if (!data.success) {
-        console.log('[NewChat] 数据库未连接:', data.error);
-      }
-    } catch (error) {
-      console.error('[NewChat] 检查数据库连接失败:', error);
-      setDbConnected(false);
-    } finally {
-      setDbCheckLoading(false);
-    }
-  };
-
-  // 设置默认模型
-  useEffect(() => {
-    if (activeKey) {
-      if (activeKey.provider === 'openai') setSelectedModel('gpt-4o');
-      else if (activeKey.provider === 'claude') setSelectedModel('claude-3-5-sonnet-20241022');
-      else if (activeKey.provider === 'deepseek') setSelectedModel('deepseek-chat');
-      else if (activeKey.provider === 'doubao') setSelectedModel('doubao-seed-2-0-lite-260215');
-    }
-  }, [activeKey]);
 
   const checkDatabaseConnection = async () => {
     try {
@@ -191,10 +165,37 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
     // 立即设置 loading 状态，防止重复发送
     setIsLoading(true);
 
-    // 获取当前用户信息
-    const userId = localStorage.getItem('current-user-id') || '';
-    const deptId = ''; // TODO: 从用户信息中获取部门ID
-    const role = 'user'; // TODO: 从用户信息中获取角色
+    // 获取当前用户完整信息（优先从后端获取最新，确保 deptId 和 role 正确）
+    let userContext = getCurrentUser();
+    
+    // 如果有 userId，尝试从后端获取完整信息（包括 deptId 和 role）
+    if (userContext.userId) {
+      try {
+        const response = await fetch('/api/auth/current', {
+          headers: {
+            'X-User-ID': userContext.userId,
+          },
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data) {
+            userContext = {
+              userId: result.data.userId,
+              deptId: result.data.deptId,
+              role: result.data.role?.code || 'user',
+              roleId: result.data.role?.id,
+              username: result.data.username,
+              personName: result.data.personName,
+            };
+            console.log('[sendMessage] 从后端获取到完整用户信息:', userContext);
+          }
+        }
+      } catch (err) {
+        console.warn('[sendMessage] 获取后端用户信息失败，使用本地缓存:', err);
+      }
+    }
+
+    const { userId, deptId, role, roleId } = userContext;
 
     if (!userId) {
       console.error('[sendMessage] 用户ID未找到，请先登录');
@@ -203,20 +204,31 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
       return;
     }
 
-    console.log('[sendMessage] 用户信息:', { userId, deptId, role });
+    console.log('[sendMessage] 用户信息:', { userId, deptId, role, roleId });
 
     // 如果没有当前会话，创建一个
+    // ⚠️ 注意：必须在函数开始时获取 session，并在整个函数执行期间使用同一个 session
     let session = currentSession;
+    let sessionId = session?.id;
+    
     if (!session) {
       console.log('[sendMessage] 创建新会话');
       try {
         session = await createSession(selectedModel, activeKey?.provider || 'unknown');
+        sessionId = session?.id;
       } catch (err) {
         console.error('[sendMessage] 创建会话失败:', err);
         setError('创建会话失败，请重试');
         setIsLoading(false);
         return;
       }
+    }
+    
+    if (!sessionId) {
+      console.error('[sendMessage] 会话ID不存在');
+      setError('会话不存在');
+      setIsLoading(false);
+      return;
     }
 
     const userMessage: Message = {
@@ -230,8 +242,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
     try {
       // 先添加用户消息到会话中（等待完成）
-      console.log('[sendMessage] 开始添加用户消息到会话');
-      await addMessage(session.id, userMessage);
+      console.log('[sendMessage] 开始添加用户消息到会话, sessionId:', sessionId);
+      await addMessage(sessionId, userMessage);
       console.log('[sendMessage] 用户消息已添加到会话');
 
       // 清空输入框和错误信息（在消息添加成功后）
@@ -255,7 +267,8 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         console.error('[sendMessage] API 调用超时');
       }, 30000); // 30秒超时
 
-      const response = await fetch('/api/chat', {
+      // 调用 RootAgent API（统一的智能体入口）
+      const response = await fetch('/api/agents/root', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -264,7 +277,6 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           userId,
           deptId,
           role,
-          conversationHistory,
         }),
       });
 
@@ -280,8 +292,21 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         throw new Error(data.error || '请求失败');
       }
 
-      // 添加助手消息
-      const assistantContent = data.data?.content || '处理完成';
+      // 检测是否有 action 需要打开表单
+      const action = data.data?.businessData?.action;
+      if (action && action.type === 'open_form') {
+        console.log('[sendMessage] 检测到需要打开表单的 action:', action);
+        setPendingAction({
+          type: action.type,
+          businessType: action.businessType,
+          formUrl: action.formUrl,
+        });
+      }
+
+      // 添加助手消息 - 优先使用 message 字段（RootAgent 返回格式）
+      // 移除 ::ACTION:: 标记
+      let assistantContent = data.data?.message || data.data?.content || data.data || '处理完成';
+      assistantContent = assistantContent.replace(/::ACTION::.*?::/g, '');
       console.log('[sendMessage] 助手回复内容:', assistantContent);
       console.log('[sendMessage] 助手回复长度:', assistantContent.length);
 
@@ -294,11 +319,11 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
 
       console.log('[sendMessage] 准备添加助手消息:', assistantMessage);
 
-      if (session) {
-        await addMessage(session.id, assistantMessage);
+      if (sessionId) {
+        await addMessage(sessionId, assistantMessage);
         console.log('[sendMessage] 助手消息已添加');
       } else {
-        console.warn('[sendMessage] 会话不存在，无法添加助手消息');
+        console.warn('[sendMessage] 会话ID不存在，无法添加助手消息');
       }
     } catch (err) {
       console.error('[sendMessage] Chat error:', err);
@@ -603,6 +628,36 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           </div>
         )}
       </div>
+
+      {/* 发起流程提示 */}
+      {pendingAction && (
+        <div className="px-4 py-3 border-t border-border bg-card/50">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-center justify-between gap-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+              <div className="flex-1">
+                <p className="font-medium text-sm">我已为您准备好 {pendingAction.businessType === 'leave' ? '请假申请' : '流程表单'} 表单</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  点击下方按钮，我将在 AI 流程操控台中帮您填写表单
+                </p>
+              </div>
+              <a
+                href={`/demo/ai-flow-console?type=${pendingAction.businessType}&formUrl=${encodeURIComponent(pendingAction.formUrl || '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
+              >
+                打开 AI 填表
+              </a>
+            </div>
+            <button
+              onClick={() => setPendingAction(null)}
+              className="mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              收起提示
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 状态提示 */}
       {dbCheckLoading && (

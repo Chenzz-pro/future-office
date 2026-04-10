@@ -88,6 +88,16 @@ export interface UserContext {
   isAdmin?: boolean;
 }
 
+// Agent执行上下文（业务Agent内部使用）
+export interface AgentContext {
+  userId: string;
+  deptId?: string;
+  role?: string;
+  message?: string;
+  conversationHistory?: Array<{ role: string; content: string }>;
+  formUrl?: string;
+}
+
 // LLM配置
 export interface LLMConfig {
   provider: string;
