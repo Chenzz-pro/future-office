@@ -15,6 +15,94 @@ export interface SSOLoginResult {
 }
 
 /**
+ * 使用 Node.js 原生 https/http 模块发送请求
+ * 注意：在 Edge Runtime 中不可用，仅用于服务器端
+ */
+async function nativeRequest(url: string, options: {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+}): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }> {
+  const urlObj = new URL(url);
+  
+  return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const client = urlObj.protocol === 'https:' 
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      ? require('https')
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      : require('http');
+    
+    const reqOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: options.method,
+      headers: options.headers,
+    };
+    
+    const req = client.request(reqOptions, (res) => {
+      let body = '';
+      res.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode || 0,
+          headers: res.headers as Record<string, string | string[] | undefined>,
+          body,
+        });
+      });
+    });
+    
+    req.on('error', reject);
+    req.write(options.body);
+    req.end();
+  });
+}
+
+/**
+ * 辅助函数：XML 转义
+ */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * 辅助函数：从 SOAP 响应中提取值
+ */
+function extractSoapValue(xml: string, tagName: string): string | null {
+  // 首先检查是否有 <return> 标签，尝试从其中提取
+  const returnMatch = xml.match(/<return[^>]*>([\s\S]*?)<\/return>/i);
+  let searchXml = xml;
+  
+  if (returnMatch && returnMatch[1]) {
+    searchXml = returnMatch[1];
+    console.log('[extractSoapValue] 从 <return> 中提取:', { tagName, content: searchXml });
+  }
+  
+  // 尝试匹配 <tagName>...</tagName> 或 <ns:tagName>...</ns:tagName>
+  const patterns = [
+    new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i'),
+    new RegExp(`<[^:]*:${tagName}[^>]*>([^<]*)</[^:]*:${tagName}>`, 'i'),
+  ];
+  
+  for (const pattern of patterns) {
+    const match = searchXml.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
+}
+
+/**
  * 调用 EKP WebService 获取 sessionId
  * 根据官方文档，getLoginSessionId 接口只需要 loginName 参数
  * @param loginName 登录名
@@ -42,24 +130,11 @@ export async function getLoginSessionId(loginName: string): Promise<SSOLoginResu
   </soap:Body>
 </soap:Envelope>`;
 
-    // 构建认证头
-    const authHeader = config.username 
-      ? `Basic ${Buffer.from(`${config.username}:${config.password || ''}`).toString('base64')}`
-      : null;
-    
-    console.log('[getLoginSessionId] EKP 地址:', baseUrl);
-    console.log('[getLoginSessionId] WebService 路径:', config.ssoWebservicePath || '/sys/webserviceservice/');
-    console.log('[getLoginSessionId] 认证用户名:', config.username);
-    console.log('[getLoginSessionId] 认证头:', authHeader ? '已设置' : '未设置');
-    
     const requestHeaders: Record<string, string> = {
       'Content-Type': 'text/xml; charset=utf-8',
       'SOAPAction': `http://webservice.sys.ekp.landray.com.cn/${serviceId}/getLoginSessionId`,
+      'User-Agent': 'EKP-SSO-Client/1.0',
     };
-    
-    if (authHeader) {
-      requestHeaders['Authorization'] = authHeader;
-    }
     
     // 构建 WebService URL（确保只有一个斜杠）
     const baseUrlClean = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
@@ -67,26 +142,51 @@ export async function getLoginSessionId(loginName: string): Promise<SSOLoginResu
       ? config.ssoWebservicePath || '/sys/webserviceservice/'
       : '/' + (config.ssoWebservicePath || 'sys/webserviceservice/');
     const wsUrl = `${baseUrlClean}${wsPath}`;
+    
+    console.log('[getLoginSessionId] 使用原生模块发送请求');
     console.log('[getLoginSessionId] 完整请求 URL:', wsUrl);
     
-    const response = await fetch(wsUrl, {
+    // 使用原生模块发送请求
+    const response = await nativeRequest(wsUrl, {
       method: 'POST',
       headers: requestHeaders,
       body: soapBody,
     });
 
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` };
+    console.log('[getLoginSessionId] 响应状态:', response.status);
+    console.log('[getLoginSessionId] 响应头 Location:', response.headers.location);
+    
+    // 检查是否是重定向
+    if (response.status === 302 || response.status === 301) {
+      const location = response.headers.location;
+      console.log('[getLoginSessionId] 收到重定向到:', location);
+      
+      // 检查 Set-Cookie 中是否有 sessionId
+      const setCookie = response.headers['set-cookie'];
+      if (setCookie) {
+        console.log('[getLoginSessionId] Set-Cookie:', setCookie);
+        // 从 Set-Cookie 中提取 sessionId
+        const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+        for (const cookie of cookies) {
+          const match = cookie.match(/SESSION=([^;]+)/);
+          if (match) {
+            console.log('[getLoginSessionId] 从 Cookie 获取到 sessionId:', match[1]);
+            return { success: true, sessionId: match[1], loginName };
+          }
+        }
+      }
+      
+      // 如果有 location，说明可能需要特殊处理
+      return { success: false, error: `WebService 返回重定向: ${location}` };
     }
 
-    const text = await response.text();
-    console.log('[getLoginSessionId] SOAP 响应状态:', response.status);
-    console.log('[getLoginSessionId] SOAP 响应长度:', text.length);
+    const text = response.body;
+    console.log('[getLoginSessionId] 响应长度:', text.length);
     
     // 检查响应是否是 HTML（登录页面），说明认证失败
     if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('<script')) {
       console.error('[getLoginSessionId] 收到 HTML 响应，可能是认证失败');
-      // 提取页面标题或关键信息
+      // 提取页面标题
       const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
       const title = titleMatch ? titleMatch[1] : '无标题';
       console.error('[getLoginSessionId] HTML 页面标题:', title);
@@ -139,20 +239,27 @@ export async function getTokenLoginName(token: string): Promise<SSOLoginResult> 
   </soap:Body>
 </soap:Envelope>`;
 
-    const response = await fetch(`${baseUrl}${config.ssoWebservicePath || '/sys/webserviceservice/'}`, {
+    const baseUrlClean = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const wsPath = (config.ssoWebservicePath || '/sys/webserviceservice/').startsWith('/') 
+      ? config.ssoWebservicePath || '/sys/webserviceservice/'
+      : '/' + (config.ssoWebservicePath || 'sys/webserviceservice/');
+    const wsUrl = `${baseUrlClean}${wsPath}`;
+
+    const response = await nativeRequest(wsUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
         'SOAPAction': `http://webservice.sys.ekp.landray.com.cn/${serviceId}/getTokenLoginName`,
+        'User-Agent': 'EKP-SSO-Client/1.0',
       },
       body: soapBody,
     });
 
-    if (!response.ok) {
+    if (response.status !== 200) {
       return { success: false, error: `HTTP ${response.status}` };
     }
 
-    const text = await response.text();
+    const text = response.body;
     
     // 解析 SOAP 响应
     const loginName = extractSoapValue(text, 'return');
@@ -201,15 +308,22 @@ export async function verifySession(sessionId: string): Promise<boolean> {
 
   try {
     const verifyPath = config.ssoSessionVerifyPath || '/sys/org/sys-inf/sysInfo.do?method=currentUser';
-    const response = await fetch(`${baseUrl}${verifyPath}`, {
+    const response = await nativeRequest(`${baseUrl}${verifyPath}`, {
+      method: 'GET',
       headers: {
         'Cookie': `JSESSIONID=${sessionId}`,
+        'User-Agent': 'EKP-SSO-Client/1.0',
       },
+      body: '',
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      return data && (data.userId || data.userid || data.user_name);
+    if (response.status === 200) {
+      try {
+        const data = JSON.parse(response.body);
+        return !!(data && (data.userId || data.userid || data.user_name));
+      } catch {
+        return false;
+      }
     }
     return false;
   } catch (error) {
@@ -227,41 +341,4 @@ export async function getSSOToken(ekpLoginName: string): Promise<string | null> 
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2);
   return `sso_${ekpLoginName}_${timestamp}_${random}`;
-}
-
-// 辅助函数：转义 XML 特殊字符
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-// 辅助函数：从 SOAP 响应中提取值
-function extractSoapValue(xml: string, tagName: string): string | null {
-  // 首先检查是否有 <return> 标签，尝试从其中提取
-  const returnMatch = xml.match(/<return[^>]*>([\s\S]*?)<\/return>/i);
-  let searchXml = xml;
-  
-  if (returnMatch && returnMatch[1]) {
-    searchXml = returnMatch[1];
-    console.log('[extractSoapValue] 从 <return> 中提取:', { tagName, content: searchXml });
-  }
-  
-  // 尝试匹配 <tagName>...</tagName> 或 <ns:tagName>...</ns:tagName>
-  const patterns = [
-    new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i'),
-    new RegExp(`<[^:]*:${tagName}[^>]*>([^<]*)</[^:]*:${tagName}>`, 'i'),
-  ];
-  
-  for (const pattern of patterns) {
-    const match = searchXml.match(pattern);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-  }
-  
-  return null;
 }
