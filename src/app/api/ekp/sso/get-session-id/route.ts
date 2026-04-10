@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     let loginName = providedLoginName;
 
     // 如果没有提供 loginName，从数据库查询
+    let userLoginName: string | undefined = undefined;
     if (!loginName) {
       const userResult = await dbManager.query<{
         fd_login_name: string;
@@ -57,9 +58,10 @@ export async function POST(request: NextRequest) {
 
       const user = userResult.rows[0];
       // 优先使用 login_name，其次 email（去掉域名部分），最后 mobile
-      loginName = user.fd_login_name 
-        || (user.fd_email ? user.fd_email.split('@')[0] : null)
+      userLoginName = user.fd_login_name 
+        || (user.fd_email ? user.fd_email.split('@')[0] : undefined)
         || user.fd_mobile;
+      loginName = userLoginName || null;
     }
 
     if (!loginName) {
@@ -69,14 +71,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 调用 EKP WebService 获取 sessionId
-    const result = await getLoginSessionId(loginName);
+    // 获取 EKP 配置以获取密码
+    let ekpPassword = '';
+    try {
+      const ekpConfigResult = await dbManager.query<{ password: string }>(
+        'SELECT password FROM ekp_configs LIMIT 1'
+      );
+      if (ekpConfigResult.rows && ekpConfigResult.rows.length > 0) {
+        ekpPassword = ekpConfigResult.rows[0].password || '';
+      }
+    } catch (e) {
+      console.warn('[SSO] 获取 EKP 配置密码失败，使用空密码');
+    }
 
-    if (!result.result || !result.sessionId) {
-      console.error('[SSO] 获取 sessionId 失败:', result.errorMsg);
+    // 调用 EKP WebService 获取 sessionId
+    // 注意：实际项目中可能需要用户输入密码，或者使用其他认证方式
+    const result = await getLoginSessionId(loginName, ekpPassword);
+
+    if (!result.success || !result.sessionId) {
+      console.error('[SSO] 获取 sessionId 失败:', result.error);
       return NextResponse.json({
         success: false,
-        error: result.errorMsg || '获取 sessionId 失败',
+        error: result.error || '获取 sessionId 失败',
       });
     }
 

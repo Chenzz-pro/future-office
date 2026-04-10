@@ -36,11 +36,11 @@ export async function POST(request: NextRequest) {
     // 调用 EKP WebService 解析 token
     const result = await getTokenLoginName(token);
 
-    if (!result.result || !result.loginName) {
-      console.error('[SSO] 解析 token 失败:', result.errorMsg);
+    if (!result.success || !result.loginName) {
+      console.error('[SSO] 解析 token 失败:', result.error);
       return NextResponse.json({
         success: false,
-        error: result.errorMsg || 'Token 验证失败',
+        error: result.error || 'Token 验证失败',
       });
     }
 
@@ -129,10 +129,10 @@ export async function GET(request: NextRequest) {
     // 调用 EKP WebService 解析 token
     const result = await getTokenLoginName(token);
 
-    if (!result.result || !result.loginName) {
+    if (!result.success || !result.loginName) {
       return NextResponse.json({
         success: false,
-        error: result.errorMsg || 'Token 验证失败',
+        error: result.error || 'Token 验证失败',
       });
     }
 

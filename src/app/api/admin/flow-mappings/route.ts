@@ -1,142 +1,119 @@
-/**
- * 流程映射管理 API
- * /api/admin/flow-mappings
- * 
- * CRUD 操作流程映射配置
- */
-
 import { NextRequest, NextResponse } from 'next/server';
-import { flowMappingService } from '@/lib/ekp/services';
+import { dbManager } from '@/lib/database';
 
-// ============================================
-// GET - 获取流程映射列表
-// ============================================
-
-export async function GET(request: NextRequest) {
+// 获取所有流程映射
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const keyword = searchParams.get('keyword') || undefined;
-    const enabled = searchParams.get('enabled');
-    const isSystem = searchParams.get('isSystem');
+    // 确保数据库已连接
+    if (!dbManager.isConnected()) {
+      return NextResponse.json(
+        { success: false, error: '数据库未连接' },
+        { status: 500 }
+      );
+    }
 
-    const mappings = await flowMappingService.getAll({
-      keyword,
-      enabled: enabled === 'true' ? true : enabled === 'false' ? false : undefined,
-      isSystem: isSystem === 'true' ? true : isSystem === 'false' ? false : undefined,
-    });
-
-    // 获取业务类型列表（用于下拉选择）
-    const businessTypes = await flowMappingService.getBusinessTypes();
-
+    const result = await dbManager.query<Record<string, unknown>>('SELECT * FROM ekp_flow_mappings ORDER BY business_type ASC');
+    
     return NextResponse.json({
       success: true,
-      data: {
-        mappings,
-        businessTypes,
-      },
+      data: result.rows,
     });
   } catch (error) {
-    console.error('[API:flow-mappings:GET] 获取映射列表失败:', error);
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : '获取列表失败',
-    }, { status: 500 });
+    console.error('获取流程映射失败:', error);
+    return NextResponse.json(
+      { success: false, error: '获取流程映射失败' },
+      { status: 500 }
+    );
   }
 }
 
-// ============================================
-// POST - 创建/初始化流程映射
-// ============================================
-
+// 创建或更新流程映射
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { action, ...params } = body;
-
-    // 初始化默认映射
-    if (action === 'init') {
-      await flowMappingService.initDefaultMappings();
-      return NextResponse.json({
-        success: true,
-        message: '默认映射初始化成功',
-      });
+    // 确保数据库已连接
+    if (!dbManager.isConnected()) {
+      return NextResponse.json(
+        { success: false, error: '数据库未连接' },
+        { status: 500 }
+      );
     }
 
-    // 创建新映射
-    const id = await flowMappingService.create(params);
+    const body = await request.json();
+    const {
+      id,
+      businessType,
+      businessName,
+      formUrl,
+      templateId,
+      enabled = true,
+    } = body;
 
-    return NextResponse.json({
-      success: true,
-      data: { id },
-      message: '创建成功',
-    }, { status: 201 });
+    // 验证必填字段
+    if (!businessType || !businessName || !formUrl) {
+      return NextResponse.json(
+        { success: false, error: '缺少必填字段' },
+        { status: 400 }
+      );
+    }
+
+    // 检查是否存在
+    if (id) {
+      // 更新
+      await dbManager.query(
+        `UPDATE ekp_flow_mappings 
+         SET business_type = ?, business_name = ?, form_url = ?, template_id = ?, enabled = ?
+         WHERE id = ?`,
+        [businessType, businessName, formUrl, templateId || '', enabled ? 1 : 0, id]
+      );
+    } else {
+      // 创建
+      const newId = id || `flow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await dbManager.query(
+        `INSERT INTO ekp_flow_mappings (id, business_type, business_name, form_url, template_id, enabled)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [newId, businessType, businessName, formUrl, templateId || '', enabled ? 1 : 0]
+      );
+    }
+
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[API:flow-mappings:POST] 创建失败:', error);
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : '创建失败',
-    }, { status: 500 });
+    console.error('保存流程映射失败:', error);
+    return NextResponse.json(
+      { success: false, error: '保存流程映射失败' },
+      { status: 500 }
+    );
   }
 }
 
-// ============================================
-// PUT - 批量更新
-// ============================================
-
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { id, ...params } = body;
-
-    if (!id) {
-      return NextResponse.json({
-        success: false,
-        error: '缺少映射ID',
-      }, { status: 400 });
-    }
-
-    const success = await flowMappingService.update(id, params);
-
-    return NextResponse.json({
-      success,
-      message: success ? '更新成功' : '更新失败',
-    });
-  } catch (error) {
-    console.error('[API:flow-mappings:PUT] 更新失败:', error);
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : '更新失败',
-    }, { status: 500 });
-  }
-}
-
-// ============================================
-// DELETE - 删除映射
-// ============================================
-
+// 删除流程映射
 export async function DELETE(request: NextRequest) {
   try {
+    // 确保数据库已连接
+    if (!dbManager.isConnected()) {
+      return NextResponse.json(
+        { success: false, error: '数据库未连接' },
+        { status: 500 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({
-        success: false,
-        error: '缺少映射ID',
-      }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: '缺少ID参数' },
+        { status: 400 }
+      );
     }
 
-    const success = await flowMappingService.delete(id);
+    await dbManager.query('DELETE FROM ekp_flow_mappings WHERE id = ?', [id]);
 
-    return NextResponse.json({
-      success,
-      message: success ? '删除成功' : '删除失败（系统预置或不存在）',
-    });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[API:flow-mappings:DELETE] 删除失败:', error);
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : '删除失败',
-    }, { status: 500 });
+    console.error('删除流程映射失败:', error);
+    return NextResponse.json(
+      { success: false, error: '删除流程映射失败' },
+      { status: 500 }
+    );
   }
 }

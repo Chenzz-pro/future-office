@@ -34,6 +34,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -777,10 +778,18 @@ export function AIFormConsole({
                   <div className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600" />
                     <span className="text-sm text-amber-800 dark:text-amber-200">
-                      需要登录 EKP 才能使用 AI 填表
+                      检测到 EKP 需要登录
                     </span>
                   </div>
                   <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowSidebar(false)}
+                      title="切换到 API 提交模式，无需登录"
+                    >
+                      API 模式
+                    </Button>
                     <Button 
                       variant="outline" 
                       size="sm"
@@ -792,6 +801,7 @@ export function AIFormConsole({
                       size="sm"
                       onClick={performSSOLogin}
                     >
+                      <Shield className="w-4 h-4 mr-1" />
                       自动登录
                     </Button>
                   </div>

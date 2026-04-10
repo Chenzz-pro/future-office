@@ -1,210 +1,202 @@
 /**
- * EKP 反向代理 API
- * 
- * 通过服务端代理访问 EKP，自动注入用户认证 Cookie
- * 解决 iframe 跨域 Cookie 问题
+ * EKP 代理 API
+ * 用于 iframe 嵌入 EKP 表单，支持跨域访问和自动认证
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getEKPSession, convertCookieDomain } from '@/lib/ekp/cookie-bridge';
+import { ekpConfigManager } from '@/lib/ekp/ekp-config-manager';
 
-// EKP 基础 URL
-const EKP_BASE_URL = process.env.EKP_BASE_URL || 'https://oa.fjhxrl.com';
-
-/**
- * 获取代理的路径
- */
-function getPath(params: { path: string[] }): string {
-  return params.path.join('/');
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
 }
 
-/**
- * 执行代理请求
- */
-async function proxyRequest(
+export async function POST(
   request: NextRequest,
-  path: string,
-  userId: string | null
-): Promise<NextResponse> {
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  return proxyRequest(request, path);
+}
+
+async function proxyRequest(request: NextRequest, pathSegments: string[]) {
+  // 检查代理是否启用
+  const config = ekpConfigManager.getConfig();
+  if (!config.proxyEnabled) {
+    return NextResponse.json(
+      { error: 'EKP 代理未启用' },
+      { status: 403 }
+    );
+  }
+
+  const baseUrl = config.baseUrl;
+  if (!baseUrl) {
+    return NextResponse.json(
+      { error: 'EKP 未配置' },
+      { status: 500 }
+    );
+  }
+
+  // 构造目标 URL
+  const targetPath = pathSegments.join('/');
+  let targetUrl: URL;
+
   try {
-    // 构建目标 URL
-    const targetUrl = `${EKP_BASE_URL}/${path}${request.nextUrl.search}`;
-    
-    // 获取用户 EKP Session
-    let ekpCookie = '';
-    if (userId) {
-      const session = await getEKPSession(userId);
-      if (session?.ekpCookie) {
-        ekpCookie = session.ekpCookie;
-      }
-    }
-    
-    // 准备请求头
-    const headers = new Headers();
-    headers.set('Host', 'oa.fjhxrl.com');
-    headers.set('X-Real-IP', request.headers.get('x-forwarded-for') || '127.0.0.1');
-    headers.set('X-Forwarded-For', request.headers.get('x-forwarded-for') || '');
-    headers.set('X-Forwarded-Proto', 'https');
-    headers.set('User-Agent', request.headers.get('user-agent') || '');
-    headers.set('Accept', request.headers.get('accept') || '*/*');
-    headers.set('Accept-Language', request.headers.get('accept-language') || 'zh-CN,zh;q=0.9');
-    
-    // 添加 EKP Cookie
-    if (ekpCookie) {
-      headers.set('Cookie', ekpCookie);
-    }
-    
+    targetUrl = new URL(`${baseUrl}/${targetPath}`);
+  } catch (e) {
+    return NextResponse.json(
+      { error: '无效的目标 URL' },
+      { status: 400 }
+    );
+  }
+
+  // 保留原始查询参数
+  const searchParams = request.nextUrl.searchParams;
+  searchParams.forEach((value, key) => {
+    targetUrl.searchParams.set(key, value);
+  });
+
+  try {
     // 获取请求体
-    let body: BodyInit | undefined;
+    let body: string | undefined;
     if (['POST', 'PUT', 'DELETE'].includes(request.method)) {
       body = await request.text();
-      
-      // 设置 Content-Type
-      const contentType = request.headers.get('content-type');
-      if (contentType) {
-        headers.set('Content-Type', contentType);
-      }
     }
-    
-    // 发送代理请求
-    const response = await fetch(targetUrl, {
+
+    // 构建代理请求
+    const headers: Record<string, string> = {
+      'Content-Type': request.headers.get('Content-Type') || 'application/x-www-form-urlencoded',
+      'Accept': request.headers.get('Accept') || '*/*',
+    };
+
+    // 添加来源标记
+    headers['X-Proxy-From'] = 'ekp-proxy';
+    headers['X-Proxy-Path'] = `/${targetPath}`;
+
+    // 构造代理请求
+    const proxyResponse = await fetch(targetUrl.toString(), {
       method: request.method,
       headers,
       body,
-      redirect: 'manual',
-      credentials: 'include',
+      redirect: 'manual', // 不自动跟随重定向
     });
-    
-    // 处理响应
-    const responseHeaders = new Headers();
-    
-    // 复制响应头（除了 Set-Cookie）
-    response.headers.forEach((value, key) => {
-      if (key.toLowerCase() !== 'set-cookie' && key.toLowerCase() !== 'transfer-encoding') {
-        responseHeaders.set(key, value);
-      }
-    });
-    
-    // 处理 Set-Cookie，转换域名
-    const setCookies = response.headers.getSetCookie?.() || [];
-    if (setCookies.length > 0) {
-      const targetDomain = request.nextUrl.hostname;
-      const convertedCookies = setCookies.map(cookie => 
-        convertCookieDomain(cookie, targetDomain)
-      );
-      responseHeaders.set('Set-Cookie', convertedCookies.join(', '));
-    }
-    
-    // 获取响应内容
-    const contentType = response.headers.get('content-type') || '';
-    let data: string | object;
-    
-    if (contentType.includes('application/json')) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
-    
+
     // 处理重定向
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location');
+    if ([301, 302, 303, 307, 308].includes(proxyResponse.status)) {
+      const location = proxyResponse.headers.get('Location');
       if (location) {
-        // 如果是 EKP 的重定向，转换为代理路径
-        if (location.startsWith('https://oa.fjhxrl.com') || location.startsWith('http://oa.fjhxrl.com')) {
-          const newPath = location
-            .replace('https://oa.fjhxrl.com', '')
-            .replace('http://oa.fjhxrl.com', '');
-          // 清理路径开头的斜杠并转换重定向路径
-          const cleanPath = newPath.replace(/^\/+/, '');
-          return NextResponse.redirect(
-            new URL(`/api/ekp-proxy/${cleanPath}`, request.url),
-            response.status
-          );
+        // 将 EKP 重定向转换为代理重定向
+        let redirectUrl: string;
+        if (location.startsWith('http://') || location.startsWith('https://')) {
+          // 绝对 URL，转换为代理路径
+          try {
+            const locUrl = new URL(location);
+            const proxyPath = config.proxyPath || '/api/ekp-proxy';
+            redirectUrl = `/api/ekp-proxy/${locUrl.pathname.replace(/^\//, '')}`;
+            if (locUrl.search) {
+              redirectUrl += locUrl.search;
+            }
+          } catch (e) {
+            redirectUrl = location;
+          }
+        } else {
+          // 相对路径
+          redirectUrl = `/api/ekp-proxy/${location.replace(/^\//, '')}`;
         }
-        // 其他重定向直接返回
+
         return new NextResponse(null, {
-          status: response.status,
+          status: proxyResponse.status,
           headers: {
-            Location: location,
+            'Location': redirectUrl,
+            'X-Proxy-Redirect': 'true',
           },
         });
       }
     }
-    
-    // 返回响应
-    if (typeof data === 'object') {
-      return NextResponse.json(data, {
-        status: response.status,
-        headers: responseHeaders,
-      });
+
+    // 返回代理响应
+    const responseBody = await proxyResponse.text();
+    const contentType = proxyResponse.headers.get('Content-Type') || '';
+
+    // 如果是 HTML 内容，修改其中的链接
+    let processedBody = responseBody;
+    if (contentType.includes('text/html')) {
+      processedBody = processHtmlContent(responseBody, baseUrl, config.proxyPath || '/api/ekp-proxy');
     }
-    
-    return new NextResponse(data, {
-      status: response.status,
-      headers: responseHeaders,
+
+    return new NextResponse(processedBody, {
+      status: proxyResponse.status,
+      headers: {
+        'Content-Type': contentType,
+        'X-Proxy-Target': targetUrl.toString(),
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
     });
-    
   } catch (error) {
     console.error('EKP 代理请求失败:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: '代理请求失败',
-        message: error instanceof Error ? error.message : '未知错误'
-      },
+      { error: '代理请求失败', details: String(error) },
       { status: 502 }
     );
   }
 }
 
 /**
- * GET 请求代理
+ * 处理 HTML 内容中的链接
+ * 将 EKP 链接转换为代理链接
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const userId = request.headers.get('x-user-id');
+function processHtmlContent(html: string, baseUrl: string, proxyPath: string): string {
+  const proxyBase = proxyPath.replace(/\/$/, '');
   
-  return proxyRequest(request, path.join('/'), userId);
-}
+  // 处理 href 属性
+  html = html.replace(/href=["'](https?:\/\/[^"']*)?(\/[^"']+)["']/gi, (match, protocol, path) => {
+    if (protocol) {
+      // 外部链接，保持不变
+      return match;
+    }
+    // 内部链接，转换为代理链接
+    return `href="${proxyBase}${path}"`;
+  });
 
-/**
- * POST 请求代理
- */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const userId = request.headers.get('x-user-id');
-  
-  return proxyRequest(request, path.join('/'), userId);
-}
+  // 处理 src 属性
+  html = html.replace(/src=["'](https?:\/\/[^"']*)?(\/[^"']+)["']/gi, (match, protocol, path) => {
+    if (protocol) {
+      return match;
+    }
+    return `src="${proxyBase}${path}"`;
+  });
 
-/**
- * PUT 请求代理
- */
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const userId = request.headers.get('x-user-id');
-  
-  return proxyRequest(request, path.join('/'), userId);
-}
+  // 处理 action 属性
+  html = html.replace(/action=["'](https?:\/\/[^"']*)?(\/[^"']+)["']/gi, (match, protocol, path) => {
+    if (protocol) {
+      return match;
+    }
+    return `action="${proxyBase}${path}"`;
+  });
 
-/**
- * DELETE 请求代理
- */
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params;
-  const userId = request.headers.get('x-user-id');
-  
-  return proxyRequest(request, path.join('/'), userId);
+  // 添加 base 标签以确保相对链接正确
+  if (!html.includes('<base')) {
+    html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${baseUrl}/">`);
+  }
+
+  return html;
 }
