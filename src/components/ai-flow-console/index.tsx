@@ -120,8 +120,10 @@ export function AIFormConsole({
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   // EKP 登录状态：null=未检测, true=已登录, false=未登录
   const [ekpLoginStatus, setEkpLoginStatus] = useState<boolean | null>(null);
-  // 是否显示 API 提交模式提示
-  const [showAPIModeHint, setShowAPIModeHint] = useState(false);
+  // SSO 登录中状态
+  const [isSSOLoading, setIsSSOLoading] = useState(false);
+  // 当前 iframe 的 SSO sessionId
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -215,11 +217,25 @@ export function AIFormConsole({
         const loginForm = iframeDoc.querySelector('form[action*="login"], input[name="username"], input[name="fd_name"]');
         if (loginForm) {
           setEkpLoginStatus(false);
-          // 在 AI 对话区域显示提示，而不是弹出遮罩
-          addSystemMessage('⚠️ 检测到 EKP 系统需要登录。请在左侧 iframe 中输入您的 OA 账号密码进行登录，登录成功后即可自动填表。\n\n💡 或者您可以点击右侧下方的"切换到 API 提交模式"来跳过 iframe 登录。');
+          // 检测到登录页面，询问是否执行 SSO 登录
+          addSystemMessage('⚠️ 检测到 EKP 系统需要登录。\n\n您可以选择：\n1. 点击"自动登录"按钮，我将尝试通过 SSO 自动登录\n2. 或直接在左侧 iframe 中输入 EKP 账号密码\n3. 或点击"切换到 API 提交模式"跳过登录');
         } else {
-          setEkpLoginStatus(true);
-          addSystemMessage('✅ EKP 表单已加载完成，您可以用自然语言描述要填写的内容。');
+          // 检查是否已成功登录（SSO 后跳转到了目标表单）
+          const currentSrc = iframeRef.current?.src || '';
+          if (currentSessionId && currentSrc.includes('login_auto.jsp')) {
+            // SSO 登录后仍在 login_auto.jsp，说明登录失败
+            addSystemMessage('⚠️ SSO 登录可能未成功。请直接在 iframe 中手动登录 EKP 账号。');
+            setEkpLoginStatus(false);
+          } else if (currentSrc.includes(formUrl?.split('?')[0] || '')) {
+            // 已跳转到目标表单，说明登录成功
+            setEkpLoginStatus(true);
+            setCurrentSessionId(null); // 清除 sessionId
+            addSystemMessage('✅ EKP SSO 登录成功！表单已加载完成，您可以用自然语言描述要填写的内容。');
+          } else {
+            // 其他情况，假设已登录
+            setEkpLoginStatus(true);
+            addSystemMessage('✅ EKP 表单已加载完成，您可以用自然语言描述要填写的内容。');
+          }
         }
       }
     } catch (error) {
@@ -227,7 +243,7 @@ export function AIFormConsole({
       setEkpLoginStatus(null);
       addSystemMessage('表单已加载。现在您可以在 EKP 表单中填写信息了。我会帮您解析自然语言并指导填表。');
     }
-  }, [addSystemMessage]);
+  }, [addSystemMessage, currentSessionId, formUrl]);
 
   // 确认已登录（刷新 iframe 状态检测）
   const handleConfirmLogin = useCallback(() => {
@@ -237,6 +253,56 @@ export function AIFormConsole({
     if (iframeRef.current) {
       iframeRef.current.src = iframeRef.current.src;
     }
+  }, [addSystemMessage]);
+
+  // 执行 SSO 自动登录
+  const performSSOLogin = useCallback(async () => {
+    if (!userId || !formUrl || isSSOLoading) return;
+
+    setIsSSOLoading(true);
+    addSystemMessage('正在执行 SSO 自动登录...');
+
+    try {
+      // 调用 SSO API 获取 sessionId
+      const response = await fetch('/api/ekp/sso/get-session-id', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': userId,
+        },
+        body: JSON.stringify({
+          targetUrl: formUrl, // 登录后跳转的目标页面
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data?.sessionId) {
+        const sessionId = result.data.sessionId;
+        setCurrentSessionId(sessionId);
+
+        // 通过 iframe 执行 SSO 登录
+        if (iframeRef.current) {
+          const ssoUrl = `/api/ekp-proxy/sys/authentication/sso/login_auto.jsp?sessionId=${encodeURIComponent(sessionId)}&target=${encodeURIComponent(formUrl)}`;
+          iframeRef.current.src = ssoUrl;
+          addSystemMessage('✅ SSO 登录请求已发送，正在验证登录状态...');
+        }
+      } else {
+        addSystemMessage(`⚠️ SSO 登录失败：${result.error || '未知错误'}。\n\n您可以：\n1. 点击"手动登录"按钮直接在 iframe 中输入账号密码\n2. 或切换到 API 提交模式`);
+        setEkpLoginStatus(false);
+      }
+    } catch (error) {
+      console.error('[AIFormConsole] SSO 登录失败:', error);
+      addSystemMessage('⚠️ SSO 登录请求失败。请直接在 iframe 中手动登录。');
+      setEkpLoginStatus(false);
+    } finally {
+      setIsSSOLoading(false);
+    }
+  }, [userId, formUrl, isSSOLoading, addSystemMessage]);
+
+  // 手动登录提示
+  const handleManualLogin = useCallback(() => {
+    addSystemMessage('请在左侧 iframe 中手动输入您的 EKP 账号密码进行登录。登录成功后，表单将自动更新。');
   }, [addSystemMessage]);
 
   // 发送消息
@@ -704,19 +770,58 @@ export function AIFormConsole({
 
           {/* 输入框 */}
           <div className="p-4 border-t">
+            {/* SSO 登录提示（当检测到未登录时显示） */}
+            {ekpLoginStatus === false && !isSSOLoading && (
+              <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm text-amber-800 dark:text-amber-200">
+                      需要登录 EKP 才能使用 AI 填表
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleManualLogin}
+                    >
+                      手动登录
+                    </Button>
+                    <Button 
+                      size="sm"
+                      onClick={performSSOLogin}
+                    >
+                      自动登录
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* SSO 登录中状态 */}
+            {isSSOLoading && (
+              <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                <span className="text-sm text-blue-800 dark:text-blue-200">
+                  正在执行 SSO 自动登录...
+                </span>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Input
                 ref={inputRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="用自然语言描述要填写的内容..."
-                disabled={isLoading || !isFormReady}
+                placeholder={ekpLoginStatus === false ? "请先登录 EKP 后再输入..." : "用自然语言描述要填写的内容..."}
+                disabled={isLoading || !isFormReady || ekpLoginStatus === false}
                 className="flex-1"
               />
               <Button
                 onClick={handleSend}
-                disabled={!inputValue.trim() || isLoading || !isFormReady}
+                disabled={!inputValue.trim() || isLoading || !isFormReady || ekpLoginStatus === false}
                 size="icon"
               >
                 {isLoading ? (
