@@ -4,7 +4,7 @@
 export * from './types';
 
 // 连接管理器
-export { dbManager, DatabaseManager, getOneAPIConfigRepository } from './manager';
+export { dbManager, DatabaseManager, getOneAPIConfigRepository, getFlowMappingRepository } from './manager';
 
 // Repository 层
 export { userRepository, UserRepository } from './repositories/user.repository';
@@ -14,6 +14,8 @@ export { customSkillRepository, CustomSkillRepository } from './repositories/cus
 export { ekpConfigRepository, EkpConfigRepository } from './repositories/ekpconfig.repository';
 export { databaseConfigRepository, DatabaseConfigRepository } from './repositories/databaseconfig.repository';
 export { OneAPIConfigRepository } from './repositories/oneapi-config.repository';
+export { FlowMappingRepository } from './repositories/flow-mapping.repository';
+export type { FlowMappingRow } from './repositories/flow-mapping.repository';
 
 // 实体类型
 export type { User } from './repositories/user.repository';

@@ -30,6 +30,7 @@ export interface AgentContext {
   role: string; // 用户角色
   message: string; // 用户消息
   conversationHistory: Array<{ role: string; content: string }>; // 对话历史
+  formUrl?: string; // 表单URL（用于发起流程）
 }
 
 // Agent执行结果

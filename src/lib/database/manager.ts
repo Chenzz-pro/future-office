@@ -4,6 +4,7 @@ import mysql from 'mysql2/promise';
 import type { DatabaseConfig, DatabaseConnectionOptions, QueryResult } from './types';
 import { oneAPIManager } from '@/lib/oneapi';
 import { OneAPIConfigRepository } from './repositories/oneapi-config.repository';
+import { FlowMappingRepository } from './repositories/flow-mapping.repository';
 
 // 使用全局变量确保单例在所有模块中共享
 // @ts-ignore
@@ -20,6 +21,9 @@ export class DatabaseManager {
 
   // OneAPI配置Repository
   public oneAPIConfigRepository: OneAPIConfigRepository | null = null;
+
+  // 流程映射Repository
+  public flowMappingRepository: FlowMappingRepository | null = null;
 
   private constructor() {}
 
@@ -88,10 +92,19 @@ export class DatabaseManager {
    */
   public async disconnect(): Promise<void> {
     if (this.pool) {
-      await this.pool.end();
+      try {
+        await this.pool.end();
+        console.log('✅ 数据库连接已断开');
+      } catch (error) {
+        // 忽略 "already closed" 错误
+        const mysqlError = error as { code?: string };
+        if (mysqlError.code !== 'PROTOCOL_CONNECTION_LOST' && 
+            mysqlError.code !== 'ECONNRESET') {
+          console.warn('断开数据库连接时出现警告:', error);
+        }
+      }
       this.pool = null;
       this.config = null;
-      console.log('✅ 数据库连接已断开');
     }
 
     // 停止心跳保活
@@ -134,16 +147,35 @@ export class DatabaseManager {
   }
 
   /**
-   * 执行查询
+   * 执行查询（带超时控制）
    */
   public async query<T = unknown>(sql: string, params?: unknown[]): Promise<QueryResult<T>> {
     if (!this.pool) {
       throw new Error('数据库未连接');
     }
 
+    // 设置查询超时为 10 秒
+    const timeoutMs = 10000;
+    let timeoutHandle: NodeJS.Timeout | null = null;
+
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const [results] = await this.pool.execute(sql, params as any);
+      // 创建一个超时 Promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`查询超时 (${timeoutMs}ms): ${sql.substring(0, 100)}...`));
+        }, timeoutMs);
+      });
+
+      // 竞速执行查询和超时
+      const [results] = await Promise.race([
+        this.pool.execute(sql, params as any),
+        timeoutPromise,
+      ]) as [unknown, unknown];
+
+      // 清除超时
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
        
       return {
          
@@ -154,8 +186,20 @@ export class DatabaseManager {
         insertId: (results as any).insertId,
       };
     } catch (error: unknown) {
+      // 清除超时
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      
       // 检查是否是连接丢失错误
-      const mysqlError = error as { code?: string };
+      const mysqlError = error as { code?: string; message?: string };
+      
+      // 如果是超时错误，直接抛出
+      if (mysqlError.message?.includes('查询超时')) {
+        console.error('[Query] 查询超时:', mysqlError.message);
+        throw error;
+      }
+      
       if (mysqlError.code === 'PROTOCOL_CONNECTION_LOST' || 
           mysqlError.code === 'ECONNRESET' ||
           mysqlError.code === 'ER_SERVER_LOST' ||
@@ -589,8 +633,128 @@ export class DatabaseManager {
       if (this.pool) {
         this.oneAPIConfigRepository = new OneAPIConfigRepository(this.pool);
       }
+
+      // 初始化流程映射Repository
+      if (this.pool) {
+        this.flowMappingRepository = new FlowMappingRepository(this.pool);
+      }
+
+      // 初始化预置流程映射数据
+      await this.initFlowMappingData();
     } catch (error) {
       console.error('[AutoInit] 组织架构表初始化失败:', error);
+      // 不抛出错误，避免影响应用启动
+    }
+  }
+
+  /**
+   * 初始化预置流程映射数据
+   */
+  private async initFlowMappingData(): Promise<void> {
+    try {
+      console.log('[FlowMapping:Init] 开始初始化预置流程映射数据...');
+
+      // 检查预置数据是否已存在
+      const checkResult = await this.query<{ count: number }>(
+        'SELECT COUNT(*) as count FROM ekp_flow_mappings WHERE is_system = 1'
+      );
+
+      const count = checkResult.rows[0]?.count || 0;
+
+      if (count > 0) {
+        console.log('[FlowMapping:Init] 预置流程映射数据已存在，跳过初始化');
+        return;
+      }
+
+      console.log('[FlowMapping:Init] 插入预置流程映射数据...');
+
+      // 预置请假流程映射
+      const leaveMappingId = crypto.randomUUID();
+      await this.query(
+        `INSERT IGNORE INTO ekp_flow_mappings (
+          id, business_type, business_name, keywords, flow_template_id,
+          flow_template_name, form_template_id, field_mappings, enabled, is_system
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
+        [
+          leaveMappingId,
+          'leave',
+          '请假申请',
+          '请假,休息,度假,年假,病假,事假,申请请假',
+          'leave_template_001',
+          '标准请假流程',
+          'leave_form_001',
+          JSON.stringify({
+            fields: [
+              { ekpField: 'fd_leave_type', localField: 'leaveType', label: '请假类型' },
+              { ekpField: 'fd_start_time', localField: 'startTime', label: '开始时间' },
+              { ekpField: 'fd_end_time', localField: 'endTime', label: '结束时间' },
+              { ekpField: 'fd_reason', localField: 'reason', label: '请假事由' },
+              { ekpField: 'fd_approver', localField: 'approver', label: '审批人' }
+            ]
+          })
+        ]
+      );
+      console.log('[FlowMapping:Init] 请假流程映射创建成功');
+
+      // 预置报销流程映射
+      const expenseMappingId = crypto.randomUUID();
+      await this.query(
+        `INSERT IGNORE INTO ekp_flow_mappings (
+          id, business_type, business_name, keywords, flow_template_id,
+          flow_template_name, form_template_id, field_mappings, enabled, is_system
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
+        [
+          expenseMappingId,
+          'expense',
+          '费用报销',
+          '报销,费用,差旅费,交通费,餐费,发票,报销单',
+          'expense_template_001',
+          '标准报销流程',
+          'expense_form_001',
+          JSON.stringify({
+            fields: [
+              { ekpField: 'fd_expense_type', localField: 'expenseType', label: '费用类型' },
+              { ekpField: 'fd_amount', localField: 'amount', label: '报销金额' },
+              { ekpField: 'fd_invoice_count', localField: 'invoiceCount', label: '发票数量' },
+              { ekpField: 'fd_description', localField: 'description', label: '费用说明' },
+              { ekpField: 'fd_approver', localField: 'approver', label: '审批人' }
+            ]
+          })
+        ]
+      );
+      console.log('[FlowMapping:Init] 报销流程映射创建成功');
+
+      // 预置出差流程映射
+      const tripMappingId = crypto.randomUUID();
+      await this.query(
+        `INSERT IGNORE INTO ekp_flow_mappings (
+          id, business_type, business_name, keywords, flow_template_id,
+          flow_template_name, form_template_id, field_mappings, enabled, is_system
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
+        [
+          tripMappingId,
+          'trip',
+          '出差申请',
+          '出差,外出,公干,差旅',
+          'trip_template_001',
+          '标准出差流程',
+          'trip_form_001',
+          JSON.stringify({
+            fields: [
+              { ekpField: 'fd_destination', localField: 'destination', label: '出差地点' },
+              { ekpField: 'fd_start_time', localField: 'startTime', label: '开始时间' },
+              { ekpField: 'fd_end_time', localField: 'endTime', label: '结束时间' },
+              { ekpField: 'fd_purpose', localField: 'purpose', label: '出差目的' },
+              { ekpField: 'fd_approver', localField: 'approver', label: '审批人' }
+            ]
+          })
+        ]
+      );
+      console.log('[FlowMapping:Init] 出差流程映射创建成功');
+
+      console.log('[FlowMapping:Init] ✅ 预置流程映射数据初始化完成');
+    } catch (error) {
+      console.error('[FlowMapping:Init] 预置流程映射数据初始化失败:', error);
       // 不抛出错误，避免影响应用启动
     }
   }
@@ -831,6 +995,29 @@ export class DatabaseManager {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='EKP配置表'
       `);
       console.log('[AutoInit] ekp_configs 表创建成功');
+
+      // 14. 创建流程映射表（EKP业务类型到流程模板的映射）
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS ekp_flow_mappings (
+          id VARCHAR(36) PRIMARY KEY COMMENT '映射ID',
+          business_type VARCHAR(100) NOT NULL COMMENT '业务类型（如leave、expense、trip）',
+          business_name VARCHAR(200) NOT NULL COMMENT '业务名称（如请假、报销、出差）',
+          keywords TEXT COMMENT '关键词（逗号分隔，用于自动识别业务类型）',
+          flow_template_id VARCHAR(100) COMMENT 'EKP流程模板ID',
+          flow_template_name VARCHAR(200) COMMENT 'EKP流程模板名称',
+          form_template_id VARCHAR(100) COMMENT 'EKP表单模板ID',
+          form_template_url VARCHAR(500) COMMENT 'EKP表单URL',
+          field_mappings JSON COMMENT '字段映射配置（JSON格式）',
+          enabled TINYINT(1) DEFAULT 1 COMMENT '是否启用',
+          is_system TINYINT(1) DEFAULT 0 COMMENT '是否系统预置',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+          INDEX idx_business_type (business_type),
+          INDEX idx_enabled (enabled),
+          INDEX idx_is_system (is_system)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='EKP流程映射表'
+      `);
+      console.log('[AutoInit] ekp_flow_mappings 表创建成功');
 
       console.log('[AutoInit] ✅ 系统核心表初始化完成');
     } catch (error) {
@@ -1219,4 +1406,23 @@ export function getOneAPIConfigRepository(): OneAPIConfigRepository | null {
     'exists': !!globalDbManager['oneAPIConfigRepository'],
   });
   return globalDbManager['oneAPIConfigRepository'];
+}
+
+// 导出流程映射Repository访问方法
+export function getFlowMappingRepository(): FlowMappingRepository | null {
+  // 使用全局实例
+  const globalDbManager = DatabaseManager.getGlobalInstance();
+  console.log('[getFlowMappingRepository] 开始获取 repository', {
+    'flowMappingRepository': !!globalDbManager['flowMappingRepository'],
+    'pool': !!globalDbManager['pool'],
+  });
+  // 如果 repository 未初始化且数据库已连接，自动初始化
+  if (!globalDbManager['flowMappingRepository'] && globalDbManager['pool']) {
+    console.log('[getFlowMappingRepository] 动态初始化 FlowMapping Repository');
+    globalDbManager['flowMappingRepository'] = new FlowMappingRepository(globalDbManager['pool']);
+  }
+  console.log('[getFlowMappingRepository] repository', {
+    'exists': !!globalDbManager['flowMappingRepository'],
+  });
+  return globalDbManager['flowMappingRepository'];
 }

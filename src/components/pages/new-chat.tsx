@@ -81,6 +81,7 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
   const [executingSkill, setExecutingSkill] = useState<string | null>(null);
   const [dbConnected, setDbConnected] = useState(false);
   const [dbCheckLoading, setDbCheckLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<{ type: string; businessType: string; formUrl?: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -291,8 +292,21 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
         throw new Error(data.error || '请求失败');
       }
 
+      // 检测是否有 action 需要打开表单
+      const action = data.data?.businessData?.action;
+      if (action && action.type === 'open_form') {
+        console.log('[sendMessage] 检测到需要打开表单的 action:', action);
+        setPendingAction({
+          type: action.type,
+          businessType: action.businessType,
+          formUrl: action.formUrl,
+        });
+      }
+
       // 添加助手消息 - 优先使用 message 字段（RootAgent 返回格式）
-      const assistantContent = data.data?.message || data.data?.content || data.data || '处理完成';
+      // 移除 ::ACTION:: 标记
+      let assistantContent = data.data?.message || data.data?.content || data.data || '处理完成';
+      assistantContent = assistantContent.replace(/::ACTION::.*?::/g, '');
       console.log('[sendMessage] 助手回复内容:', assistantContent);
       console.log('[sendMessage] 助手回复长度:', assistantContent.length);
 
@@ -614,6 +628,36 @@ export function NewChatPage({ onNewChat }: NewChatPageProps) {
           </div>
         )}
       </div>
+
+      {/* 发起流程提示 */}
+      {pendingAction && (
+        <div className="px-4 py-3 border-t border-border bg-card/50">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-center justify-between gap-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+              <div className="flex-1">
+                <p className="font-medium text-sm">我已为您准备好 {pendingAction.businessType === 'leave' ? '请假申请' : '流程表单'} 表单</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  点击下方按钮，我将在 AI 流程操控台中帮您填写表单
+                </p>
+              </div>
+              <a
+                href={`/demo/ai-flow-console?type=${pendingAction.businessType}&formUrl=${encodeURIComponent(pendingAction.formUrl || '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
+              >
+                打开 AI 填表
+              </a>
+            </div>
+            <button
+              onClick={() => setPendingAction(null)}
+              className="mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              收起提示
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 状态提示 */}
       {dbCheckLoading && (
