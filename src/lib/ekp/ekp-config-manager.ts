@@ -33,21 +33,13 @@ export interface EKPBaseConfig {
   enabled: boolean;
 }
 
-// 扩展配置接口，存储在 config JSON 字段中
-export interface EKPExtraConfig {
-  ssoEnabled?: boolean;
-  ssoServiceId?: string;
-  ssoWebservicePath?: string;
-  ssoLoginPath?: string;
-  ssoSessionVerifyPath?: string;
-  proxyEnabled?: boolean;
-  proxyPath?: string;
-  leaveTemplateId?: string;
-  expenseTemplateId?: string;
-  tripTemplateId?: string;
-  purchaseTemplateId?: string;
-  apiPath?: string;
-  enabled?: boolean;
+export interface EKPFlowMapping {
+  id: string;
+  businessType: string;
+  businessName: string;
+  formUrl: string;
+  templateId: string;
+  enabled: boolean;
 }
 
 export interface EKPConfig extends EKPBaseConfig {
@@ -69,21 +61,9 @@ export interface EKPConfig extends EKPBaseConfig {
   purchaseTemplateId: string;
 }
 
-// 数据库行类型
-interface EkpConfigRow {
-  id: string;
-  user_id: string;
-  ekp_address: string;
-  username: string;
-  password: string;
-  auth_type: string;
-  config: string | null;
-  created_at: Date;
-  updated_at: Date;
-}
-
 class EKPConfigManager {
   private config: EKPConfig | null = null;
+  private flowMappings: EKPFlowMapping[] = [];
   private loaded = false;
 
   /**
@@ -97,42 +77,46 @@ class EKPConfigManager {
 
     try {
       // 加载基础配置
-      const result = await dbManager.query<EkpConfigRow>('SELECT * FROM ekp_configs LIMIT 1');
-      
+      const result = await dbManager.query<Record<string, unknown>>('SELECT * FROM ekp_configs LIMIT 1');
       if (result.rows && result.rows.length > 0) {
         const row = result.rows[0];
-        
-        // 解析 JSON 配置
-        let extraConfig: EKPExtraConfig = {};
-        if (row.config) {
-          try {
-            extraConfig = JSON.parse(row.config);
-          } catch (e) {
-            console.warn('解析 config JSON 失败:', e);
-          }
-        }
-
         this.config = {
-          baseUrl: row.ekp_address || extraConfig.apiPath || '',
-          username: row.username || '',
-          password: row.password || '',
-          apiPath: extraConfig.apiPath || '/api/sys-notify/sysNotifyTodoRestService/getTodo',
-          enabled: extraConfig.enabled ?? true,
-          ssoEnabled: extraConfig.ssoEnabled ?? true,
-          ssoServiceId: extraConfig.ssoServiceId || 'loginWebserviceService',
-          ssoWebservicePath: extraConfig.ssoWebservicePath || '/sys/webserviceservice/',
-          ssoLoginPath: extraConfig.ssoLoginPath || '/sys/authentication/sso/login_auto.jsp',
-          ssoSessionVerifyPath: extraConfig.ssoSessionVerifyPath || '/sys/org/sys-inf/sysInfo.do?method=currentUser',
-          proxyEnabled: extraConfig.proxyEnabled ?? true,
-          proxyPath: extraConfig.proxyPath || '/api/ekp-proxy',
-          leaveTemplateId: extraConfig.leaveTemplateId || '',
-          expenseTemplateId: extraConfig.expenseTemplateId || '',
-          tripTemplateId: extraConfig.tripTemplateId || '',
-          purchaseTemplateId: extraConfig.purchaseTemplateId || '',
+          baseUrl: (row.base_url as string) || (row.url as string) || '',
+          username: (row.username as string) || '',
+          password: (row.password as string) || '',
+          apiPath: (row.api_path as string) || '/api/sys-notify/sysNotifyTodoRestService/getTodo',
+          enabled: (row.enabled as number) === 1 || row.enabled === true,
+          ssoEnabled: (row.sso_enabled as number) === 1 || row.sso_enabled === true || (row.sso_enabled as string) === 'true',
+          ssoServiceId: (row.sso_service_id as string) || 'loginWebserviceService',
+          ssoWebservicePath: (row.sso_webservice_path as string) || '/sys/webserviceservice/',
+          ssoLoginPath: (row.sso_login_path as string) || '/sys/authentication/sso/login_auto.jsp',
+          ssoSessionVerifyPath: (row.sso_session_verify_path as string) || '/sys/org/sys-inf/sysInfo.do?method=currentUser',
+          proxyEnabled: (row.proxy_enabled as number) === 1 || row.proxy_enabled === true || (row.proxy_enabled as string) === 'true',
+          proxyPath: (row.proxy_path as string) || '/api/ekp-proxy',
+          leaveTemplateId: (row.leave_template_id as string) || '',
+          expenseTemplateId: (row.expense_template_id as string) || '',
+          tripTemplateId: (row.trip_template_id as string) || '',
+          purchaseTemplateId: (row.purchase_template_id as string) || '',
         };
       } else {
         // 默认配置
         this.config = this.getDefaultConfig();
+      }
+
+      // 加载流程映射
+      try {
+        const mappingResult = await dbManager.query<Record<string, unknown>>('SELECT * FROM ekp_flow_mappings ORDER BY business_type ASC');
+        this.flowMappings = mappingResult.rows ? mappingResult.rows.map(row => ({
+          id: row.id as string,
+          businessType: row.business_type as string,
+          businessName: row.business_name as string,
+          formUrl: row.form_url as string,
+          templateId: row.template_id as string,
+          enabled: (row.enabled as number) === 1 || row.enabled === true,
+        })) : [];
+      } catch (e) {
+        // 表可能不存在
+        this.flowMappings = [];
       }
 
       this.loaded = true;
@@ -225,8 +209,21 @@ class EKPConfigManager {
   }
 
   /**
+   * 获取流程映射列表
+   */
+  getFlowMappings(): EKPFlowMapping[] {
+    return this.flowMappings;
+  }
+
+  /**
+   * 根据业务类型获取流程映射
+   */
+  getFlowMappingByType(businessType: string): EKPFlowMapping | undefined {
+    return this.flowMappings.find(m => m.businessType === businessType && m.enabled);
+  }
+
+  /**
    * 保存完整配置
-   * 注意：使用 config JSON 字段存储扩展配置
    */
   async save(config: Partial<EKPConfig>): Promise<boolean> {
     if (!dbManager.isConnected()) {
@@ -242,53 +239,77 @@ class EKPConfigManager {
       const checkResult = await dbManager.query<{ count: number }>('SELECT COUNT(*) as count FROM ekp_configs');
       const exists = checkResult.rows && checkResult.rows.length > 0 && (checkResult.rows[0].count || 0) > 0;
 
-      // 构建 config JSON
-      const extraConfig: EKPExtraConfig = {
-        ssoEnabled: newConfig.ssoEnabled,
-        ssoServiceId: newConfig.ssoServiceId,
-        ssoWebservicePath: newConfig.ssoWebservicePath,
-        ssoLoginPath: newConfig.ssoLoginPath,
-        ssoSessionVerifyPath: newConfig.ssoSessionVerifyPath,
-        proxyEnabled: newConfig.proxyEnabled,
-        proxyPath: newConfig.proxyPath,
-        leaveTemplateId: newConfig.leaveTemplateId,
-        expenseTemplateId: newConfig.expenseTemplateId,
-        tripTemplateId: newConfig.tripTemplateId,
-        purchaseTemplateId: newConfig.purchaseTemplateId,
-        apiPath: newConfig.apiPath,
-        enabled: newConfig.enabled,
-      };
-
       if (exists) {
-        // 更新 - 直接更新记录
+        // 更新
         await dbManager.query(
           `UPDATE ekp_configs SET
-           ekp_address = ?,
+           base_url = ?,
+           url = ?,
            username = ?,
            password = ?,
-           config = ?,
+           api_path = ?,
+           enabled = ?,
+           sso_enabled = ?,
+           sso_service_id = ?,
+           sso_webservice_path = ?,
+           sso_login_path = ?,
+           sso_session_verify_path = ?,
+           proxy_enabled = ?,
+           proxy_path = ?,
+           leave_template_id = ?,
+           expense_template_id = ?,
+           trip_template_id = ?,
+           purchase_template_id = ?,
            updated_at = NOW()
            WHERE id = (SELECT id FROM ekp_configs LIMIT 1)`,
           [
             newConfig.baseUrl,
-            newConfig.username,
-            newConfig.password,
-            JSON.stringify(extraConfig),
-          ]
-        );
-      } else {
-        // 创建新记录
-        await dbManager.query(
-          `INSERT INTO ekp_configs (id, user_id, ekp_address, username, password, auth_type, config, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-          [
-            'default',
-            '00000000-0000-0000-0000-000000000000', // system user
             newConfig.baseUrl,
             newConfig.username,
             newConfig.password,
-            'basic',
-            JSON.stringify(extraConfig),
+            newConfig.apiPath,
+            newConfig.enabled ? 1 : 0,
+            newConfig.ssoEnabled ? 1 : 0,
+            newConfig.ssoServiceId,
+            newConfig.ssoWebservicePath,
+            newConfig.ssoLoginPath,
+            newConfig.ssoSessionVerifyPath,
+            newConfig.proxyEnabled ? 1 : 0,
+            newConfig.proxyPath,
+            newConfig.leaveTemplateId,
+            newConfig.expenseTemplateId,
+            newConfig.tripTemplateId,
+            newConfig.purchaseTemplateId,
+          ]
+        );
+      } else {
+        // 创建
+        await dbManager.query(
+          `INSERT INTO ekp_configs (
+           id, base_url, url, username, password, api_path, enabled,
+           sso_enabled, sso_service_id, sso_webservice_path, sso_login_path, sso_session_verify_path,
+           proxy_enabled, proxy_path, leave_template_id, expense_template_id, trip_template_id, purchase_template_id,
+           created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [
+            'default',
+            newConfig.baseUrl,
+            newConfig.baseUrl,
+            newConfig.username,
+            newConfig.password,
+            newConfig.apiPath,
+            newConfig.enabled ? 1 : 0,
+            newConfig.ssoEnabled ? 1 : 0,
+            newConfig.ssoServiceId,
+            newConfig.ssoWebservicePath,
+            newConfig.ssoLoginPath,
+            newConfig.ssoSessionVerifyPath,
+            newConfig.proxyEnabled ? 1 : 0,
+            newConfig.proxyPath,
+            newConfig.leaveTemplateId,
+            newConfig.expenseTemplateId,
+            newConfig.tripTemplateId,
+            newConfig.purchaseTemplateId,
           ]
         );
       }

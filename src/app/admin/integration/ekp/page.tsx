@@ -30,11 +30,21 @@ import {
   AlertCircle,
   Save,
   RefreshCcw,
+  ArrowRight,
+  Clock,
   Info,
   Table,
   Users,
+  BriefcaseBusiness,
+  User,
+  Key,
   Shield,
+  Globe,
   Route,
+  FileText,
+  Plus,
+  Trash2,
+  Edit,
 } from 'lucide-react';
 import FieldMappingTable from '@/components/field-mapping-table';
 import EKPInterfacesPanel from './interfaces-panel';
@@ -58,7 +68,22 @@ interface EKPConfig {
   proxyEnabled: boolean;
   proxyPath: string;
   
+  // 表单模板配置
+  leaveTemplateId: string;
+  expenseTemplateId: string;
+  tripTemplateId: string;
+  purchaseTemplateId: string;
+  
   // 其他
+  enabled: boolean;
+}
+
+interface FlowMapping {
+  id: string;
+  businessType: string;
+  businessName: string;
+  formUrl: string;
+  templateId: string;
   enabled: boolean;
 }
 
@@ -70,7 +95,7 @@ export default function EKPPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [syncStats, setSyncStats] = useState<{ total: number; success: number; failed: number; lastSync: string } | null>(null);
 
   // 配置状态
   const [config, setConfig] = useState<EKPConfig>({
@@ -85,12 +110,22 @@ export default function EKPPage() {
     ssoSessionVerifyPath: '/sys/org/sys-inf/sysInfo.do?method=currentUser',
     proxyEnabled: true,
     proxyPath: '/api/ekp-proxy',
+    leaveTemplateId: '',
+    expenseTemplateId: '',
+    tripTemplateId: '',
+    purchaseTemplateId: '',
     enabled: true,
   });
+
+  // 流程映射状态
+  const [flowMappings, setFlowMappings] = useState<FlowMapping[]>([]);
+  const [editingMapping, setEditingMapping] = useState<FlowMapping | null>(null);
+  const [showMappingDialog, setShowMappingDialog] = useState(false);
 
   // 加载配置
   useEffect(() => {
     fetchConfig();
+    fetchFlowMappings();
   }, []);
 
   const fetchConfig = async () => {
@@ -112,6 +147,10 @@ export default function EKPPage() {
             ssoSessionVerifyPath: data.data.ssoSessionVerifyPath || '/sys/org/sys-inf/sysInfo.do?method=currentUser',
             proxyEnabled: data.data.proxyEnabled ?? true,
             proxyPath: data.data.proxyPath || '/api/ekp-proxy',
+            leaveTemplateId: data.data.leaveTemplateId || '',
+            expenseTemplateId: data.data.expenseTemplateId || '',
+            tripTemplateId: data.data.tripTemplateId || '',
+            purchaseTemplateId: data.data.purchaseTemplateId || '',
             enabled: data.data.enabled ?? true,
           });
         }
@@ -122,9 +161,22 @@ export default function EKPPage() {
     setLoading(false);
   };
 
+  const fetchFlowMappings = async () => {
+    try {
+      const response = await fetch('/api/admin/flow-mappings');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          setFlowMappings(data.data);
+        }
+      }
+    } catch (error) {
+      console.error('获取流程映射失败:', error);
+    }
+  };
+
   const handleSaveConfig = async () => {
     setLoading(true);
-    setSaveSuccess(false);
     try {
       const response = await fetch('/api/admin/ekp-config', {
         method: 'POST',
@@ -133,10 +185,9 @@ export default function EKPPage() {
       });
       const data = await response.json();
       if (data.success) {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        alert('配置保存成功');
       } else {
-        alert('配置保存失败: ' + (data.error || '未知错误'));
+        alert('配置保存失败: ' + data.error);
       }
     } catch (error) {
       console.error('保存配置失败:', error);
@@ -166,6 +217,45 @@ export default function EKPPage() {
       });
     }
     setTesting(false);
+  };
+
+  const handleSaveFlowMapping = async (mapping: FlowMapping) => {
+    try {
+      const response = await fetch('/api/admin/flow-mappings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mapping),
+      });
+      const data = await response.json();
+      if (data.success) {
+        fetchFlowMappings();
+        setShowMappingDialog(false);
+        setEditingMapping(null);
+      } else {
+        alert('保存失败: ' + data.error);
+      }
+    } catch (error) {
+      console.error('保存流程映射失败:', error);
+      alert('保存失败');
+    }
+  };
+
+  const handleDeleteFlowMapping = async (id: string) => {
+    if (!confirm('确定要删除这个流程映射吗？')) return;
+    try {
+      const response = await fetch(`/api/admin/flow-mappings?id=${id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (data.success) {
+        fetchFlowMappings();
+      } else {
+        alert('删除失败: ' + data.error);
+      }
+    } catch (error) {
+      console.error('删除流程映射失败:', error);
+      alert('删除失败');
+    }
   };
 
   return (
@@ -200,6 +290,10 @@ export default function EKPPage() {
           <TabsTrigger value="proxy" className="gap-2 data-[state=active]:bg-background">
             <Route className="w-4 h-4" />
             代理配置
+          </TabsTrigger>
+          <TabsTrigger value="flow-mapping" className="gap-2 data-[state=active]:bg-background">
+            <FileText className="w-4 h-4" />
+            流程映射
           </TabsTrigger>
           <TabsTrigger value="interfaces" className="gap-2 data-[state=active]:bg-background">
             <Database className="w-4 h-4" />
@@ -284,17 +378,6 @@ export default function EKPPage() {
                 </div>
               </div>
 
-              {/* 保存成功提示 */}
-              {saveSuccess && (
-                <div className="p-4 rounded-lg bg-green-50 text-green-800">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5" />
-                    <span className="font-medium">配置保存成功</span>
-                  </div>
-                </div>
-              )}
-
-              {/* 测试结果 */}
               {testResult && (
                 <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
                   <div className="flex items-center gap-2">
@@ -390,16 +473,6 @@ export default function EKPPage() {
                   保存SSO配置
                 </Button>
               </div>
-
-              {/* 保存成功提示 */}
-              {saveSuccess && (
-                <div className="p-4 rounded-lg bg-green-50 text-green-800">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5" />
-                    <span className="font-medium">配置保存成功</span>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -461,7 +534,7 @@ export default function EKPPage() {
                   配置代理路径后，iframe将使用以下URL格式：
                 </p>
                 <code className="text-xs bg-background px-2 py-1 rounded">
-                  {config.proxyPath || '/api/ekp-proxy'}/km/review/km_review_main/kmReviewMain.do?method=add&fdTemplateId=xxx
+                  {config.proxyPath || '/api/ekp-proxy'}/km/review/km_review_main/kmReviewMain.do?method=add&amp;fdTemplateId=xxx
                 </code>
               </div>
 
@@ -471,16 +544,119 @@ export default function EKPPage() {
                   保存代理配置
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              {/* 保存成功提示 */}
-              {saveSuccess && (
-                <div className="p-4 rounded-lg bg-green-50 text-green-800">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5" />
-                    <span className="font-medium">配置保存成功</span>
-                  </div>
+        {/* 流程映射 */}
+        <TabsContent value="flow-mapping" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                流程映射配置
+              </CardTitle>
+              <CardDescription>
+                配置业务类型与EKP表单模板的映射关系，支持AI流程操控台自动打开对应表单
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 快捷配置 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="leaveTemplateId">请假申请模板ID</Label>
+                  <Input
+                    id="leaveTemplateId"
+                    value={config.leaveTemplateId}
+                    onChange={(e) => setConfig({ ...config, leaveTemplateId: e.target.value })}
+                    placeholder="17cba859d4a22f589b8cc4b482bb6898"
+                  />
                 </div>
-              )}
+                <div className="space-y-2">
+                  <Label htmlFor="expenseTemplateId">费用报销模板ID</Label>
+                  <Input
+                    id="expenseTemplateId"
+                    value={config.expenseTemplateId}
+                    onChange={(e) => setConfig({ ...config, expenseTemplateId: e.target.value })}
+                    placeholder="费用报销表单模板ID"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tripTemplateId">出差申请模板ID</Label>
+                  <Input
+                    id="tripTemplateId"
+                    value={config.tripTemplateId}
+                    onChange={(e) => setConfig({ ...config, tripTemplateId: e.target.value })}
+                    placeholder="出差申请表单模板ID"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="purchaseTemplateId">采购申请模板ID</Label>
+                  <Input
+                    id="purchaseTemplateId"
+                    value={config.purchaseTemplateId}
+                    onChange={(e) => setConfig({ ...config, purchaseTemplateId: e.target.value })}
+                    placeholder="采购申请表单模板ID"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveConfig} disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  保存流程映射
+                </Button>
+              </div>
+
+              <div className="border-t pt-4 mt-4">
+                <h4 className="font-medium mb-4">已配置的流程映射</h4>
+                {flowMappings.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    暂无流程映射配置
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {flowMappings.map((mapping) => (
+                      <div
+                        key={mapping.id}
+                        className="flex items-center justify-between p-3 border rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{mapping.businessType}</Badge>
+                            <span className="font-medium">{mapping.businessName}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1 truncate">
+                            {mapping.formUrl}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={mapping.enabled ? 'default' : 'secondary'}>
+                            {mapping.enabled ? '启用' : '禁用'}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingMapping(mapping);
+                              setShowMappingDialog(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteFlowMapping(mapping.id)}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -512,11 +688,11 @@ export default function EKPPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex gap-2 pt-4">
-                    <Button variant="outline" disabled={syncing}>
+                    <Button variant="outline" onClick={() => setSyncing(true)} disabled={syncing}>
                       {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                       全量同步
                     </Button>
-                    <Button variant="outline" disabled={syncing}>
+                    <Button variant="outline" onClick={() => setSyncing(true)} disabled={syncing}>
                       {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
                       增量同步
                     </Button>
