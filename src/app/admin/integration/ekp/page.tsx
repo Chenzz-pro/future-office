@@ -200,10 +200,10 @@ export default function EKPPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const response = await fetch('/api/ekp?action=test', {
+      const response = await fetch('/api/ekp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ ...config, action: 'test' }),
       });
       const data = await response.json();
       setTestResult({
